@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        #qr-code {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WhatsApp Bot</h1>
+    <p>Escaneie o QR Code abaixo para conectar:</p>
+    <div id="qr-code">
+        <canvas id="qrCanvas"></canvas>
+    </div>
+    <script>
+        const { ipcRenderer } = require('electron');
+        const QRCode = require('qrcode');
+
+        ipcRenderer.on('qr-code', (event, qrCode) => {
+            // Renderiza o QR Code no canvas
+            const canvas = document.getElementById('qrCanvas');
+            QRCode.toCanvas(canvas, qrCode, (error) => {
+                if (error) {
+                    console.error('Erro ao renderizar QR Code:', error);
+                }
+            });
+        });
+
+        // Registra a janela com o backend
+        ipcRenderer.send('register-window');
+    </script>
+</body>
+</html>
