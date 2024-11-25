@@ -1,7 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('electron', {
-    
-    onQRCodeReceived: (callback) => ipcRenderer.on('qr-code', callback),
-    registerWindow: () => ipcRenderer.send('register-window'),
+contextBridge.exposeInMainWorld('electronAPI', {
+    onQRCode: (callback) => ipcRenderer.on('qr-code', (_, qr) => callback(qr)),
 });

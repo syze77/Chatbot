@@ -10,33 +10,32 @@
             text-align: center;
             padding: 20px;
         }
-        #qr-code {
+        #qrCodeContainer {
             margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 20px;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 </head>
 <body>
     <h1>iEscolar Bot</h1>
-    <p>Para se conectar, escaneie o qrcode abaixo:</p>
-    <div id="qr-code">
-        <canvas id="qrCanvas"></canvas>
-    </div>
+    <p>Para se conectar, escaneie o QR Code abaixo:</p>
+    <div id="qrCodeContainer"></div>
+
     <script>
-        const { ipcRenderer } = require('electron');
-        const QRCode = require('qrcode');
+        // Função chamada quando o QR Code é recebido do processo principal
+        window.electronAPI.onQRCode((qrCodeData) => {
+            const qrCodeContainer = document.getElementById('qrCodeContainer');
 
-        ipcRenderer.on('qr-code', (event, qrCode) => {
-            // Renderiza o QR Code no canvas
-            const canvas = document.getElementById('qrCanvas');
-            QRCode.toCanvas(canvas, qrCode, (error) => {
-                if (error) {
-                    console.error('Erro ao renderizar QR Code:', error);
-                }
-            });
+            // Limpa o container antes de gerar o novo QR Code
+            qrCodeContainer.innerHTML = '';
+
+            // Gera o QR Code no container
+            QRCode.toCanvas(qrCodeContainer, qrCodeData, { width: 300 })
+                .then(() => console.log('QR Code gerado com sucesso!'))
+                .catch(err => console.error('Erro ao gerar QR Code:', err));
         });
-
-        // Registra a janela com o backend
-        ipcRenderer.send('register-window');
     </script>
 </body>
 </html>
