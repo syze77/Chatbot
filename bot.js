@@ -3,7 +3,7 @@ const venom = require('venom-bot');
 // Cria a sessão persistente
 venom
   .create({
-    session: 'whatsapp-session', // Nome da sessão para persistência
+    session: 'whatsapp-session', // Nome da sessão
     multidevice: true, // Suporte a múltiplos dispositivos
   })
   .then((client) => start(client))
@@ -21,7 +21,7 @@ function start(client) {
     
     // Responde com base na mensagem recebida
     if (message.body.toLowerCase() === 'olá') {
-      client.sendText(message.from, 'Olá! Como posso ajudar?');
+      client.sendText(message.from, 'Olá!, você esta falando com o Suporte da Redenet, como posso ajudar?');
     } else {
       client.sendText(message.from, 'Desculpe, não entendi sua mensagem.');
     }
