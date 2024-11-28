@@ -20,8 +20,10 @@
 </head>
 <body>
     <h1>iEscolar Bot</h1>
-    <p>Para se conectar, escaneie o QR Code abaixo:</p>
-    <div id="qrCodeContainer"></div>
+    <div id="qrCodeContainer">
+        <canvas id="qrCanvas" width="300" height="300"></canvas>
+        <p>Escaneie o QR Code para autenticar.</p>
+    </div>
 
     <script>
         // Função chamada quando o QR Code é recebido do processo principal
