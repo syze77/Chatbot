@@ -13,8 +13,12 @@
   },
   "dependencies": {
     "electron": "^33.2.0",
+    "hydra-bot": "^1.0.33",
+    "mime-types": "^2.1.35",
+    "puppeteer": "^23.9.0",
+    "puppeteer-core": "^23.9.0",
     "qrcode": "^1.5.4",
     "qrcode.js": "^0.0.1",
-    "venom-bot": "^5.0.0"
+    "ws": "^8.18.0"
   }
 }
