@@ -1,43 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iEscolar Bot</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
-        }
-        #qrCodeContainer {
-            margin-top: 20px;
-            border: 1px solid #ddd;
-            padding: 20px;
-        }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <title>Suporte da Redenet</title>
 </head>
 <body>
-    <h1>iEscolar Bot</h1>
-    <div id="qrCodeContainer">
-        <canvas id="qrCanvas" width="300" height="300"></canvas>
-        <p>Escaneie o QR Code para autenticar.</p>
+    <h1>Atendimento do Suporte</h1>
+    <div>
+        <p id="activeChats">Chats Ativos: 0</p>
+        <p id="waitingList">Lista de Espera: 0</p>
     </div>
-
-    <script>
-        // Função chamada quando o QR Code é recebido do processo principal
-        window.electronAPI.onQRCode((qrCodeData) => {
-            const qrCodeContainer = document.getElementById('qrCodeContainer');
-
-            // Limpa o container antes de gerar o novo QR Code
-            qrCodeContainer.innerHTML = '';
-
-            // Gera o QR Code no container
-            QRCode.toCanvas(qrCodeContainer, qrCodeData, { width: 300 })
-                .then(() => console.log('QR Code gerado com sucesso!'))
-                .catch(err => console.error('Erro ao gerar QR Code:', err));
-        });
-    </script>
+    
+    <script src="renderer.js"></script>  <!-- Garanta que o script renderer.js está correto -->
 </body>
 </html>

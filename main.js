@@ -1,52 +1,50 @@
-const venom = require('venom-bot');
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let mainWindow;
 
-app.on('ready', () => {
+// Função para criar a janela principal
+function createWindow() {
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
         webPreferences: {
-            preload: path.join(__dirname, 'preload.js'), // Comunicação segura com o renderer
-            contextIsolation: true, // Segurança no Electron
-            nodeIntegration: false, // Desativa Node.js no frontend
-        },
+            nodeIntegration: true, // Para permitir o uso de Node.js no renderizador
+            contextIsolation: false, // Para permitir comunicação com o IPC
+        }
     });
 
-    mainWindow.loadFile('index.html'); // Carrega o HTML do frontend
+    mainWindow.loadFile('index.html');
 
-    venom.create({
-        session: 'whatsapp-session',
-        multidevice: true,
-        headless: true,
-        useChrome: true, // Usa o Chrome no modo headless
-    }).then((client) => start(client))
-    .catch((error) => {
-        console.error('Erro ao iniciar o bot:', error);
+    // Quando a janela é fechada
+    mainWindow.on('closed', () => {
+        mainWindow = null;
     });
+}
 
-    function start(client) {
-        console.log('Bot iniciado com sucesso!');
+// Função para iniciar o app
+app.whenReady().then(() => {
+    createWindow();
 
-        // Evento para capturar o QR Code
-        client.on('qr', (qr) => {
-            console.log('QR Code gerado', qr);  // Esse log deve ser visto no console do Electron, não no console do navegador
+    app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+        }
+    });
+});
 
-            // Envia o QR Code para o frontend (renderer)
-            if (mainWindow) {
-                mainWindow.webContents.send('qr-code', qr); // Envia o QR Code para o frontend
-            }
-        });
+// Envia os dados atualizados da fila de espera e chats ativos para o renderizador
+ipcMain.on('updateStatus', (event, data) => {
+    console.log('Atualização recebida:', data);
 
-        // Escuta mudanças de estado da conexão
-        client.onStateChange((state) => {
-            console.log('Estado da conexão:', state);
-        });
+    if (mainWindow) {
+        // Envia os dados do status para o renderizador
+        mainWindow.webContents.send('statusUpdate', data);
     }
 });
 
+// Fecha o app quando todas as janelas forem fechadas
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();

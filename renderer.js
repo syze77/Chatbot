@@ -1,11 +1,20 @@
-window.electronAPI.onQRCode((qrCodeData) => {
-    const qrCodeContainer = document.getElementById('qrCodeContainer');
+const { ipcRenderer } = require('electron');
 
-    // Limpa o container antes de gerar o novo QR Code
-    qrCodeContainer.innerHTML = '';
+// Escuta o evento 'statusUpdate' e atualiza a interface
+ipcRenderer.on('statusUpdate', (event, data) => {
+    const activeChatsElement = document.getElementById('activeChats');
+    const waitingListElement = document.getElementById('waitingList');
 
-    // Gera o QR Code no container
-    QRCode.toCanvas(qrCodeContainer, qrCodeData, { width: 300 })
-        .then(() => console.log('QR Code gerado com sucesso!'))
-        .catch(err => console.error('Erro ao gerar QR Code:', err));
+    // Atualiza o número de chats ativos
+    activeChatsElement.textContent = `Chats Ativos: ${data.activeChats}`;
+
+    // Limpa a lista de espera
+    waitingListElement.innerHTML = '';
+
+    // Popula a lista de espera dinamicamente
+    data.waitingList.forEach((userId, index) => {
+        const listItem = document.createElement('li');
+        listItem.textContent = `Usuário ${index + 1}: ${userId}`;
+        waitingListElement.appendChild(listItem);
+    });
 });

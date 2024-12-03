@@ -1,3 +1,4 @@
+const { ipcRenderer } = require('electron'); // Importa o ipcRenderer para enviar atualizações
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const path = require('path');
@@ -11,6 +12,11 @@ let page;
 
 // Caminho para salvar os cookies
 const cookiesPath = path.join(__dirname, 'cookies.json');
+
+// Fila de espera e controle de chats ativos
+let waitingList = [];
+let activeChats = 0;
+const maxActiveChats = 4;
 
 // Função para salvar os cookies
 async function saveCookies(page) {
@@ -49,7 +55,7 @@ async function startBrowser() {
         // Carrega os cookies se existirem
         await loadCookies(page);
 
-        // Navega até o WhatsApp Web
+        // Navega até o WhatsApp Business Web
         await page.goto('https://web.whatsapp.com/', { waitUntil: 'domcontentloaded' });
 
         const qrCodeSelector = 'canvas[aria-label="Scan this QR code to link a device!"]';
@@ -120,28 +126,77 @@ async function startListeningForMessages(conn) {
             const messageText = newMsg.result.body.toLowerCase();
             console.log('Mensagem recebida:', messageText);
 
-            const responses = {
-                'olá': 'Olá! Como posso ajudar você?',
-                'oi': 'Olá! Como posso ajudar você?',
-                'horário': 'Nosso horário de atendimento é das 9h às 18h.',
-            };
+            // Resposta de saudação e opções
+            const responseText = `Olá! Eu sou o Suporte da Redenet. Como posso ajudar você? Escolha uma das opções abaixo:
+    
+            1 - Problema com iEscolar
+            2 - Financeiro
+            3 - Dúvidas sobre Produtos/Serviços
+            4 - Suporte Técnico
+            5 - Outros
 
-            const reply = Object.keys(responses).find((key) => messageText.includes(key));
-            const responseText = reply ? responses[reply] : 'Desculpe, não entendi sua mensagem.';
+            Por favor, digite o número da opção desejada.`;
 
-            try {
+            // Adicionar usuário à fila ou atender imediatamente
+            if (activeChats < maxActiveChats) {
+                activeChats++;
+                console.log('Atendendo novo chat...');
                 await conn.client.sendMessage({
                     to: newMsg.result.chatId,
                     body: responseText,
                     options: { type: 'sendText' },
                 });
                 console.log('Mensagem enviada:', responseText);
-            } catch (err) {
-                console.error('Erro ao enviar a mensagem:', err);
+            } else {
+                waitingList.push(newMsg.result.chatId); // Adiciona à fila de espera
+                console.log('Usuário na fila de espera');
+                await conn.client.sendMessage({
+                    to: newMsg.result.chatId,
+                    body: 'Você está na lista de espera. Aguarde sua vez.',
+                    options: { type: 'sendText' },
+                });
             }
+
+            // Envia as atualizações de chats ativos e lista de espera para o processo principal
+            sendUpdateToRenderer();
         }
     });
-}   
+}
+
+// Função para enviar as atualizações para o processo principal do Electron
+function sendUpdateToRenderer() {
+    if (typeof ipcRenderer !== 'undefined') {
+        ipcRenderer.send('updateStatus', {
+            activeChats,
+            waitingList
+        });
+    } else {
+        console.error("ipcRenderer não está disponível no contexto atual");
+    }
+}
+
+// Função para liberar uma vaga de chat e atender o próximo da fila
+async function endChat() {
+    if (activeChats > 0) activeChats--;
+    if (waitingList.length > 0) {
+        const nextInLine = waitingList.shift();
+        activeChats++;
+        console.log('Atendendo o próximo na fila...');
+        // Enviar a mensagem de saudação para o próximo da fila
+        const responseText = `Olá! Eu sou o Suporte da Redenet. Como posso ajudar você? Escolha uma das opções abaixo:
+    
+            1 - Problema com iEscolar
+            2 - Financeiro
+            3 - Dúvidas sobre Produtos/Serviços
+            4 - Suporte Técnico
+            5 - Outros`;
+        await conn.client.sendMessage({
+            to: nextInLine,
+            body: responseText,
+            options: { type: 'sendText' },
+        });
+    }
+}
 
 // Inicializa o navegador
 (async () => {
