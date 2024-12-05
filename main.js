@@ -1,6 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const fs = require('fs');
 
 let mainWindow;
 
@@ -10,11 +9,13 @@ function createWindow() {
         width: 800,
         height: 600,
         webPreferences: {
-            nodeIntegration: true, // Para permitir o uso de Node.js no renderizador
-            contextIsolation: false, // Para permitir comunicação com o IPC
-        }
+            nodeIntegration: false, // Não habilitar Node.js no renderizador (por segurança)
+            contextIsolation: true, // Ativar o isolamento de contexto
+            preload: path.join(__dirname, 'preload.js'), // Arquivo de preload
+        },
     });
 
+    // Carrega o arquivo HTML
     mainWindow.loadFile('index.html');
 
     // Quando a janela é fechada
@@ -23,10 +24,11 @@ function createWindow() {
     });
 }
 
-// Função para iniciar o app
+// Inicializa o app
 app.whenReady().then(() => {
     createWindow();
 
+    // Recria a janela quando o aplicativo é ativado (ex: ícone no macOS)
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
@@ -34,17 +36,17 @@ app.whenReady().then(() => {
     });
 });
 
-// Envia os dados atualizados da fila de espera e chats ativos para o renderizador
+// Escuta as mensagens do `bot.js` para atualizações de status
 ipcMain.on('updateStatus', (event, data) => {
-    console.log('Atualização recebida:', data);
+    console.log('Atualização de status recebida:', data);
 
+    // Envia as atualizações para o front-end
     if (mainWindow) {
-        // Envia os dados do status para o renderizador
         mainWindow.webContents.send('statusUpdate', data);
     }
 });
 
-// Fecha o app quando todas as janelas forem fechadas
+// Fecha o aplicativo quando todas as janelas forem fechadas
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();

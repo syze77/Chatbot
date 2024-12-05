@@ -1,4 +1,4 @@
-const { ipcRenderer } = require('electron'); // Importa o ipcRenderer para enviar atualizações
+const { ipcRenderer } = require('electron'); // Garantir que o ipcRenderer está disponível no contexto
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const path = require('path');
@@ -62,6 +62,7 @@ async function startBrowser() {
         try {
             await page.waitForSelector(qrCodeSelector, { timeout: 60000 });
             console.log('QR Code detectado, aguardando escaneamento...');
+
             await page.screenshot({ path: 'qr_code.png' });
 
             await page.waitForSelector('div[title="Nova conversa"]', { timeout: 60000 });
@@ -124,81 +125,97 @@ async function startListeningForMessages(conn) {
         console.log('Nova mensagem recebida...');
         if (!newMsg.result.fromMe) {
             const messageText = newMsg.result.body.toLowerCase();
+            const chatId = newMsg.result.chatId;
+
             console.log('Mensagem recebida:', messageText);
 
-            // Resposta de saudação e opções
-            const responseText = `Olá! Eu sou o Suporte da Redenet. Como posso ajudar você? Escolha uma das opções abaixo:
-    
-            1 - Problema com iEscolar
-            2 - Financeiro
-            3 - Dúvidas sobre Produtos/Serviços
-            4 - Suporte Técnico
-            5 - Outros
-
-            Por favor, digite o número da opção desejada.`;
-
-            // Adicionar usuário à fila ou atender imediatamente
-            if (activeChats < maxActiveChats) {
-                activeChats++;
-                console.log('Atendendo novo chat...');
-                await conn.client.sendMessage({
-                    to: newMsg.result.chatId,
-                    body: responseText,
-                    options: { type: 'sendText' },
-                });
-                console.log('Mensagem enviada:', responseText);
+            if (messageText.startsWith("nome:")) {
+                // Coleta as informações do usuário
+                const userInfo = parseUserInfo(messageText);
+                if (userInfo) {
+                    if (activeChats < maxActiveChats) {
+                        activeChats++;
+                        console.log('Atendendo novo chat...');
+                        await conn.client.sendMessage({
+                            to: chatId,
+                            body: 'Obrigado pelas informações! Estamos iniciando seu atendimento.',
+                            options: { type: 'sendText' },
+                        });
+                    } else {
+                        waitingList.push({ chatId, ...userInfo });
+                        console.log('Usuário na fila de espera');
+                        await conn.client.sendMessage({
+                            to: chatId,
+                            body: 'Você está na lista de espera. Aguarde sua vez.',
+                            options: { type: 'sendText' },
+                        });
+                    }
+                    sendUpdateToRenderer();
+                } else {
+                    await conn.client.sendMessage({
+                        to: chatId,
+                        body: 'Por favor, insira suas informações no formato correto: Nome: [seu nome], Cidade: [sua cidade], Cargo: [seu cargo], Escola: [sua escola]',
+                        options: { type: 'sendText' },
+                    });
+                }
             } else {
-                waitingList.push(newMsg.result.chatId); // Adiciona à fila de espera
-                console.log('Usuário na fila de espera');
                 await conn.client.sendMessage({
-                    to: newMsg.result.chatId,
-                    body: 'Você está na lista de espera. Aguarde sua vez.',
+                    to: chatId,
+                    body: `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
+                    
+Nome completo:
+Cidade:
+Cargo: (Aluno, Supervisor, Secretário, Professor, Administrador, Responsável)
+Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor ou Supervisor)
+
+⚠️ Atenção: Certifique-se de preencher todas as informações corretamente para agilizar o atendimento.`,
                     options: { type: 'sendText' },
                 });
             }
-
-            // Envia as atualizações de chats ativos e lista de espera para o processo principal
-            sendUpdateToRenderer();
         }
+    });
+
+    // Detectar quando um chat é finalizado
+    conn.client.ev.on('chatClosed', async (chatId) => {
+        activeChats--;  // Reduz o número de chats ativos quando um chat é fechado
+        sendUpdateToRenderer();
     });
 }
 
-// Função para enviar as atualizações para o processo principal do Electron
+// Função para analisar as informações do usuário
+function parseUserInfo(messageText) {
+    const info = {};
+    const lines = messageText.split('\n');
+    for (const line of lines) {
+        const [key, ...value] = line.split(':');
+        if (key && value) {
+            info[key.trim().toLowerCase()] = value.join(':').trim();
+        }
+    }
+    if (info.nome && info.cidade && info.cargo && info.escola) {
+        return {
+            nome: info.nome,
+            cidade: info.cidade,
+            cargo: info.cargo,
+            escola: info.escola,
+        };
+    }
+    return null;
+}
+
 function sendUpdateToRenderer() {
+    const statusUpdate = {
+        activeChats,
+        waitingList: waitingList.map((user, index) => ({
+            id: index + 1,
+            ...user,
+        })),
+    };
+
     if (typeof ipcRenderer !== 'undefined') {
-        ipcRenderer.send('updateStatus', {
-            activeChats,
-            waitingList
-        });
+        ipcRenderer.send('updateStatus', statusUpdate);
     } else {
-        console.error("ipcRenderer não está disponível no contexto atual");
+        console.error('ipcRenderer não está disponível no contexto atual');
     }
 }
 
-// Função para liberar uma vaga de chat e atender o próximo da fila
-async function endChat() {
-    if (activeChats > 0) activeChats--;
-    if (waitingList.length > 0) {
-        const nextInLine = waitingList.shift();
-        activeChats++;
-        console.log('Atendendo o próximo na fila...');
-        // Enviar a mensagem de saudação para o próximo da fila
-        const responseText = `Olá! Eu sou o Suporte da Redenet. Como posso ajudar você? Escolha uma das opções abaixo:
-    
-            1 - Problema com iEscolar
-            2 - Financeiro
-            3 - Dúvidas sobre Produtos/Serviços
-            4 - Suporte Técnico
-            5 - Outros`;
-        await conn.client.sendMessage({
-            to: nextInLine,
-            body: responseText,
-            options: { type: 'sendText' },
-        });
-    }
-}
-
-// Inicializa o navegador
-(async () => {
-    await startBrowser();
-})();
