@@ -1,34 +1,43 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const { startHydraBot, stopHydraBot } = require('./bot'); // Garantir que você tenha uma função stopHydraBot
 
-let mainWindow;
+let win;
 
-// Função para criar a janela principal
 function createWindow() {
-    mainWindow = new BrowserWindow({
+    win = new BrowserWindow({
         width: 800,
         height: 600,
         webPreferences: {
-            nodeIntegration: false, // Não habilitar Node.js no renderizador (por segurança)
-            contextIsolation: true, // Ativar o isolamento de contexto
-            preload: path.join(__dirname, 'preload.js'), // Arquivo de preload
-        },
+            nodeIntegration: true,
+            preload: path.join(__dirname, 'preload.js') // Se você tiver um arquivo preload.js
+        }
     });
 
-    // Carrega o arquivo HTML
-    mainWindow.loadFile('index.html');
+    // Carregar o arquivo HTML local
+    win.loadFile('index.html'); // Mudança aqui para carregar o HTML diretamente
 
-    // Quando a janela é fechada
-    mainWindow.on('closed', () => {
-        mainWindow = null;
+    // Quando a janela for fechada, definimos win como null
+    win.on('closed', () => {
+        win = null;
+        // Parar o HydraBot se a janela for fechada
+        stopHydraBot();
     });
 }
 
-// Inicializa o app
+// Ouvindo o evento 'updateStatus' e enviando para o renderer process
+ipcMain.on('updateStatus', (event, statusUpdate) => {
+    if (win) {
+        win.webContents.send('statusUpdate', statusUpdate);
+    }
+});
+
+// Inicia o bot
+startHydraBot();
+
 app.whenReady().then(() => {
     createWindow();
 
-    // Recria a janela quando o aplicativo é ativado (ex: ícone no macOS)
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
@@ -36,17 +45,6 @@ app.whenReady().then(() => {
     });
 });
 
-// Escuta as mensagens do `bot.js` para atualizações de status
-ipcMain.on('updateStatus', (event, data) => {
-    console.log('Atualização de status recebida:', data);
-
-    // Envia as atualizações para o front-end
-    if (mainWindow) {
-        mainWindow.webContents.send('statusUpdate', data);
-    }
-});
-
-// Fecha o aplicativo quando todas as janelas forem fechadas
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();

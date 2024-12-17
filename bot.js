@@ -1,14 +1,7 @@
-const { ipcRenderer } = require('electron'); // Garantir que o ipcRenderer está disponível no contexto
-const puppeteer = require('puppeteer-core');
+const hydraBot = require('hydra-bot');
 const fs = require('fs');
 const path = require('path');
-const hydraBot = require('hydra-bot');
-
-// Caminho do executável do Chrome
-const executablePath = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-
-let browser;
-let page;
+const { ipcMain } = require('electron'); // Importando ipcMain para enviar dados ao main process
 
 // Caminho para salvar os cookies
 const cookiesPath = path.join(__dirname, 'cookies.json');
@@ -16,76 +9,19 @@ const cookiesPath = path.join(__dirname, 'cookies.json');
 // Fila de espera e controle de chats ativos
 let waitingList = [];
 let activeChats = 0;
-const maxActiveChats = 4;
+const maxActiveChats = 3;  // Limite de chats simultâneos
 
-// Função para salvar os cookies
-async function saveCookies(page) {
-    const cookies = await page.cookies();
-    fs.writeFileSync(cookiesPath, JSON.stringify(cookies, null, 2));
-    console.log('Cookies salvos com sucesso.');
-}
+let bot;
+let processedChats = new Set(); // Para evitar múltiplos processamentos do mesmo chat
 
-// Função para carregar os cookies
-async function loadCookies(page) {
-    if (fs.existsSync(cookiesPath)) {
-        const cookies = JSON.parse(fs.readFileSync(cookiesPath));
-        for (let cookie of cookies) {
-            await page.setCookie(cookie);
-        }
-        console.log('Cookies carregados com sucesso.');
-    }
-}
-
-// Função de atraso (sleep)
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function startBrowser() {
+// Função para iniciar o HydraBot
+async function startHydraBot() {
     try {
-        browser = await puppeteer.launch({
-            headless: false,
-            executablePath,
-            slowMo: 100,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        });
-
-        page = await browser.newPage();
-
-        // Carrega os cookies se existirem
-        await loadCookies(page);
-
-        // Navega até o WhatsApp Business Web
-        await page.goto('https://web.whatsapp.com/', { waitUntil: 'domcontentloaded' });
-
-        const qrCodeSelector = 'canvas[aria-label="Scan this QR code to link a device!"]';
-        try {
-            await page.waitForSelector(qrCodeSelector, { timeout: 60000 });
-            console.log('QR Code detectado, aguardando escaneamento...');
-
-            await page.screenshot({ path: 'qr_code.png' });
-
-            await page.waitForSelector('div[title="Nova conversa"]', { timeout: 60000 });
-            console.log('Conectado ao WhatsApp Web!');
-            await saveCookies(page);
-            await setupHydra(page);
-        } catch (err) {
-            console.log('QR Code já escaneado ou erro na conexão.', err);
-            await setupHydra(page);
-        }
-    } catch (err) {
-        console.error('Erro ao iniciar o navegador:', err);
-        if (browser) await browser.close();
-    }
-}
-
-async function setupHydra(page) {
-    try {
-        const ev = await hydraBot.initServer({
+        bot = await hydraBot.initServer({
             puppeteerOptions: {
                 headless: false,
                 devtools: true,
-                browserPage: page,
+                args: ['--no-sandbox', '--disable-setuid-sandbox'],
             },
             timeAutoClose: 0,
             printQRInTerminal: true,
@@ -93,7 +29,7 @@ async function setupHydra(page) {
 
         console.log('Servidor Hydra iniciado!');
 
-        ev.on('connection', async (conn) => {
+        bot.on('connection', async (conn) => {
             console.log('Status da conexão:', conn);
             if (conn.connect) {
                 console.log('Conexão Hydra estabelecida.');
@@ -103,18 +39,16 @@ async function setupHydra(page) {
             }
         });
 
-        ev.on('qrcode', (qrcode) => {
+        bot.on('qrcode', (qrcode) => {
             console.log('QR Code gerado pelo Hydra:', qrcode);
         });
 
-        return ev;
     } catch (error) {
-        console.error('Erro ao configurar o Hydra:', error);
-        if (browser) await browser.close();
-        await startBrowser(); // Reinicia o navegador em caso de falha
+        console.error('Erro ao iniciar o Hydra:', error);
     }
 }
 
+// Função para ouvir as mensagens e evitar múltiplas respostas
 async function startListeningForMessages(conn) {
     if (!conn.client || !conn.client.ev) {
         console.error('Erro: cliente ou evento não definidos');
@@ -122,15 +56,20 @@ async function startListeningForMessages(conn) {
     }
 
     conn.client.ev.on('newMessage', async (newMsg) => {
-        console.log('Nova mensagem recebida...');
+        const chatId = newMsg.result.chatId;
+        console.log('Nova mensagem recebida...', chatId);
+
+        // Evita processar o mesmo chat várias vezes
+        if (processedChats.has(chatId)) {
+            console.log(`Mensagem já processada para o chat ${chatId}`);
+            return;
+        }
+
         if (!newMsg.result.fromMe) {
             const messageText = newMsg.result.body.toLowerCase();
-            const chatId = newMsg.result.chatId;
-
             console.log('Mensagem recebida:', messageText);
 
             if (messageText.startsWith("nome:")) {
-                // Coleta as informações do usuário
                 const userInfo = parseUserInfo(messageText);
                 if (userInfo) {
                     if (activeChats < maxActiveChats) {
@@ -138,7 +77,7 @@ async function startListeningForMessages(conn) {
                         console.log('Atendendo novo chat...');
                         await conn.client.sendMessage({
                             to: chatId,
-                            body: 'Obrigado pelas informações! Estamos iniciando seu atendimento.',
+                            body: `Obrigado pelas informações, ${userInfo.nome}! Estamos iniciando seu atendimento.`,
                             options: { type: 'sendText' },
                         });
                     } else {
@@ -150,7 +89,8 @@ async function startListeningForMessages(conn) {
                             options: { type: 'sendText' },
                         });
                     }
-                    sendUpdateToRenderer();
+                    sendUpdateToMainProcess(); // Envia as atualizações de status para o main process
+                    processedChats.add(chatId); // Marca o chat como processado
                 } else {
                     await conn.client.sendMessage({
                         to: chatId,
@@ -175,10 +115,20 @@ Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor o
         }
     });
 
-    // Detectar quando um chat é finalizado
     conn.client.ev.on('chatClosed', async (chatId) => {
-        activeChats--;  // Reduz o número de chats ativos quando um chat é fechado
-        sendUpdateToRenderer();
+        activeChats--;
+        processedChats.delete(chatId);
+        if (waitingList.length > 0) {
+            const nextUser = waitingList.shift(); // Remove o primeiro da fila
+            activeChats++;
+            console.log('Atendendo novo chat da fila...');
+            await conn.client.sendMessage({
+                to: nextUser.chatId,
+                body: `Você foi removido da fila! Iniciando seu atendimento, ${nextUser.nome}.`,
+                options: { type: 'sendText' },
+            });
+        }
+        sendUpdateToMainProcess(); // Envia as atualizações de status para o main process
     });
 }
 
@@ -192,9 +142,10 @@ function parseUserInfo(messageText) {
             info[key.trim().toLowerCase()] = value.join(':').trim();
         }
     }
+
     if (info.nome && info.cidade && info.cargo && info.escola) {
         return {
-            nome: info.nome,
+            nome: capitalizeName(info.nome),
             cidade: info.cidade,
             cargo: info.cargo,
             escola: info.escola,
@@ -203,7 +154,16 @@ function parseUserInfo(messageText) {
     return null;
 }
 
-function sendUpdateToRenderer() {
+// Função para capitalizar a primeira letra de cada palavra
+function capitalizeName(name) {
+    return name
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+}
+
+// Função para enviar a atualização ao main process
+function sendUpdateToMainProcess() {
     const statusUpdate = {
         activeChats,
         waitingList: waitingList.map((user, index) => ({
@@ -212,10 +172,8 @@ function sendUpdateToRenderer() {
         })),
     };
 
-    if (typeof ipcRenderer !== 'undefined') {
-        ipcRenderer.send('updateStatus', statusUpdate);
-    } else {
-        console.error('ipcRenderer não está disponível no contexto atual');
-    }
+    // Envia para o main process
+    ipcMain.emit('updateStatus', statusUpdate);
 }
 
+module.exports = { startHydraBot, sendUpdateToMainProcess };

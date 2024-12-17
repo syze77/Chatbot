@@ -3,8 +3,8 @@ window.electron.onStatusUpdate((event, data) => {
     console.log('Status recebido no renderizador:', data);
 
     // Atualiza a interface com os dados recebidos
-    document.getElementById('chatStatus').innerText = `Chats Ativos: ${data.activeChats}`;
-    document.getElementById('waitingList').innerText = `Lista de Espera: ${data.waitingList.length}`;
+    document.getElementById('chatStatus').innerHTML = `Chats Ativos: ${data.activeChats}`;
+    document.getElementById('waitingList').innerHTML = `Lista de Espera: ${data.waitingList.length}`;
 });
 
 // Função para enviar uma atualização de status
