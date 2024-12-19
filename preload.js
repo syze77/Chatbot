@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expor uma função para o renderer process ouvir atualizações de status
+// Expondo as funções do ipcRenderer para o contexto do renderer
 contextBridge.exposeInMainWorld('electron', {
-    onStatusUpdate: (callback) => ipcRenderer.on('statusUpdate', callback),
+  onStatusUpdate: (callback) => ipcRenderer.on('statusUpdate', callback),
+  sendUpdateStatus: (statusData) => ipcRenderer.send('updateStatus', statusData),
 });

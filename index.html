@@ -10,47 +10,65 @@
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f7f7f7;
+            background-color: #f2f2f2;
         }
         #status-container {
+            max-width: 900px;
+            margin: 40px auto;
             padding: 20px;
             background-color: #ffffff;
             border-radius: 8px;
-            margin: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
         h1 {
             text-align: center;
             color: #333;
         }
-        .chat-item {
-            padding: 10px;
+        .status-container {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .section {
+            flex: 1;
+            min-width: 300px;
             border: 1px solid #ddd;
-            margin: 10px 0;
             border-radius: 5px;
             background-color: #f9f9f9;
-        }
-        .waiting-list {
-            color: red;
-        }
-        .active-chat {
-            color: green;
+            overflow: hidden;
         }
         .status-header {
             background-color: #4CAF50;
             color: white;
             padding: 10px;
-            border-radius: 5px;
-        }
-        .status-container {
-            display: flex;
-            justify-content: space-between;
-        }
-        .section {
-            width: 48%;
-        }
-        .count {
+            text-align: center;
             font-weight: bold;
-            margin-bottom: 10px;
+        }
+        .list-container {
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .chat-item {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background-color: #ffffff;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .waiting-list {
+            color: #d9534f;
+        }
+        .active-chat {
+            color: #5cb85c;
+        }
+        .empty-message {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -58,44 +76,59 @@
     <div id="status-container">
         <h1>Status do Atendimento</h1>
         <div class="status-container">
+            <!-- Seção de atendimentos ativos -->
             <div class="section">
                 <div class="status-header">Atendimentos Ativos</div>
-                <div id="active-chat-list"></div>
+                <div id="active-chat-list" class="list-container">
+                    <div class="empty-message">Nenhum atendimento ativo no momento.</div>
+                </div>
             </div>
+
+            <!-- Seção de fila de espera -->
             <div class="section">
                 <div class="status-header">Fila de Espera</div>
-                <div id="waiting-list-container"></div>
+                <div id="waiting-list-container" class="list-container">
+                    <div class="empty-message">Nenhum usuário na fila de espera.</div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Usando o método exposto pelo preload.js
+        // Função para atualizar a interface com os dados de status
         window.electron.onStatusUpdate((event, statusData) => {
-            updateUI(statusData); // Atualiza a interface com os dados recebidos
+            updateUI(statusData);
         });
 
-        // Função para atualizar a interface com os dados recebidos
+        // Função para atualizar a interface
         function updateUI(data) {
-            // Atualiza a lista de atendimentos ativos
+            // Atualiza atendimentos ativos
             const activeChatList = document.getElementById('active-chat-list');
-            activeChatList.innerHTML = '';
-            data.activeChats.forEach(chat => {
-                const chatItem = document.createElement('div');
-                chatItem.className = 'chat-item active-chat';
-                chatItem.textContent = `${chat.nome} - ${chat.cargo} - ${chat.escola}`;
-                activeChatList.appendChild(chatItem);
-            });
+            activeChatList.innerHTML = ''; // Limpa o conteúdo anterior
+            if (data.activeChats && data.activeChats.length > 0) {
+                data.activeChats.forEach(chat => {
+                    const chatItem = document.createElement('div');
+                    chatItem.className = 'chat-item active-chat';
+                    chatItem.textContent = `${chat.name} - ${chat.role} - ${chat.school}`;
+                    activeChatList.appendChild(chatItem);
+                });
+            } else {
+                activeChatList.innerHTML = '<div class="empty-message">Nenhum atendimento ativo no momento.</div>';
+            }
 
-            // Atualiza a lista de fila de espera
+            // Atualiza a fila de espera
             const waitingListContainer = document.getElementById('waiting-list-container');
-            waitingListContainer.innerHTML = '';
-            data.waitingList.forEach(user => {
-                const userItem = document.createElement('div');
-                userItem.className = 'chat-item waiting-list';
-                userItem.textContent = `${user.nome} - ${user.cargo} - ${user.escola}`;
-                waitingListContainer.appendChild(userItem);
-            });
+            waitingListContainer.innerHTML = ''; // Limpa o conteúdo anterior
+            if (data.waitingList && data.waitingList.length > 0) {
+                data.waitingList.forEach(user => {
+                    const userItem = document.createElement('div');
+                    userItem.className = 'chat-item waiting-list';
+                    userItem.textContent = `${user.name} - ${user.role} - ${user.school}`;
+                    waitingListContainer.appendChild(userItem);
+                });
+            } else {
+                waitingListContainer.innerHTML = '<div class="empty-message">Nenhum usuário na fila de espera.</div>';
+            }
         }
     </script>
 </body>

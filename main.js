@@ -1,52 +1,41 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const { startHydraBot, stopHydraBot } = require('./bot'); // Garantir que você tenha uma função stopHydraBot
+const { startHydraBot } = require('./bot');
 
 let win;
 
 function createWindow() {
-    win = new BrowserWindow({
-        width: 800,
-        height: 600,
-        webPreferences: {
-            nodeIntegration: true,
-            preload: path.join(__dirname, 'preload.js') // Se você tiver um arquivo preload.js
-        }
-    });
+  win = new BrowserWindow({
+    width: 800,
+    height: 600,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),  // Certifique-se de incluir o preload.js
+      contextIsolation: true,  // Melhora a segurança isolando o contexto entre o renderer e o Node.js
+      enableRemoteModule: false,  // Desabilita o remote module, por questões de segurança
+    },
+  });
 
-    // Carregar o arquivo HTML local
-    win.loadFile('index.html'); // Mudança aqui para carregar o HTML diretamente
+  win.loadFile('index.html');
 
-    // Quando a janela for fechada, definimos win como null
-    win.on('closed', () => {
-        win = null;
-        // Parar o HydraBot se a janela for fechada
-        stopHydraBot();
-    });
+  win.on('closed', () => {
+    win = null;
+  });
 }
 
-// Ouvindo o evento 'updateStatus' e enviando para o renderer process
-ipcMain.on('updateStatus', (event, statusUpdate) => {
-    if (win) {
-        win.webContents.send('statusUpdate', statusUpdate);
-    }
+// Recebe as atualizações do status de atendimento e envia para o renderer
+ipcMain.on('updateStatus', (event, statusData) => {
+  if (win) {
+    win.webContents.send('statusUpdate', statusData);  // Envia os dados via IPC para o renderer
+  }
 });
 
-// Inicia o bot
-startHydraBot();
-
 app.whenReady().then(() => {
-    createWindow();
-
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
-    });
+  createWindow();
+  startHydraBot();  // Inicia o bot
 });
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
 });
