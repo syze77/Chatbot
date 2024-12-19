@@ -9,29 +9,37 @@ function createWindow() {
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),  // Certifique-se de incluir o preload.js
-      contextIsolation: true,  // Melhora a segurança isolando o contexto entre o renderer e o Node.js
-      enableRemoteModule: false,  // Desabilita o remote module, por questões de segurança
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
-  win.loadFile('index.html');
-
+  win.loadFile(path.join(__dirname, 'index.html'));
   win.on('closed', () => {
     win = null;
   });
 }
 
-// Recebe as atualizações do status de atendimento e envia para o renderer
 ipcMain.on('updateStatus', (event, statusData) => {
-  if (win) {
-    win.webContents.send('statusUpdate', statusData);  // Envia os dados via IPC para o renderer
+  try {
+    if (win) {
+      win.webContents.send('statusUpdate', statusData); 
+    }
+  } catch (err) {
+    console.error("Erro ao enviar status para a janela:", err);
   }
 });
 
 app.whenReady().then(() => {
   createWindow();
-  startHydraBot();  // Inicia o bot
+  startHydraBot();
+
+  win.webContents.once('did-finish-load', () => {
+    if (win) {
+      win.webContents.send('statusUpdate', { activeChats: [], waitingList: [] });
+    }
+  });
 });
 
 app.on('window-all-closed', () => {

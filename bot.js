@@ -6,7 +6,17 @@ const cookiesPath = path.join(__dirname, 'cookies.json');
 const maxActiveChats = 3;
 
 let bot;
+let activeChatsList = [];
+const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
 
+Nome completo:
+Cidade:
+Cargo: (Aluno, Supervisor, Secretário, Professor, Administrador, Responsável)
+Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor ou Supervisor)
+
+⚠️ Atenção: Certifique-se de preencher todas as informações corretamente para agilizar o atendimento.`;
+
+// Inicia o bot
 async function startHydraBot() {
   try {
     bot = await hydraBot.initServer({
@@ -15,7 +25,6 @@ async function startHydraBot() {
         devtools: false,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       },
-      timeAutoClose: 0,
       printQRInTerminal: true,
     });
 
@@ -24,9 +33,9 @@ async function startHydraBot() {
     bot.on('connection', async (conn) => {
       if (conn.connect) {
         console.log('Conexão Hydra estabelecida.');
-        await startListeningForMessages(conn);
+        startListeningForMessages(conn);
       } else {
-        console.log('Erro na conexão Hydra.');
+        console.error('Erro na conexão Hydra.');
       }
     });
 
@@ -38,111 +47,119 @@ async function startHydraBot() {
   }
 }
 
-async function startListeningForMessages(conn) {
-  if (!conn.client || !conn.client.ev) {
-    console.error('Erro: cliente ou evento não definidos');
-    return;
-  }
-
+// Função que escuta as mensagens recebidas
+function startListeningForMessages(conn) {
   conn.client.ev.on('newMessage', async (newMsg) => {
     const chatId = newMsg.result.chatId;
 
     if (!newMsg.result.fromMe) {
       const messageText = newMsg.result.body.toLowerCase();
-      console.log('Mensagem recebida:', messageText);
 
       if (messageText.startsWith("nome:")) {
         const userInfo = parseUserInfo(messageText);
         if (userInfo) {
-          const activeChats = await getActiveChatsCount();
-
-          if (activeChats < maxActiveChats) {
-            console.log('Atendendo novo chat...');
-            await conn.client.sendMessage({
-              to: chatId,
-              body: `Obrigado pelas informações, ${userInfo.name}! Estamos iniciando seu atendimento.`,
-              options: { type: 'sendText' },
-            });
-            sendStatusUpdateToMainProcess(activeChats, []); // Envia o status para o front-end
+          if (activeChatsList.length < maxActiveChats) {
+            activeChatsList.push(userInfo);
+            await sendMessage(conn, chatId, `Obrigado pelas informações, ${userInfo.name}! Estamos iniciando seu atendimento.`);
+            await sendProblemOptions(conn, chatId); // Envia opções de problemas
           } else {
-            console.log('Usuário na fila de espera');
-            await conn.client.sendMessage({
-              to: chatId,
-              body: 'Você está na lista de espera. Aguarde sua vez.',
-              options: { type: 'sendText' },
-            });
-            sendStatusUpdateToMainProcess(activeChats, [userInfo]); // Envia para o front-end com fila de espera
+            userInfo.isWaiting = true;  // Define o usuário como aguardando
+            activeChatsList.push(userInfo);  // Adiciona à lista de espera
+            await sendMessage(conn, chatId, `Você está na lista de espera. Sua posição na fila é: ${activeChatsList.filter(chat => chat.isWaiting).length}. Aguarde sua vez.`);
           }
+          sendStatusUpdateToMainProcess();
         } else {
-          await conn.client.sendMessage({
-            to: chatId,
-            body: 'Por favor, insira suas informações no formato correto: Nome: [seu nome], Cidade: [sua cidade], Cargo: [seu cargo], Escola: [sua escola]',
-            options: { type: 'sendText' },
-          });
+          await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
         }
+      } else if (messageText === '6') {
+        // Resposta quando o usuário escolhe a opção de acessar os vídeos
+        await sendMessage(conn, chatId, 'Para mais informações, acesse o canal iEscolar e assista aos vídeos explicativos para resolver as dúvidas mais comuns:\n\n📺 [Clique aqui para assistir aos vídeos do iEscolar](https://www.youtube.com/@iescolaronline5069/videos)');
+        sendProblemToFrontEnd('Vídeos iEscolar');  // Envia a informação do problema para o front-end
+      } else if (messageText === '1') {
+        sendProblemToFrontEnd('Falha no acesso ao sistema');
+      } else if (messageText === '2') {
+        sendProblemToFrontEnd('Erro ao cadastrar aluno/funcionário');
+      } else if (messageText === '3') {
+        sendProblemToFrontEnd('Problemas com o diário de classe');
+      } else if (messageText === '4') {
+        sendProblemToFrontEnd('Falha no registro de notas');
+      } else if (messageText === '5') {
+        sendProblemToFrontEnd('Outro problema');
       } else {
-        await conn.client.sendMessage({
-          to: chatId,
-          body: `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
-                
-Nome completo:
-Cidade:
-Cargo: (Aluno, Supervisor, Secretário, Professor, Administrador, Responsável)
-Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor ou Supervisor)
-
-⚠️ Atenção: Certifique-se de preencher todas as informações corretamente para agilizar o atendimento.`,
-          options: { type: 'sendText' },
-        });
+        await sendMessage(conn, chatId, defaultMessage);
       }
     }
   });
 
   conn.client.ev.on('chatClosed', async (chatId) => {
     console.log('Chat encerrado:', chatId);
-    const activeChats = await getActiveChatsCount();
-    sendStatusUpdateToMainProcess(activeChats, []);
+    activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);  // Remove da lista
+    sendStatusUpdateToMainProcess();
   });
 }
 
+// Função que analisa a mensagem de texto e extrai as informações
 function parseUserInfo(messageText) {
   const info = {};
   const lines = messageText.split('\n');
   for (const line of lines) {
     const [key, ...value] = line.split(':');
-    if (key && value) {
+    if (key && value.length) {
       info[key.trim().toLowerCase()] = value.join(':').trim();
     }
   }
-
   if (info.nome && info.cidade && info.cargo && info.escola) {
     return {
-      name: capitalizeName(info.nome),
-      city: info.cidade,
-      role: info.cargo,
-      school: info.escola,
+      name: capitalize(info.nome),
+      city: capitalize(info.cidade),
+      role: capitalize(info.cargo),
+      school: capitalize(info.escola),
     };
   }
   return null;
 }
 
-function capitalizeName(name) {
-  return name
+// Função para capitalizar as primeiras letras das palavras
+function capitalize(str) {
+  return str
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
 }
 
-async function sendStatusUpdateToMainProcess(activeChats, waitingList) {
-  const statusUpdate = {
-    activeChats,
-    waitingList,
-  };
-  ipcMain.emit('updateStatus', null, statusUpdate); // Envia o status via IPC para o main process
+// Função para enviar mensagens ao usuário
+async function sendMessage(conn, chatId, message) {
+  await conn.client.sendMessage({ to: chatId, body: message, options: { type: 'sendText' } });
 }
 
-async function getActiveChatsCount() {
-  // Simulação do número de chats ativos
-  return Math.floor(Math.random() * (maxActiveChats + 1));  // Apenas para exemplo
+// Função que envia as opções de problemas para o usuário
+async function sendProblemOptions(conn, chatId) {
+  const problemOptions = `Por favor, selecione o tipo de problema que você está enfrentando:
+
+1️⃣ Falha no acesso ao sistema
+2️⃣ Erro ao cadastrar aluno/funcionário
+3️⃣ Problemas com o diário de classe
+4️⃣ Falha no registro de notas
+5️⃣ Outros (Caso seu problema não esteja na lista, digite abaixo)
+6️⃣ Veja as dúvidas mais comuns no canal iEscolar (vídeos explicativos)`;
+
+  await sendMessage(conn, chatId, problemOptions);
+}
+
+// Função para enviar a atualização de status ao processo principal (front-end)
+function sendStatusUpdateToMainProcess() {
+  const activeChats = activeChatsList.filter(chat => !chat.isWaiting);  // Filtra chats ativos
+  const waitingList = activeChatsList.filter(chat => chat.isWaiting);  // Filtra chats na lista de espera
+
+  ipcMain.emit('updateStatus', null, {
+    activeChats,
+    waitingList,
+  });
+}
+
+// Função para enviar o problema selecionado para o front-end
+function sendProblemToFrontEnd(problem) {
+  ipcMain.emit('userProblem', null, problem);
 }
 
 module.exports = { startHydraBot };

@@ -5,24 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Status do Atendimento</title>
     <style>
-        /* Estilo para a estrutura */
         body {
             font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
             margin: 0;
             padding: 0;
-            background-color: #f2f2f2;
         }
         #status-container {
             max-width: 900px;
             margin: 40px auto;
             padding: 20px;
-            background-color: #ffffff;
+            background-color: #fff;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
         h1 {
             text-align: center;
-            color: #333;
+            font-size: 2rem;
         }
         .status-container {
             display: flex;
@@ -33,10 +32,9 @@
         .section {
             flex: 1;
             min-width: 300px;
-            border: 1px solid #ddd;
             border-radius: 5px;
             background-color: #f9f9f9;
-            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         .status-header {
             background-color: #4CAF50;
@@ -54,21 +52,27 @@
             padding: 10px;
             margin: 10px 0;
             border-radius: 5px;
-            background-color: #ffffff;
             border: 1px solid #ddd;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .waiting-list {
-            color: #d9534f;
-        }
-        .active-chat {
-            color: #5cb85c;
+            font-size: 1rem;
+            line-height: 1.5;
         }
         .empty-message {
             text-align: center;
             color: #999;
-            font-style: italic;
+        }
+        .info-label {
+            font-weight: bold;
+        }
+        .active-chat-item {
+            background-color: #ffeb3b; /* Amarelo */
+        }
+        .waiting-chat-item {
+            background-color: #f44336; /* Vermelho */
+        }
+        .problem-info {
             margin-top: 10px;
+            font-style: italic;
+            color: #555;
         }
     </style>
 </head>
@@ -76,15 +80,12 @@
     <div id="status-container">
         <h1>Status do Atendimento</h1>
         <div class="status-container">
-            <!-- Seção de atendimentos ativos -->
             <div class="section">
                 <div class="status-header">Atendimentos Ativos</div>
                 <div id="active-chat-list" class="list-container">
                     <div class="empty-message">Nenhum atendimento ativo no momento.</div>
                 </div>
             </div>
-
-            <!-- Seção de fila de espera -->
             <div class="section">
                 <div class="status-header">Fila de Espera</div>
                 <div id="waiting-list-container" class="list-container">
@@ -95,40 +96,70 @@
     </div>
 
     <script>
-        // Função para atualizar a interface com os dados de status
         window.electron.onStatusUpdate((event, statusData) => {
             updateUI(statusData);
         });
 
-        // Função para atualizar a interface
         function updateUI(data) {
-            // Atualiza atendimentos ativos
             const activeChatList = document.getElementById('active-chat-list');
-            activeChatList.innerHTML = ''; // Limpa o conteúdo anterior
+            activeChatList.innerHTML = '';
             if (data.activeChats && data.activeChats.length > 0) {
                 data.activeChats.forEach(chat => {
-                    const chatItem = document.createElement('div');
-                    chatItem.className = 'chat-item active-chat';
-                    chatItem.textContent = `${chat.name} - ${chat.role} - ${chat.school}`;
+                    const chatItem = createChatItem(chat, 'active');
                     activeChatList.appendChild(chatItem);
                 });
             } else {
                 activeChatList.innerHTML = '<div class="empty-message">Nenhum atendimento ativo no momento.</div>';
             }
 
-            // Atualiza a fila de espera
             const waitingListContainer = document.getElementById('waiting-list-container');
-            waitingListContainer.innerHTML = ''; // Limpa o conteúdo anterior
+            waitingListContainer.innerHTML = '';
             if (data.waitingList && data.waitingList.length > 0) {
-                data.waitingList.forEach(user => {
-                    const userItem = document.createElement('div');
-                    userItem.className = 'chat-item waiting-list';
-                    userItem.textContent = `${user.name} - ${user.role} - ${user.school}`;
+                data.waitingList.forEach((user, index) => {
+                    const userItem = createChatItem(user, 'waiting');
+                    const position = document.createElement('div');
+                    position.classList.add('info-label');
+                    position.innerHTML = `Posição na fila: ${index + 1}`;
+                    userItem.appendChild(position);
                     waitingListContainer.appendChild(userItem);
                 });
             } else {
                 waitingListContainer.innerHTML = '<div class="empty-message">Nenhum usuário na fila de espera.</div>';
             }
+        }
+
+        function createChatItem(user, status) {
+            const chatItem = document.createElement('div');
+            chatItem.className = `chat-item ${status === 'active' ? 'active-chat-item' : 'waiting-chat-item'}`;
+
+            const name = document.createElement('div');
+            name.innerHTML = `<span class="info-label">Nome:</span> ${capitalize(user.name)}`;
+            chatItem.appendChild(name);
+
+            const role = document.createElement('div');
+            role.innerHTML = `<span class="info-label">Cargo:</span> ${capitalize(user.role)}`;
+            chatItem.appendChild(role);
+
+            const city = document.createElement('div');
+            city.innerHTML = `<span class="info-label">Cidade:</span> ${capitalize(user.city)}`;
+            chatItem.appendChild(city);
+
+            const school = document.createElement('div');
+            school.innerHTML = `<span class="info-label">Escola:</span> ${capitalize(user.school)}`;
+            chatItem.appendChild(school);
+
+            if (user.problem) {
+                const problemInfo = document.createElement('div');
+                problemInfo.classList.add('problem-info');
+                problemInfo.innerHTML = `<span class="info-label">Problema:</span> ${user.problem}`;
+                chatItem.appendChild(problemInfo);
+            }
+
+            return chatItem;
+        }
+
+        function capitalize(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
         }
     </script>
 </body>
