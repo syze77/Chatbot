@@ -72,7 +72,6 @@ function startListeningForMessages(conn) {
           await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
         }
       } else if (messageText === '6') {
-        // Resposta quando o usuário escolhe a opção de acessar os vídeos
         await sendMessage(conn, chatId, 'Para mais informações, acesse o canal iEscolar e assista aos vídeos explicativos para resolver as dúvidas mais comuns:\n\n📺 [Clique aqui para assistir aos vídeos do iEscolar](https://www.youtube.com/@iescolaronline5069/videos)');
         sendProblemToFrontEnd('Vídeos iEscolar');  // Envia a informação do problema para o front-end
       } else if (messageText === '1') {
@@ -112,7 +111,7 @@ function parseUserInfo(messageText) {
     return {
       name: capitalize(info.nome),
       city: capitalize(info.cidade),
-      role: capitalize(info.cargo),
+      position: capitalize(info.cargo),
       school: capitalize(info.escola),
     };
   }
@@ -121,10 +120,15 @@ function parseUserInfo(messageText) {
 
 // Função para capitalizar as primeiras letras das palavras
 function capitalize(str) {
-  return str
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
+    return str
+        .split(' ') // Divide a string em palavras
+        .map(word => {
+            if (word.length > 0) {
+                return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(); // Capitaliza a palavra
+            }
+            return word; // Evita erros com strings vazias
+        })
+        .join(' '); // Junta as palavras novamente
 }
 
 // Função para enviar mensagens ao usuário
