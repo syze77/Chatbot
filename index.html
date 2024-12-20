@@ -90,7 +90,8 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             transition: background-color 0.3s ease, transform 0.3s ease;
             display: flex;
-            flex-wrap: wrap;
+            flex-direction: column; /* Exibe os itens em coluna */
+            gap: 10px; /* Espaço entre as linhas */
         }
 
         .chat-item:hover {
@@ -163,7 +164,7 @@
 <body>
     <div class="container">
         <h1 class="title">
-            <i class="fas fa-tachometer-" style="margin-right: 10px;"></i> Painel de Controle
+            <i style="margin-right: 10px;"></i> Painel de Controle
         </h1>
             
         <div class="row g-4">
@@ -208,7 +209,6 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Simulação de integração com Electron
         window.electron.onStatusUpdate((event, statusData) => {
             updateUI(statusData);
         });
@@ -218,13 +218,8 @@
             const waitingListContainer = document.getElementById('waiting-list-container');
             const problemListContainer = document.getElementById('problem-list-container');
 
-            // Atualizar Atendimentos Ativos
             updateSection(data.activeChats, activeChatList, 'active');
-
-            // Atualizar Fila de Espera
             updateSection(data.waitingList, waitingListContainer, 'waiting', true);
-
-            // Atualizar Problemas Relatados
             updateSection(data.problems, problemListContainer, 'problem');
         }
 
@@ -250,7 +245,6 @@
             const chatItem = document.createElement('div');
             chatItem.classList.add('chat-item');
 
-            // Definir a classe com base no status
             if (status === 'active') {
                 chatItem.classList.add('active-chat-item');
             } else if (status === 'waiting') {
@@ -259,27 +253,22 @@
                 chatItem.classList.add('problem-item');
             }
 
-            // Nome
             const name = document.createElement('div');
-            name.innerHTML = `<span class="info-label">Nome:</span> ${user.name}<br>`;
+            name.innerHTML = `<span class="info-label">Nome:</span> ${user.name}`;
             chatItem.appendChild(name);
 
-            // Cargo
             const role = document.createElement('div');
-            role.innerHTML = `<span class="info-label">Cargo:</span> ${user.position}<br>`;
+            role.innerHTML = `<span class="info-label">Cargo:</span> ${user.position}`;
             chatItem.appendChild(role);
 
-            // Cidade
             const city = document.createElement('div');
-            city.innerHTML = `<span class="info-label">Cidade:</span> ${user.city}<br>`;
+            city.innerHTML = `<span class="info-label">Cidade:</span> ${user.city}`;
             chatItem.appendChild(city);
 
-            // Escola
             const school = document.createElement('div');
-            school.innerHTML = `<span class="info-label">Escola:</span> ${user.school}<br>`;
+            school.innerHTML = `<span class="info-label">Escola:</span> ${user.school}`;
             chatItem.appendChild(school);
 
-            // Problema (se houver)
             if (user.problem) {
                 const problemInfo = document.createElement('div');
                 problemInfo.classList.add('problem-info');
@@ -287,9 +276,8 @@
                 chatItem.appendChild(problemInfo);
             }
 
-    return chatItem;
-}
-
+            return chatItem;
+        }
     </script>
 </body>
 </html>
