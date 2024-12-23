@@ -1,18 +1,22 @@
 const hydraBot = require('hydra-bot');
 const path = require('path');
 const { ipcMain } = require('electron');
+const XLSX = require('xlsx'); // Add this line
 
 const cookiesPath = path.join(__dirname, 'cookies.json');
+const excelFilePath = path.join(__dirname, 'bot_data.xlsx'); // Add this line
 const maxActiveChats = 3;
+const maxTotalChats = 5;
 
 let bot;
 let activeChatsList = [];
 let userCurrentTopic = {};  // Armazenar o tópico atual de cada usuário
 let botConnection = null; // Add this at the top with other variables
+let reportedProblems = []; // Add this to store reported problems
 
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
 
-Nome completo:
+Nome:
 Cidade:
 Cargo: (Aluno, Supervisor, Secretário, Professor, Administrador, Responsável)
 Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor ou Supervisor)
@@ -51,6 +55,12 @@ async function startHydraBot() {
       }
     });
 
+    // Add IPC listener to mark problem as completed
+    ipcMain.on('markProblemCompleted', (event, chatId) => {
+      reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId);
+      sendStatusUpdateToMainProcess();
+    });
+
     bot.on('qrcode', (qrcode) => {
       console.log('QR Code gerado pelo Hydra:', qrcode);
     });
@@ -71,13 +81,13 @@ function startListeningForMessages(conn) {
         const userInfo = parseUserInfo(messageText);
         if (userInfo) {
           if (activeChatsList.length < maxActiveChats) {
-            activeChatsList.push(userInfo);
+            activeChatsList.push({ ...userInfo, chatId });
             await sendMessage(conn, chatId, `Obrigado pelas informações, ${userInfo.name}! Estamos iniciando seu atendimento.`);
             await sendProblemOptions(conn, chatId); // Envia opções de problemas
             userCurrentTopic[chatId] = 'problema'; // Define o usuário na fase de problemas
           } else {
             userInfo.isWaiting = true;  // Define o usuário como aguardando
-            activeChatsList.push(userInfo);  // Adiciona à lista de espera
+            activeChatsList.push({ ...userInfo, chatId });  // Adiciona à lista de espera
             await sendMessage(conn, chatId, `Você está na lista de espera. Sua posição na fila é: ${activeChatsList.filter(chat => chat.isWaiting).length}. Aguarde sua vez.`);
           }
           sendStatusUpdateToMainProcess();
@@ -93,6 +103,9 @@ function startListeningForMessages(conn) {
       } else if (userCurrentTopic[chatId] === 'descricaoProblema') {
         // Usuário na fase de descrição do problema
         await handleProblemDescription(conn, chatId, newMsg.result.body);
+      } else if (userCurrentTopic[chatId] === 'videoFeedback') {
+        // Usuário na fase de feedback do vídeo
+        await handleVideoFeedback(conn, chatId, messageText);
       } else {
         await sendMessage(conn, chatId, defaultMessage);
       }
@@ -104,6 +117,7 @@ function startListeningForMessages(conn) {
     activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
     delete userCurrentTopic[chatId]; 
     sendStatusUpdateToMainProcess();
+    attendNextUserInQueue(conn); // Attend the next user in the queue
   });
 }
 
@@ -240,47 +254,104 @@ async function handleSubProblemSelection(conn, chatId, messageText) {
     userCurrentTopic[chatId] = 'problema';
     await sendProblemOptions(conn, chatId);
   } else {
-    // Lida com o problema selecionado (não envia para o front-end)
-    await sendMessage(conn, chatId, 'Obrigado por informar. Estamos analisando seu problema.');
-    userCurrentTopic[chatId] = 'problema';  // Retorna à fase de problemas
+    // Envia um vídeo do YouTube relacionado ao subtópico
+    await sendMessage(conn, chatId, 'Aqui está um vídeo que pode ajudar a resolver seu problema: https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    await sendMessage(conn, chatId, 'O vídeo foi suficiente para resolver seu problema? (sim/não)');
+    userCurrentTopic[chatId] = 'videoFeedback'; // Define para a fase de feedback do vídeo
+  }
+}
+
+// Função para lidar com o feedback do vídeo
+async function handleVideoFeedback(conn, chatId, messageText) {
+  if (messageText === 'sim') {
+    await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais alguma coisa, estamos à disposição.');
+    userCurrentTopic[chatId] = 'problema'; // Retorna à fase de problemas
+    await closeChat(conn, chatId); // Close the chat
+  } else if (messageText === 'não') {
+    await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
+    userCurrentTopic[chatId] = 'descricaoProblema'; // Define para a fase de descrição do problema
+  } else {
+    await sendMessage(conn, chatId, 'Resposta inválida. Por favor, responda com "sim" ou "não".');
   }
 }
 
 // Função para lidar com a descrição do problema
 async function handleProblemDescription(conn, chatId, messageText) {
   console.log(`Bot: handleProblemDescription called with chatId: ${chatId}`);
-  sendProblemToFrontEnd(messageText, chatId);  // Envia a descrição do problema no formato original com o chatId
+  const userInfo = activeChatsList.find(chat => chat.chatId === chatId);
+  const problemData = { 
+    chatId, 
+    description: messageText, 
+    date: new Date().toLocaleDateString(),
+    name: userInfo ? userInfo.name : '',
+    position: userInfo ? userInfo.position : '',
+    city: userInfo ? userInfo.city : '',
+    school: userInfo ? userInfo.school : ''
+  }; // Add user info to problem data
+  reportedProblems.push(problemData); // Add problem to reportedProblems
+  saveProblemToExcel(problemData); // Save problem to Excel
   await sendMessage(conn, chatId, 'Sua descrição foi recebida. Um atendente entrará em contato em breve.');
-  userCurrentTopic[chatId] = 'problema';  // Retorna à fase de problemas
+  userCurrentTopic[chatId] = 'atendente';  // Define o usuário como sendo atendido por um atendente
+  sendProblemToFrontEnd(problemData);  // Envia a descrição do problema no formato original com o chatId
+  sendStatusUpdateToMainProcess(); // Update the status to include the new problem
+  attendNextUserInQueue(conn); // Attend the next user in the queue
+}
+
+// Função para salvar o problema no Excel
+function saveProblemToExcel(problemData) {
+  let workbook;
+  try {
+    workbook = XLSX.readFile(excelFilePath);
+  } catch (error) {
+    workbook = XLSX.utils.book_new();
+    workbook.SheetNames.push('Problems');
+    workbook.Sheets['Problems'] = XLSX.utils.aoa_to_sheet([['Date', 'Name', 'Position', 'City', 'School', 'Problem']]);
+  }
+
+  const worksheet = workbook.Sheets['Problems'];
+  const newRow = [problemData.date, problemData.name, problemData.position, problemData.city, problemData.school, problemData.description];
+  XLSX.utils.sheet_add_aoa(worksheet, [newRow], { origin: -1 });
+  workbook.Sheets['Problems'] = worksheet;
+
+  XLSX.writeFile(workbook, excelFilePath);
 }
 
 // Função para enviar a atualização de status ao processo principal (front-end)
 function sendStatusUpdateToMainProcess() {
   const activeChats = activeChatsList.filter(chat => !chat.isWaiting); 
   const waitingList = activeChatsList.filter(chat => chat.isWaiting);  
+  const attendedByAttendant = activeChatsList.filter(chat => userCurrentTopic[chat.chatId] === 'atendente');
   
   ipcMain.emit('statusUpdate', null, {  // Corrected event name
     activeChats,
     waitingList,
+    problems: reportedProblems, // Include reported problems in the status update
+    attendedByAttendant // Include chats attended by attendants
   });
 }
 
 // Função para enviar o problema selecionado para o front-end
-function sendProblemToFrontEnd(problemDescription, chatId) {
-  console.log(`Bot: sendProblemToFrontEnd called with chatId: ${chatId}`);
-  ipcMain.emit('userProblem', null, problemDescription, chatId);
+function sendProblemToFrontEnd(problemData) {
+  console.log(`Bot: sendProblemToFrontEnd called with chatId: ${problemData.chatId}`);
+  ipcMain.emit('userProblem', null, problemData.description, problemData.chatId, problemData.name);
 }
 
-// Remove redirectToWhatsAppChat if not needed
-// async function redirectToWhatsAppChat(conn, chatId) {
-//   try {
-//     console.log('Attempting to redirect to chat:', chatId);
-//     // Use the Hydra bot API to focus/open the chat
-//     await conn.client.openChat(chatId);
-//     console.log('Successfully redirected to chat');
-//   } catch (error) {
-//     console.error('Error redirecting to chat:', error);
-//   }
-// }
+// Função para encerrar o chat
+async function closeChat(conn, chatId) {
+  await conn.client.sendMessage({ to: chatId, body: 'Atendimento encerrado. Obrigado!', options: { type: 'sendText' } });
+  conn.client.ev.emit('chatClosed', chatId);
+}
+
+// Função para atender o próximo usuário na fila
+async function attendNextUserInQueue(conn) {
+  const nextUser = activeChatsList.find(chat => chat.isWaiting);
+  if (nextUser) {
+    nextUser.isWaiting = false;
+    await sendMessage(conn, nextUser.chatId, `Obrigado por aguardar, ${nextUser.name}. Estamos iniciando seu atendimento.`);
+    await sendProblemOptions(conn, nextUser.chatId);
+    userCurrentTopic[nextUser.chatId] = 'problema';
+    sendStatusUpdateToMainProcess();
+  }
+}
 
 module.exports = { startHydraBot };

@@ -6,69 +6,115 @@
     <title>Status do Suporte</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Font Awesome for Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js for charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
-            font-family: 'Arial', sans-serif;
-            background-color: #343a40; /* Fundo principal */
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
             margin: 0;
             padding: 0;
-            color: #ffffff; /* Texto principal */
+        }
+
+        .sidebar {
+            width: 250px;
             height: 100vh;
+            background-color: #343a40;
+            position: fixed;
+            top: 0;
+            left: 0;
             display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
+            flex-direction: column;
+            color: #ffffff;
+            padding: 20px;
         }
 
-        .container {
-            max-width: 1200px;
+        .sidebar h1 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 30px;
+            text-align: center;
+            color: #17a2b8;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .sidebar ul li {
+            margin: 15px 0;
+        }
+
+        .sidebar ul li a {
+            text-decoration: none;
+            color: #ffffff;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: color 0.3s ease;
+        }
+
+        .sidebar ul li a:hover {
+            color: #17a2b8;
+        }
+
+        .content {
+            margin-left: 250px;
+            padding: 40px;
+            background-color: #ffffff;
+            min-height: 100vh;
+        }
+
+        .header {
+            background-color: #17a2b8;
+            padding: 20px;
+            color: #ffffff;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .header .search-bar {
+            width: 50%;
+            display: flex;
+            align-items: center;
+            background-color: #ffffff;
+            border-radius: 20px;
+            padding: 5px 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .header .search-bar input {
             width: 100%;
-            padding: 20px;
+            border: none;
+            outline: none;
         }
 
-        .title {
-            font-size: 3rem;
-            font-weight: bold;
-            text-align: center;
-            color: #ffffff; /* Texto principal */
-            background-color: #17a2b8; /* Cor primária */
-            padding: 20px;
+        .header .search-bar i {
+            color: #17a2b8;
+        }
+
+        .card {
             border-radius: 10px;
-            box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.5);
-            margin-bottom: 40px;
-            transition: background-color 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .title:hover {
-            background-color: #138496; /* Cor primária escura */
-            box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.7);
-        }
-
-        .status-header {
-            background-color: #17a2b8; /* Cor primária */
-            color: #ffffff; /* Texto principal */
-            padding: 15px;
-            text-align: center;
-            font-weight: bold;
-            border-radius: 10px;
-            font-size: 1.2rem;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 20px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-        }
-
-        .status-header i {
-            font-size: 2rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             transition: transform 0.3s ease;
         }
 
-        .status-header:hover i {
-            transform: scale(1.2);
+        .card:hover {
+            transform: translateY(-5px);
         }
 
         .list-container {
@@ -76,126 +122,72 @@
             overflow-y: auto;
             padding: 15px;
             border-radius: 10px;
-            background-color: #495057; /* Cor de fundo das caixas */
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            background-color: #f1f3f5;
+        }
+
+        .empty-message {
+            text-align: center;
+            color: #6c757d;
         }
 
         .chat-item {
             padding: 15px;
             margin: 10px 0;
             border-radius: 10px;
-            border: 1px solid #6c757d; /* Texto secundário */
-            font-size: 1.1rem;
-            line-height: 1.7;
-            background-color: rgba(255, 255, 255, 0.1); /* Fundo das caixas */
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: background-color 0.3s ease, transform 0.3s ease;
-            display: flex;
-            flex-direction: column; 
-            gap: 10px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease;
         }
 
         .chat-item:hover {
-            background-color: rgba(23, 162, 184, 0.1); /* Cor primária clara */
-            transform: translateY(-5px);
+            background-color: #e9ecef;
         }
 
-        .empty-message {
+        .status-header {
+            background-color: #17a2b8;
+            color: #ffffff;
+            padding: 15px;
             text-align: center;
-            color: #6c757d; /* Texto secundário */
-        }
-
-        .info-label {
             font-weight: bold;
-            margin-right: 5px;
-        }
-
-        .active-chat-item {
-            background-color: #28a745; /* Cor secundária */
-        }
-
-        .waiting-chat-item {
-            background-color: #ffc107; /* Cor de alerta */
-        }
-
-        .problem-item {
-            background-color: #dc3545; /* Cor de erro */
-            color: #ffffff; /* Texto principal */
-            position: relative;
-            font-weight: normal;
-            padding-right: 40px; /* Espaço à direita para o sino */
-        }
-
-        .problem-info {
-            margin-top: 10px;
-            font-style: italic;
-            color: #6c757d; /* Texto secundário */
-        }
-
-        .card {
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
             border-radius: 10px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
-        }
-
-        .col-lg-4 {
-            margin-bottom: 30px;
-        }
-
-        .bell-icon {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            color: #ffffff; /* Texto principal */
-            font-size: 1.6rem;
-            transition: transform 0.3s ease;
-        }
-
-        .bell-icon:hover {
-            transform: rotate(10deg); 
-        }
-
-        @keyframes problemPulse {
-            0% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.05);
-            }
-            100% {
-                transform: scale(1);
-            }
+            font-size: 1.2rem;
+            margin-bottom: 20px;
         }
 
         /* Responsividade */
         @media (max-width: 768px) {
-            .title {
-                font-size: 2.5rem;
-            }
-
-            .col-lg-4 {
-                margin-bottom: 20px;
+            .sidebar {
                 width: 100%;
+                height: auto;
+                position: static;
             }
 
-            .container {
-                margin-top: 20px;
-                padding: 10px;
+            .content {
+                margin-left: 0;
+                padding: 20px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 class="title">
-            <i class="fas fa-cogs"></i> Painel de Controle
-        </h1>
-            
+    <div class="sidebar">
+        <h1><i class="fas fa-cogs"></i> Painel</h1>
+        <ul>
+            <li><a href="#"><i class="fas fa-home"></i> Início</a></li>
+            <li><a href="#"><i class="fas fa-headset"></i> Atendimentos</a></li>
+            <li><a href="#"><i class="fas fa-users"></i> Fila de Espera</a></li>
+            <li><a href="#"><i class="fas fa-exclamation-triangle"></i> Problemas</a></li>
+        </ul>
+    </div>
+    <div class="content">
+        <div class="header">
+            <h2>Status do Suporte</h2>
+            <div class="search-bar">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Pesquisar...">
+            </div>
+        </div>
+
         <div class="row g-4">
             <div class="col-lg-4">
                 <div class="card">
@@ -230,9 +222,26 @@
                 </div>
             </div>
         </div>
-    </div>
 
-    <audio id="notification-sound" src="notification.mp3" preload="auto"></audio>
+        <div class="row g-4 mt-4">
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="status-header">
+                        <i class="fas fa-chart-line"></i> Problemas por Dia
+                    </div>
+                    <canvas id="dailyProblemsChart"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="status-header">
+                        <i class="fas fa-chart-pie"></i> Problemas por Mês
+                    </div>
+                    <canvas id="monthlyProblemsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -240,11 +249,12 @@
             updateUI(statusData);
         });
 
-        window.electron.onUserProblem((event, problemDescription, chatId) => {
-            displayProblem(problemDescription, chatId);
+        window.electron.onUserProblem((event, problemDescription, chatId, userName) => {
+            displayProblem(problemDescription, chatId, userName);
             showNotification('Novo Problema Relatado', problemDescription);
             playNotificationSound();
             showBellIcon();
+            fetchDataAndUpdateCharts(); // Update charts when a new problem is reported
         });
 
         function updateUI(data) {
@@ -257,7 +267,7 @@
             updateSection(data.problems, problemListContainer, 'problem');
         }
 
-        function displayProblem(problemDescription, chatId) {
+        function displayProblem(problemDescription, chatId, userName) {
             const problemListContainer = document.getElementById('problem-list-container');
             const emptyMessage = problemListContainer.querySelector('.empty-message');
             if (emptyMessage) {
@@ -266,7 +276,7 @@
             
             const problemItem = document.createElement('div');
             problemItem.classList.add('chat-item', 'problem-item');
-            problemItem.innerHTML = `${problemDescription}`;
+            problemItem.innerHTML = `<strong>${userName}:</strong> ${problemDescription}`;
             problemItem.addEventListener('click', () => {
                 console.log(`Index: Problem item clicked with chatId: ${chatId}`);
                 window.electron.openWhatsAppChat(chatId);
@@ -327,10 +337,13 @@
 
             if (status === 'active') {
                 chatItem.classList.add('active-chat-item');
+                chatItem.innerHTML = `<strong>${user.name}:</strong> Atendido por humano`;
             } else if (status === 'waiting') {
                 chatItem.classList.add('waiting-chat-item');
             } else if (status === 'problem') {
                 chatItem.classList.add('problem-item');
+                chatItem.innerHTML = `<strong>${user.name}:</strong> ${user.description}`;
+                return chatItem;
             }
 
             const name = document.createElement('div');
@@ -349,27 +362,98 @@
             school.innerHTML = `<span class="info-label">Escola:</span> ${user.school}`;
             chatItem.appendChild(school);
 
-            if (user.problem) {
-                const problemInfo = document.createElement('div');
-                problemInfo.classList.add('problem-info');
-                problemInfo.innerHTML = `Problema: ${user.problem}`;
-                chatItem.appendChild(problemInfo);
-            }
-
             return chatItem;
         }
 
-        // Remove or comment out these functions as they're no longer needed
-        /*
-        function redirectToChat(chatId) {
-            console.log(`Index: redirectToChat called with chatId: ${chatId}`);
-            window.electron.redirectToChat(chatId);
+        // Function to fetch data from Excel file and update charts
+        async function fetchDataAndUpdateCharts() {
+            const response = await fetch('bot_data.xlsx');
+            const arrayBuffer = await response.arrayBuffer();
+            const data = new Uint8Array(arrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+
+            const worksheet = workbook.Sheets['Problems'];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+            updateDailyChart(jsonData);
+            updateMonthlyChart(jsonData);
         }
 
-        window.electron.onRedirectToChat((event, chatId) => {
-            console.log(`Index: Redirecting to chat with ID: ${chatId}`);
-        });
-        */
+        function updateDailyChart(data) {
+            const labels = data.slice(1).map(row => row[0]);
+            const values = data.slice(1).map(row => row[5]);
+
+            const ctx = document.getElementById('dailyProblemsChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Problemas por Dia',
+                        data: values,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateMonthlyChart(data) {
+            const labels = data.slice(1).map(row => row[0]);
+            const values = data.slice(1).map(row[5]);
+
+            const ctx = document.getElementById('monthlyProblemsChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Problemas por Mês',
+                        data: values,
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.2)',
+                            'rgba(54, 162, 235, 0.2)',
+                            'rgba(255, 206, 86, 0.2)',
+                            'rgba(75, 192, 192, 0.2)',
+                            'rgba(153, 102, 255, 0.2)',
+                            'rgba(255, 159, 64, 0.2)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 206, 86, 1)',
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(153, 102, 255, 1)',
+                            'rgba(255, 159, 64, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Problemas por Mês'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Call the function to fetch data and update charts initially
+        fetchDataAndUpdateCharts();
     </script>
 </body>
 </html>
