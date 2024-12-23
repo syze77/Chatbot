@@ -337,7 +337,6 @@
 
             if (status === 'active') {
                 chatItem.classList.add('active-chat-item');
-                chatItem.innerHTML = `<strong>${user.name}:</strong> Atendido por humano`;
             } else if (status === 'waiting') {
                 chatItem.classList.add('waiting-chat-item');
             } else if (status === 'problem') {
@@ -381,7 +380,7 @@
 
         function updateDailyChart(data) {
             const labels = data.slice(1).map(row => row[0]);
-            const values = data.slice(1).map(row => row[5]);
+            const values = data.slice(1).map(row[5]);
 
             const ctx = document.getElementById('dailyProblemsChart').getContext('2d');
             new Chart(ctx, {

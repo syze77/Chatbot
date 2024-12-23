@@ -291,7 +291,6 @@ async function handleProblemDescription(conn, chatId, messageText) {
   reportedProblems.push(problemData); // Add problem to reportedProblems
   saveProblemToExcel(problemData); // Save problem to Excel
   await sendMessage(conn, chatId, 'Sua descrição foi recebida. Um atendente entrará em contato em breve.');
-  userCurrentTopic[chatId] = 'atendente';  // Define o usuário como sendo atendido por um atendente
   sendProblemToFrontEnd(problemData);  // Envia a descrição do problema no formato original com o chatId
   sendStatusUpdateToMainProcess(); // Update the status to include the new problem
   attendNextUserInQueue(conn); // Attend the next user in the queue
@@ -318,7 +317,7 @@ function saveProblemToExcel(problemData) {
 
 // Função para enviar a atualização de status ao processo principal (front-end)
 function sendStatusUpdateToMainProcess() {
-  const activeChats = activeChatsList.filter(chat => !chat.isWaiting); 
+  const activeChats = activeChatsList.filter(chat => !chat.isWaiting && userCurrentTopic[chat.chatId] !== 'atendente'); 
   const waitingList = activeChatsList.filter(chat => chat.isWaiting);  
   const attendedByAttendant = activeChatsList.filter(chat => userCurrentTopic[chat.chatId] === 'atendente');
   
