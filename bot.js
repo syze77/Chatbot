@@ -8,6 +8,7 @@ const maxActiveChats = 3;
 let bot;
 let activeChatsList = [];
 let userCurrentTopic = {};  // Armazenar o tópico atual de cada usuário
+let botConnection = null; // Add this at the top with other variables
 
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
 
@@ -35,9 +36,18 @@ async function startHydraBot() {
     bot.on('connection', async (conn) => {
       if (conn.connect) {
         console.log('Conexão Hydra estabelecida.');
+        botConnection = conn; // Store connection
         startListeningForMessages(conn);
       } else {
         console.error('Erro na conexão Hydra.');
+      }
+    });
+
+    // Add IPC listener for chat redirection
+    ipcMain.on('redirectToChat', async (event, chatId) => {
+      console.log('Bot: Received redirect request for chat:', chatId);
+      if (botConnection) {
+        await redirectToWhatsAppChat(botConnection, chatId);
       }
     });
 
@@ -82,7 +92,7 @@ function startListeningForMessages(conn) {
         await handleSubProblemSelection(conn, chatId, messageText);
       } else if (userCurrentTopic[chatId] === 'descricaoProblema') {
         // Usuário na fase de descrição do problema
-        await handleProblemDescription(conn, chatId, messageText);
+        await handleProblemDescription(conn, chatId, newMsg.result.body);
       } else {
         await sendMessage(conn, chatId, defaultMessage);
       }
@@ -230,14 +240,16 @@ async function handleSubProblemSelection(conn, chatId, messageText) {
     userCurrentTopic[chatId] = 'problema';
     await sendProblemOptions(conn, chatId);
   } else {
-    // Lida com o problema selecionado (pode enviar para o front-end ou tomar outras ações)
-    sendProblemToFrontEnd(messageText);
+    // Lida com o problema selecionado (não envia para o front-end)
+    await sendMessage(conn, chatId, 'Obrigado por informar. Estamos analisando seu problema.');
+    userCurrentTopic[chatId] = 'problema';  // Retorna à fase de problemas
   }
 }
 
 // Função para lidar com a descrição do problema
 async function handleProblemDescription(conn, chatId, messageText) {
-  sendProblemToFrontEnd(messageText);  // Envia a descrição do problema
+  console.log(`Bot: handleProblemDescription called with chatId: ${chatId}`);
+  sendProblemToFrontEnd(messageText, chatId);  // Envia a descrição do problema no formato original com o chatId
   await sendMessage(conn, chatId, 'Sua descrição foi recebida. Um atendente entrará em contato em breve.');
   userCurrentTopic[chatId] = 'problema';  // Retorna à fase de problemas
 }
@@ -247,15 +259,28 @@ function sendStatusUpdateToMainProcess() {
   const activeChats = activeChatsList.filter(chat => !chat.isWaiting); 
   const waitingList = activeChatsList.filter(chat => chat.isWaiting);  
   
-  ipcMain.emit('updateStatus', null, {
+  ipcMain.emit('statusUpdate', null, {  // Corrected event name
     activeChats,
     waitingList,
   });
 }
 
 // Função para enviar o problema selecionado para o front-end
-function sendProblemToFrontEnd(problemDescription) {
-  ipcMain.emit('userProblem', null, problemDescription);
+function sendProblemToFrontEnd(problemDescription, chatId) {
+  console.log(`Bot: sendProblemToFrontEnd called with chatId: ${chatId}`);
+  ipcMain.emit('userProblem', null, problemDescription, chatId);
 }
+
+// Remove redirectToWhatsAppChat if not needed
+// async function redirectToWhatsAppChat(conn, chatId) {
+//   try {
+//     console.log('Attempting to redirect to chat:', chatId);
+//     // Use the Hydra bot API to focus/open the chat
+//     await conn.client.openChat(chatId);
+//     console.log('Successfully redirected to chat');
+//   } catch (error) {
+//     console.error('Error redirecting to chat:', error);
+//   }
+// }
 
 module.exports = { startHydraBot };
