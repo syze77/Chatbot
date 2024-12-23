@@ -97,7 +97,7 @@ function startListeningForMessages(conn) {
       } else if (userCurrentTopic[chatId] === 'problema') {
         // Usuário na fase de problemas
         await handleProblemSelection(conn, chatId, messageText);
-      } else if (userCurrentTopic[chatId] === 'subproblema') {
+      } else if (userCurrentTopic[chatId] && userCurrentTopic[chatId].stage === 'subproblema') {
         // Usuário na fase de subtópicos
         await handleSubProblemSelection(conn, chatId, messageText);
       } else if (userCurrentTopic[chatId] === 'descricaoProblema') {
@@ -221,7 +221,7 @@ Digite 'voltar' para retornar ao menu anterior.`;
 2️⃣ Erro ao inserir dados do funcionário
 3️⃣ Outro problema relacionado ao cadastro
 
-Digite 'voltar' para retornar ao menu anterior.`;
+Digite 'voltar' para retornar ao menu anterior.`; 
       break;
     case 'Problemas com o diário de classe':
       subProblemOptions = `Selecione o subtópico:
@@ -230,7 +230,7 @@ Digite 'voltar' para retornar ao menu anterior.`;
 2️⃣ Falha na visualização de registros
 3️⃣ Outro problema com o diário de classe
 
-Digite 'voltar' para retornar ao menu anterior.`;
+Digite 'voltar' para retornar ao menu anterior.`; 
       break;
     case 'Falha no registro de notas':
       subProblemOptions = `Selecione o subtópico:
@@ -239,11 +239,11 @@ Digite 'voltar' para retornar ao menu anterior.`;
 2️⃣ Notas não estão sendo salvas
 3️⃣ Outro problema com o registro de notas
 
-Digite 'voltar' para retornar ao menu anterior.`;
+Digite 'voltar' para retornar ao menu anterior.`; 
       break;
   }
 
-  userCurrentTopic[chatId] = 'subproblema'; 
+  userCurrentTopic[chatId] = { problem, stage: 'subproblema' }; 
   await sendMessage(conn, chatId, subProblemOptions);
 }
 
@@ -255,10 +255,64 @@ async function handleSubProblemSelection(conn, chatId, messageText) {
     await sendProblemOptions(conn, chatId);
   } else {
     // Envia um vídeo do YouTube relacionado ao subtópico
-    await sendMessage(conn, chatId, 'Aqui está um vídeo que pode ajudar a resolver seu problema: https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    const videoUrl = getVideoUrlForSubProblem(messageText);
+    const subProblemText = getSubProblemText(userCurrentTopic[chatId].problem, messageText);
+    await sendMessage(conn, chatId, `Aqui está um vídeo que pode ajudar a resolver seu problema: ${videoUrl}`);
     await sendMessage(conn, chatId, 'O vídeo foi suficiente para resolver seu problema? (sim/não)');
     userCurrentTopic[chatId] = 'videoFeedback'; // Define para a fase de feedback do vídeo
+    // Adiciona o problema à planilha
+    const userInfo = activeChatsList.find(chat => chat.chatId === chatId);
+    const problemData = { 
+      chatId, 
+      description: subProblemText, // Salva o subtópico selecionado
+      date: new Date().toLocaleDateString(),
+      name: userInfo ? userInfo.name : '',
+      position: userInfo ? userInfo.position : '',
+      city: userInfo ? userInfo.city : '',
+      school: userInfo ? userInfo.school : ''
+    };
+    reportedProblems.push(problemData);
+    saveProblemToExcel(problemData);
+    sendStatusUpdateToMainProcess();
   }
+}
+
+// Função para obter o texto do subtópico
+function getSubProblemText(problem, subProblem) {
+  const subProblemTexts = {
+    'Falha no acesso ao sistema': {
+      '1': 'Não consigo acessar minha conta',
+      '2': 'Sistema não carrega',
+      '3': 'Outro problema relacionado ao acesso'
+    },
+    'Erro ao cadastrar aluno/funcionário': {
+      '1': 'Erro ao inserir dados do aluno',
+      '2': 'Erro ao inserir dados do funcionário',
+      '3': 'Outro problema relacionado ao cadastro'
+    },
+    'Problemas com o diário de classe': {
+      '1': 'Falha na inserção de notas',
+      '2': 'Falha na visualização de registros',
+      '3': 'Outro problema com o diário de classe'
+    },
+    'Falha no registro de notas': {
+      '1': 'Não consigo registrar as notas',
+      '2': 'Notas não estão sendo salvas',
+      '3': 'Outro problema com o registro de notas'
+    }
+  };
+  return subProblemTexts[problem] ? subProblemTexts[problem][subProblem] : 'Outro problema';
+}
+
+// Função para obter o URL do vídeo para um subtópico
+function getVideoUrlForSubProblem(subProblem) {
+  const videoUrls = {
+    '1': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Exemplo de URL de vídeo
+    '2': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    '3': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    // Adicione mais URLs conforme necessário
+  };
+  return videoUrls[subProblem] || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'; // URL padrão
 }
 
 // Função para lidar com o feedback do vídeo
@@ -266,7 +320,7 @@ async function handleVideoFeedback(conn, chatId, messageText) {
   if (messageText === 'sim') {
     await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais alguma coisa, estamos à disposição.');
     userCurrentTopic[chatId] = 'problema'; // Retorna à fase de problemas
-    await closeChat(conn, chatId); // Close the chat
+    await closeChat(chatId); // Close the chat
   } else if (messageText === 'não') {
     await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
     userCurrentTopic[chatId] = 'descricaoProblema'; // Define para a fase de descrição do problema
@@ -332,13 +386,20 @@ function sendStatusUpdateToMainProcess() {
 // Função para enviar o problema selecionado para o front-end
 function sendProblemToFrontEnd(problemData) {
   console.log(`Bot: sendProblemToFrontEnd called with chatId: ${problemData.chatId}`);
+  if (problemData.description.startsWith('Subtópico:')) {
+    return; // Não envia subtópicos para o front-end
+  }
   ipcMain.emit('userProblem', null, problemData.description, problemData.chatId, problemData.name);
 }
 
 // Função para encerrar o chat
-async function closeChat(conn, chatId) {
-  await conn.client.sendMessage({ to: chatId, body: 'Atendimento encerrado. Obrigado!', options: { type: 'sendText' } });
-  conn.client.ev.emit('chatClosed', chatId);
+async function closeChat(chatId) {
+  await sendMessage(botConnection, chatId, 'Atendimento encerrado. Obrigado!');
+  activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
+  delete userCurrentTopic[chatId];
+  reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId); // Remove the problem
+  sendStatusUpdateToMainProcess();
+  attendNextUserInQueue(botConnection);
 }
 
 // Função para atender o próximo usuário na fila

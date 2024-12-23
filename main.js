@@ -1,6 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-// const open = require('open'); // Remove this line
 const { startHydraBot } = require('./bot');
 
 let win;
@@ -22,20 +21,20 @@ function createWindow() {
   });
 }
 
-ipcMain.on('statusUpdate', (event, statusData) => {  // Corrected event name
+ipcMain.on('statusUpdate', (event, statusData) => {
   try {
     if (win) {
-      win.webContents.send('statusUpdate', statusData); 
+      win.webContents.send('statusUpdate', statusData);
     }
   } catch (err) {
     console.error("Erro ao enviar status para a janela:", err);
   }
 });
 
-ipcMain.on('userProblem', (event, problemDescription, chatId) => {
+ipcMain.on('userProblem', (event, problemDescription, chatId, userName) => {
   try {
     if (win) {
-      win.webContents.send('userProblem', problemDescription, chatId);
+      win.webContents.send('userProblem', problemDescription, chatId, userName);
     }
   } catch (err) {
     console.error("Erro ao enviar problema para a janela:", err);
@@ -56,7 +55,7 @@ app.whenReady().then(() => {
 
   win.webContents.once('did-finish-load', () => {
     if (win) {
-      win.webContents.send('statusUpdate', { activeChats: [], waitingList: [] });
+      win.webContents.send('statusUpdate', { activeChats: [], waitingList: [], problems: [] });
     }
   });
 });

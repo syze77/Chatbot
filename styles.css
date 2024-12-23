@@ -1,0 +1,154 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8f9fa;
+    margin: 0;
+    padding: 0;
+}
+
+.sidebar {
+    width: 250px;
+    height: 100vh;
+    background-color: #343a40;
+    position: fixed;
+    top: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    color: #ffffff;
+    padding: 20px;
+}
+
+.sidebar h1 {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 30px;
+    text-align: center;
+    color: #17a2b8;
+}
+
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+}
+
+.sidebar ul li {
+    margin: 15px 0;
+}
+
+.sidebar ul li a {
+    text-decoration: none;
+    color: #ffffff;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: color 0.3s ease;
+}
+
+.sidebar ul li a:hover {
+    color: #17a2b8;
+}
+
+.content {
+    margin-left: 250px;
+    padding: 40px;
+    background-color: #ffffff;
+    min-height: 100vh;
+}
+
+.header {
+    background-color: #17a2b8;
+    padding: 20px;
+    color: #ffffff;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+}
+
+.header .search-bar {
+    width: 50%;
+    display: flex;
+    align-items: center;
+    background-color: #ffffff;
+    border-radius: 20px;
+    padding: 5px 15px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header .search-bar input {
+    width: 100%;
+    border: none;
+    outline: none;
+}
+
+.header .search-bar i {
+    color: #17a2b8;
+}
+
+.card {
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+.list-container {
+    max-height: 350px;
+    overflow-y: auto;
+    padding: 15px;
+    border-radius: 10px;
+    background-color: #f1f3f5;
+}
+
+.empty-message {
+    text-align: center;
+    color: #6c757d;
+}
+
+.chat-item {
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 10px;
+    background-color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s ease;
+}
+
+.chat-item:hover {
+    background-color: #e9ecef;
+}
+
+.status-header {
+    background-color: #17a2b8;
+    color: #ffffff;
+    padding: 15px;
+    text-align: center;
+    font-weight: bold;
+    border-radius: 10px;
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+    }
+
+    .content {
+        margin-left: 0;
+        padding: 20px;
+    }
+}

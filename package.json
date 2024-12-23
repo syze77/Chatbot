@@ -12,6 +12,7 @@
         "concurrently": "^7.6.0"
     },
     "dependencies": {
+        "chart.js": "^4.4.7",
         "electron": "^33.2.0",
         "hydra-bot": "^1.0.33",
         "mime-types": "^2.1.35",
