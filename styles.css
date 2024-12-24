@@ -3,6 +3,7 @@ body {
     background-color: #f8f9fa;
     margin: 0;
     padding: 0;
+    display: flex;
 }
 
 .sidebar {
@@ -16,6 +17,17 @@ body {
     flex-direction: column;
     color: #ffffff;
     padding: 20px;
+    transition: width 0.3s;
+}
+
+.sidebar.collapsed {
+    width: 60px;
+}
+
+.sidebar h1, .sidebar ul {
+    margin: 10px;
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 .sidebar h1 {
@@ -32,6 +44,7 @@ body {
 }
 
 .sidebar ul li {
+    list-style: none;
     margin: 15px 0;
 }
 
@@ -49,11 +62,20 @@ body {
     color: #17a2b8;
 }
 
+.sidebar.collapsed h1, .sidebar.collapsed ul li a span {
+    display: none;
+}
+
 .content {
     margin-left: 250px;
     padding: 40px;
     background-color: #ffffff;
     min-height: 100vh;
+    transition: margin-left 0.3s;
+}
+
+.content.collapsed {
+    margin-left: 60px;
 }
 
 .header {
@@ -137,6 +159,22 @@ body {
     border-radius: 10px;
     font-size: 1.2rem;
     margin-bottom: 20px;
+}
+
+.toggle-btn {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    background: #343a40;
+    color: white;
+    border: none;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 4px;
+}
+
+.toggle-btn:hover {
+    background: #495057;
 }
 
 /* Responsividade */

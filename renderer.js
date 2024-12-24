@@ -1,15 +1,25 @@
-window.electron.onStatusUpdate((event, statusData) => {
-    updateUI(statusData);
-    fetchDataAndUpdateCharts(); // Update charts when status is updated
-});
+if (window.electron) {
+    window.electron.onStatusUpdate((event, statusData) => {
+        updateUI(statusData);
+        fetchDataAndUpdateCharts(dailyProblemsChart, monthlyProblemsChart); // Update charts when status is updated
+    });
 
-window.electron.onUserProblem((event, problemDescription, chatId, userName) => {
-    displayProblem(problemDescription, chatId, userName);
-    showNotification('Novo Problema Relatado', problemDescription);
-    playNotificationSound();
-    showBellIcon();
-    fetchDataAndUpdateCharts(); // Update charts when a new problem is reported
-});
+    window.electron.onUserProblem((event, problemDescription, chatId, userName) => {
+        displayProblem(problemDescription, chatId, userName);
+        showNotification('Novo Problema Relatado', problemDescription);
+        playNotificationSound();
+        showBellIcon();
+        fetchDataAndUpdateCharts(dailyProblemsChart, monthlyProblemsChart); // Update charts when a new problem is reported
+    });
+
+    window.electron.getCompletedAttendances((event, completedAttendances) => {
+        loadCompletedAttendances(completedAttendances);
+    });
+
+    window.electron.deleteCompletedAttendance = (chatId) => {
+        ipcRenderer.send('deleteCompletedAttendance', chatId);
+    };
+}
 
 const notificationSound = document.getElementById('notification-sound');
 const activeChatList = document.getElementById('active-chat-list');
@@ -118,7 +128,7 @@ function createChatItem(user, status) {
 }
 
 // Function to fetch data from Excel file and update charts
-async function fetchDataAndUpdateCharts() {
+async function fetchDataAndUpdateCharts(dailyProblemsChart, monthlyProblemsChart) {
     const response = await fetch('bot_data.xlsx');
     const arrayBuffer = await response.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
@@ -127,48 +137,20 @@ async function fetchDataAndUpdateCharts() {
     const worksheet = workbook.Sheets['Problems'];
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-    updateDailyChart(jsonData);
-    updateMonthlyChart(jsonData);
+    updateDailyChart(jsonData, dailyProblemsChart);
+    updateMonthlyChart(jsonData, monthlyProblemsChart);
 }
 
-function updateDailyChart(data) {
+function updateDailyChart(data, chart) {
     const labels = data.length > 1 ? data.slice(1).map(row => row[0]) : ['No Data'];
     const values = data.length > 1 ? data.slice(1).map(row => row[5]) : [0];
 
-    const ctx = document.getElementById('dailyProblemsChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Problemas por Dia',
-                data: values,
-                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                borderColor: 'rgba(75, 192, 192, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            },
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                },
-                title: {
-                    display: true,
-                    text: 'Problemas por Dia'
-                }
-            }
-        }
-    });
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = values;
+    chart.update();
 }
 
-function updateMonthlyChart(data) {
+function updateMonthlyChart(data, chart) {
     const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
     const monthlyData = new Array(12).fill(0);
 
@@ -180,46 +162,7 @@ function updateMonthlyChart(data) {
         });
     }
 
-    const ctx = document.getElementById('monthlyProblemsChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: monthNames,
-            datasets: [{
-                label: 'Problemas por Mês',
-                data: monthlyData,
-                backgroundColor: [
-                    'rgb(255, 99, 132)',
-                    'rgb(54, 162, 235)',
-                    'rgb(255, 205, 86)',
-                    'rgb(75, 192, 192)',
-                    'rgb(153, 102, 255)',
-                    'rgb(255, 159, 64)',
-                    'rgb(255, 99, 132)',
-                    'rgb(54, 162, 235)',
-                    'rgb(255, 205, 86)',
-                    'rgb(75, 192, 192)',
-                    'rgb(153, 102, 255)',
-                    'rgb(255, 159, 64)'
-                ],
-                hoverOffset: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                },
-                title: {
-                    display: true,
-                    text: 'Problemas por Mês'
-                }
-            }
-        }
-    });
+    chart.data.labels = monthNames;
+    chart.data.datasets[0].data = monthlyData;
+    chart.update();
 }
-
-// Call the function to fetch data and update charts initially
-fetchDataAndUpdateCharts();

@@ -49,6 +49,17 @@ ipcMain.on('openWhatsAppChat', async (event, chatId) => {
   open.default(whatsappUrl, { app: { name: 'chrome' } }); // Open the URL in Chrome
 });
 
+ipcMain.on('getCompletedAttendances', (event) => {
+  // Fetch completed attendances from storage and send to renderer
+  const completedAttendances = getCompletedAttendancesFromStorage();
+  event.sender.send('getCompletedAttendances', completedAttendances);
+});
+
+ipcMain.on('deleteCompletedAttendance', (event, chatId) => {
+  // Delete the completed attendance from storage
+  deleteCompletedAttendanceFromStorage(chatId);
+});
+
 app.whenReady().then(() => {
   createWindow();
   startHydraBot();
@@ -65,3 +76,13 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+// Functions to handle completed attendances storage
+function getCompletedAttendancesFromStorage() {
+  // Implement logic to fetch completed attendances from storage
+  return [];
+}
+
+function deleteCompletedAttendanceFromStorage(chatId) {
+  // Implement logic to delete a completed attendance from storage
+}
