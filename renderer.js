@@ -127,23 +127,18 @@ function createChatItem(user, status) {
     return chatItem;
 }
 
-// Function to fetch data from Excel file and update charts
+// Function to fetch data from SQLite database and update charts
 async function fetchDataAndUpdateCharts(dailyProblemsChart, monthlyProblemsChart) {
-    const response = await fetch('bot_data.xlsx');
-    const arrayBuffer = await response.arrayBuffer();
-    const data = new Uint8Array(arrayBuffer);
-    const workbook = XLSX.read(data, { type: 'array' });
+    const response = await fetch('/getProblemsData'); // Adjust the endpoint as needed
+    const data = await response.json();
 
-    const worksheet = workbook.Sheets['Problems'];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-    updateDailyChart(jsonData, dailyProblemsChart);
-    updateMonthlyChart(jsonData, monthlyProblemsChart);
+    updateDailyChart(data, dailyProblemsChart);
+    updateMonthlyChart(data, monthlyProblemsChart);
 }
 
 function updateDailyChart(data, chart) {
-    const labels = data.length > 1 ? data.slice(1).map(row => row[0]) : ['No Data'];
-    const values = data.length > 1 ? data.slice(1).map(row => row[5]) : [0];
+    const labels = data.length > 1 ? data.map(row => row.date) : ['No Data'];
+    const values = data.length > 1 ? data.map(row => row.description) : [0];
 
     chart.data.labels = labels;
     chart.data.datasets[0].data = values;
@@ -155,8 +150,8 @@ function updateMonthlyChart(data, chart) {
     const monthlyData = new Array(12).fill(0);
 
     if (data.length > 1) {
-        data.slice(1).forEach(row => {
-            const date = new Date(row[0]);
+        data.forEach(row => {
+            const date = new Date(row.date);
             const month = date.getMonth();
             monthlyData[month]++;
         });
@@ -165,4 +160,23 @@ function updateMonthlyChart(data, chart) {
     chart.data.labels = monthNames;
     chart.data.datasets[0].data = monthlyData;
     chart.update();
+}
+
+// Function to load completed attendances
+function loadCompletedAttendances(completedAttendances) {
+    const completedList = document.getElementById('completed-list');
+    completedList.innerHTML = '';
+    completedAttendances.forEach(attendance => {
+        const item = document.createElement('div');
+        item.classList.add('completed-item');
+        item.innerHTML = `
+            <div>
+                <strong>${attendance.name}</strong><br>
+                ${attendance.position} - ${attendance.city} - ${attendance.school}<br>
+                ${attendance.description}
+            </div>
+            <input type="checkbox" data-chat-id="${attendance.chatId}">
+        `;
+        completedList.appendChild(item);
+    });
 }

@@ -1,10 +1,9 @@
 const hydraBot = require('hydra-bot');
 const path = require('path');
 const { ipcMain } = require('electron');
-const XLSX = require('xlsx'); // Add this line
+const sqlite3 = require('sqlite3').verbose();
 
 const cookiesPath = path.join(__dirname, 'cookies.json');
-const excelFilePath = path.join(__dirname, 'bot_data.xlsx'); // Add this line
 const maxActiveChats = 3;
 const maxTotalChats = 5;
 
@@ -13,6 +12,7 @@ let activeChatsList = [];
 let userCurrentTopic = {};  // Armazenar o tópico atual de cada usuário
 let botConnection = null; // Add this at the top with other variables
 let reportedProblems = []; // Add this to store reported problems
+let db;
 
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
 
@@ -58,12 +58,15 @@ async function startHydraBot() {
     // Add IPC listener to mark problem as completed
     ipcMain.on('markProblemCompleted', (event, chatId) => {
       reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId);
+      markProblemAsCompleted(chatId);
       sendStatusUpdateToMainProcess();
     });
 
     bot.on('qrcode', (qrcode) => {
       console.log('QR Code gerado pelo Hydra:', qrcode);
     });
+
+    initializeDatabase();
   } catch (error) {
     console.error('Erro ao iniciar o Hydra:', error);
   }
@@ -116,6 +119,7 @@ function startListeningForMessages(conn) {
     console.log('Chat encerrado:', chatId);
     activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
     delete userCurrentTopic[chatId]; 
+    markProblemAsCompleted(chatId); // Mark the problem as completed
     sendStatusUpdateToMainProcess();
     attendNextUserInQueue(conn); // Attend the next user in the queue
   });
@@ -260,7 +264,7 @@ async function handleSubProblemSelection(conn, chatId, messageText) {
     await sendMessage(conn, chatId, `Aqui está um vídeo que pode ajudar a resolver seu problema: ${videoUrl}`);
     await sendMessage(conn, chatId, 'O vídeo foi suficiente para resolver seu problema? (sim/não)');
     userCurrentTopic[chatId] = 'videoFeedback'; // Define para a fase de feedback do vídeo
-    // Adiciona o problema à planilha
+    // Adiciona o problema ao banco de dados
     const userInfo = activeChatsList.find(chat => chat.chatId === chatId);
     const problemData = { 
       chatId, 
@@ -272,7 +276,7 @@ async function handleSubProblemSelection(conn, chatId, messageText) {
       school: userInfo ? userInfo.school : ''
     };
     reportedProblems.push(problemData);
-    saveProblemToExcel(problemData);
+    saveProblemToDatabase(problemData);
     sendStatusUpdateToMainProcess();
   }
 }
@@ -343,30 +347,33 @@ async function handleProblemDescription(conn, chatId, messageText) {
     school: userInfo ? userInfo.school : ''
   }; // Add user info to problem data
   reportedProblems.push(problemData); // Add problem to reportedProblems
-  saveProblemToExcel(problemData); // Save problem to Excel
+  saveProblemToDatabase(problemData); // Save problem to database
   await sendMessage(conn, chatId, 'Sua descrição foi recebida. Um atendente entrará em contato em breve.');
   sendProblemToFrontEnd(problemData);  // Envia a descrição do problema no formato original com o chatId
   sendStatusUpdateToMainProcess(); // Update the status to include the new problem
   attendNextUserInQueue(conn); // Attend the next user in the queue
 }
 
-// Função para salvar o problema no Excel
-function saveProblemToExcel(problemData) {
-  let workbook;
-  try {
-    workbook = XLSX.readFile(excelFilePath);
-  } catch (error) {
-    workbook = XLSX.utils.book_new();
-    workbook.SheetNames.push('Problems');
-    workbook.Sheets['Problems'] = XLSX.utils.aoa_to_sheet([['Date', 'Name', 'Position', 'City', 'School', 'Problem']]);
-  }
+// Função para salvar o problema no banco de dados
+function saveProblemToDatabase(problemData) {
+  db.run(`INSERT INTO problems (chatId, description, date, name, position, city, school) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+    [problemData.chatId, problemData.description, problemData.date, problemData.name, problemData.position, problemData.city, problemData.school], 
+    function(err) {
+      if (err) {
+        return console.log(err.message);
+      }
+      console.log(`A row has been inserted with rowid ${this.lastID}`);
+    });
+}
 
-  const worksheet = workbook.Sheets['Problems'];
-  const newRow = [problemData.date, problemData.name, problemData.position, problemData.city, problemData.school, problemData.description];
-  XLSX.utils.sheet_add_aoa(worksheet, [newRow], { origin: -1 });
-  workbook.Sheets['Problems'] = worksheet;
-
-  XLSX.writeFile(workbook, excelFilePath);
+// Função para marcar o problema como concluído no banco de dados
+function markProblemAsCompleted(chatId) {
+  db.run(`UPDATE problems SET status = 'completed' WHERE chatId = ?`, [chatId], function(err) {
+    if (err) {
+      return console.log(err.message);
+    }
+    console.log(`Problem with chatId ${chatId} marked as completed.`);
+  });
 }
 
 // Função para enviar a atualização de status ao processo principal (front-end)
@@ -398,6 +405,7 @@ async function closeChat(chatId) {
   activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
   delete userCurrentTopic[chatId];
   reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId); // Remove the problem
+  markProblemAsCompleted(chatId); // Mark the problem as completed
   sendStatusUpdateToMainProcess();
   attendNextUserInQueue(botConnection);
 }
@@ -412,6 +420,33 @@ async function attendNextUserInQueue(conn) {
     userCurrentTopic[nextUser.chatId] = 'problema';
     sendStatusUpdateToMainProcess();
   }
+}
+
+// Função para inicializar o banco de dados
+function initializeDatabase() {
+  db = new sqlite3.Database(path.join(__dirname, 'bot_data.db'), (err) => {
+    if (err) {
+      return console.error(err.message);
+    }
+    console.log('Connected to the SQLite database.');
+  });
+
+  db.run(`CREATE TABLE IF NOT EXISTS problems (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chatId TEXT,
+    description TEXT,
+    date TEXT,
+    name TEXT,
+    position TEXT,
+    city TEXT,
+    school TEXT,
+    status TEXT DEFAULT 'pending'
+  )`, (err) => {
+    if (err) {
+      return console.log(err.message);
+    }
+    console.log('Table created.');
+  });
 }
 
 module.exports = { startHydraBot };

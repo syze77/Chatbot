@@ -1,8 +1,12 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { startHydraBot } = require('./bot');
+const sqlite3 = require('sqlite3').verbose();
+const express = require('express');
 
 let win;
+let db;
+const server = express();
 
 function createWindow() {
   win = new BrowserWindow({
@@ -20,6 +24,37 @@ function createWindow() {
     win = null;
   });
 }
+
+function initializeDatabase() {
+  db = new sqlite3.Database(path.join(__dirname, 'bot_data.db'), (err) => {
+    if (err) {
+      console.error('Erro ao abrir o banco de dados:', err);
+    } else {
+      console.log('Conectado ao banco de dados SQLite.');
+      db.run(`CREATE TABLE IF NOT EXISTS problems (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT,
+        name TEXT,
+        position TEXT,
+        city TEXT,
+        school TEXT,
+        description TEXT,
+        status TEXT DEFAULT 'pending'
+      )`);
+    }
+  });
+}
+
+server.get('/getProblemsData', (req, res) => {
+  db.all('SELECT * FROM problems', (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar dados dos problemas:', err);
+      res.status(500).send('Erro ao buscar dados dos problemas');
+    } else {
+      res.json(rows);
+    }
+  });
+});
 
 ipcMain.on('statusUpdate', (event, statusData) => {
   try {
@@ -50,24 +85,37 @@ ipcMain.on('openWhatsAppChat', async (event, chatId) => {
 });
 
 ipcMain.on('getCompletedAttendances', (event) => {
-  // Fetch completed attendances from storage and send to renderer
-  const completedAttendances = getCompletedAttendancesFromStorage();
-  event.sender.send('getCompletedAttendances', completedAttendances);
+  db.all('SELECT * FROM problems WHERE status = "completed"', (err, rows) => {
+    if (err) {
+      console.error('Erro ao buscar atendimentos concluídos:', err);
+      event.sender.send('getCompletedAttendances', []);
+    } else {
+      event.sender.send('getCompletedAttendances', rows);
+    }
+  });
 });
 
 ipcMain.on('deleteCompletedAttendance', (event, chatId) => {
-  // Delete the completed attendance from storage
-  deleteCompletedAttendanceFromStorage(chatId);
+  db.run('DELETE FROM problems WHERE id = ?', chatId, (err) => {
+    if (err) {
+      console.error('Erro ao deletar atendimento concluído:', err);
+    }
+  });
 });
 
 app.whenReady().then(() => {
   createWindow();
+  initializeDatabase();
   startHydraBot();
 
   win.webContents.once('did-finish-load', () => {
     if (win) {
       win.webContents.send('statusUpdate', { activeChats: [], waitingList: [], problems: [] });
     }
+  });
+
+  server.listen(3000, () => {
+    console.log('Server is running on port 3000');
   });
 });
 
@@ -76,13 +124,3 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
-
-// Functions to handle completed attendances storage
-function getCompletedAttendancesFromStorage() {
-  // Implement logic to fetch completed attendances from storage
-  return [];
-}
-
-function deleteCompletedAttendanceFromStorage(chatId) {
-  // Implement logic to delete a completed attendance from storage
-}
