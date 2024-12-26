@@ -5,13 +5,12 @@ const sqlite3 = require('sqlite3').verbose();
 
 const cookiesPath = path.join(__dirname, 'cookies.json');
 const maxActiveChats = 3;
-const maxTotalChats = 5;
 
 let bot;
 let activeChatsList = [];
-let userCurrentTopic = {};  // Armazenar o tópico atual de cada usuário
-let botConnection = null; // Add this at the top with other variables
-let reportedProblems = []; // Add this to store reported problems
+let userCurrentTopic = {};
+let botConnection = null;
+let reportedProblems = [];
 let db;
 
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
@@ -23,8 +22,8 @@ Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor o
 
 ⚠️ Atenção: Certifique-se de preencher todas as informações corretamente para agilizar o atendimento.`;
 
-// Inicia o bot
-async function startHydraBot() {
+// Initialize the bot
+async function startHydraBot(io) {
   try {
     bot = await hydraBot.initServer({
       puppeteerOptions: {
@@ -40,26 +39,23 @@ async function startHydraBot() {
     bot.on('connection', async (conn) => {
       if (conn.connect) {
         console.log('Conexão Hydra estabelecida.');
-        botConnection = conn; // Store connection
-        startListeningForMessages(conn);
+        botConnection = conn;
+        startListeningForMessages(conn, io);
       } else {
         console.error('Erro na conexão Hydra.');
       }
     });
 
-    // Add IPC listener for chat redirection
     ipcMain.on('redirectToChat', async (event, chatId) => {
-      console.log('Bot: Received redirect request for chat:', chatId);
       if (botConnection) {
         await redirectToWhatsAppChat(botConnection, chatId);
       }
     });
 
-    // Add IPC listener to mark problem as completed
     ipcMain.on('markProblemCompleted', (event, chatId) => {
       reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId);
-      markProblemAsCompleted(chatId);
-      sendStatusUpdateToMainProcess();
+      markProblemAsCompleted(chatId, io);
+      sendStatusUpdateToMainProcess(io);
     });
 
     bot.on('qrcode', (qrcode) => {
@@ -72,8 +68,8 @@ async function startHydraBot() {
   }
 }
 
-// Função que escuta as mensagens recebidas
-function startListeningForMessages(conn) {
+// Listen for incoming messages
+function startListeningForMessages(conn, io) {
   conn.client.ev.on('newMessage', async (newMsg) => {
     const chatId = newMsg.result.chatId;
 
@@ -86,29 +82,26 @@ function startListeningForMessages(conn) {
           if (activeChatsList.length < maxActiveChats) {
             activeChatsList.push({ ...userInfo, chatId });
             await sendMessage(conn, chatId, `Obrigado pelas informações, ${userInfo.name}! Estamos iniciando seu atendimento.`);
-            await sendProblemOptions(conn, chatId); // Envia opções de problemas
-            userCurrentTopic[chatId] = 'problema'; // Define o usuário na fase de problemas
+            await sendProblemOptions(conn, chatId);
+            userCurrentTopic[chatId] = 'problema';
+            saveClientInfoToDatabase(userInfo, chatId, io);
           } else {
-            userInfo.isWaiting = true;  // Define o usuário como aguardando
-            activeChatsList.push({ ...userInfo, chatId });  // Adiciona à lista de espera
+            userInfo.isWaiting = true;
+            activeChatsList.push({ ...userInfo, chatId });
             await sendMessage(conn, chatId, `Você está na lista de espera. Sua posição na fila é: ${activeChatsList.filter(chat => chat.isWaiting).length}. Aguarde sua vez.`);
           }
-          sendStatusUpdateToMainProcess();
+          sendStatusUpdateToMainProcess(io);
         } else {
           await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
         }
       } else if (userCurrentTopic[chatId] === 'problema') {
-        // Usuário na fase de problemas
-        await handleProblemSelection(conn, chatId, messageText);
+        await handleProblemSelection(conn, chatId, messageText, io);
       } else if (userCurrentTopic[chatId] && userCurrentTopic[chatId].stage === 'subproblema') {
-        // Usuário na fase de subtópicos
-        await handleSubProblemSelection(conn, chatId, messageText);
+        await handleSubProblemSelection(conn, chatId, messageText, io);
       } else if (userCurrentTopic[chatId] === 'descricaoProblema') {
-        // Usuário na fase de descrição do problema
-        await handleProblemDescription(conn, chatId, newMsg.result.body);
+        await handleProblemDescription(conn, chatId, newMsg.result.body, io);
       } else if (userCurrentTopic[chatId] === 'videoFeedback') {
-        // Usuário na fase de feedback do vídeo
-        await handleVideoFeedback(conn, chatId, messageText);
+        await handleVideoFeedback(conn, chatId, messageText, io);
       } else {
         await sendMessage(conn, chatId, defaultMessage);
       }
@@ -116,16 +109,14 @@ function startListeningForMessages(conn) {
   });
 
   conn.client.ev.on('chatClosed', async (chatId) => {
-    console.log('Chat encerrado:', chatId);
     activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
-    delete userCurrentTopic[chatId]; 
-    markProblemAsCompleted(chatId); // Mark the problem as completed
-    sendStatusUpdateToMainProcess();
-    attendNextUserInQueue(conn); // Attend the next user in the queue
+    delete userCurrentTopic[chatId];
+    sendStatusUpdateToMainProcess(io);
+    attendNextUserInQueue(conn, io);
   });
 }
 
-// Função que analisa a mensagem de texto e extrai as informações
+// Parse user information from the message
 function parseUserInfo(messageText) {
   const info = {};
   const lines = messageText.split('\n');
@@ -146,25 +137,17 @@ function parseUserInfo(messageText) {
   return null;
 }
 
-// Função para capitalizar as primeiras letras das palavras
+// Capitalize the first letters of words
 function capitalize(str) {
-    return str
-        .split(' ') // Divide a string em palavras
-        .map(word => {
-            if (word.length > 0) {
-                return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(); // Capitaliza a palavra
-            }
-            return word; // Evita erros com strings vazias
-        })
-        .join(' '); // Junta as palavras novamente
+  return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
 
-// Função para enviar mensagens ao usuário
+// Send a message to the user
 async function sendMessage(conn, chatId, message) {
   await conn.client.sendMessage({ to: chatId, body: message, options: { type: 'sendText' } });
 }
 
-// Função que envia as opções de problemas para o usuário
+// Send problem options to the user
 async function sendProblemOptions(conn, chatId) {
   const problemOptions = `Por favor, selecione o tipo de problema que você está enfrentando:
 
@@ -177,8 +160,8 @@ async function sendProblemOptions(conn, chatId) {
   await sendMessage(conn, chatId, problemOptions);
 }
 
-// Função para lidar com a seleção de problemas
-async function handleProblemSelection(conn, chatId, messageText) {
+// Handle problem selection
+async function handleProblemSelection(conn, chatId, messageText, io) {
   switch (messageText) {
     case '1':
       await sendSubProblemOptions(conn, chatId, 'Falha no acesso ao sistema');
@@ -194,17 +177,17 @@ async function handleProblemSelection(conn, chatId, messageText) {
       break;
     case '5':
       await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
-      userCurrentTopic[chatId] = 'descricaoProblema'; // Define para a fase de descrição
+      userCurrentTopic[chatId] = 'descricaoProblema';
       break;
     case 'voltar':
-      await sendProblemOptions(conn, chatId); 
+      await sendProblemOptions(conn, chatId);
       break;
     default:
       await sendMessage(conn, chatId, 'Opção inválida. Por favor, selecione uma opção válida.');
   }
 }
 
-// Função para enviar os subtópicos de um problema
+// Send sub-problem options to the user
 async function sendSubProblemOptions(conn, chatId, problem) {
   let subProblemOptions = '';
 
@@ -251,37 +234,37 @@ Digite 'voltar' para retornar ao menu anterior.`;
   await sendMessage(conn, chatId, subProblemOptions);
 }
 
-// Função para lidar com a seleção de subtópicos
-async function handleSubProblemSelection(conn, chatId, messageText) {
+// Handle sub-problem selection
+async function handleSubProblemSelection(conn, chatId, messageText, io) {
   if (messageText === 'voltar') {
-    // Volta para a seleção de problemas
     userCurrentTopic[chatId] = 'problema';
     await sendProblemOptions(conn, chatId);
   } else {
-    // Envia um vídeo do YouTube relacionado ao subtópico
     const videoUrl = getVideoUrlForSubProblem(messageText);
     const subProblemText = getSubProblemText(userCurrentTopic[chatId].problem, messageText);
     await sendMessage(conn, chatId, `Aqui está um vídeo que pode ajudar a resolver seu problema: ${videoUrl}`);
     await sendMessage(conn, chatId, 'O vídeo foi suficiente para resolver seu problema? (sim/não)');
-    userCurrentTopic[chatId] = 'videoFeedback'; // Define para a fase de feedback do vídeo
-    // Adiciona o problema ao banco de dados
+    userCurrentTopic[chatId] = 'videoFeedback';
     const userInfo = activeChatsList.find(chat => chat.chatId === chatId);
     const problemData = { 
       chatId, 
-      description: subProblemText, // Salva o subtópico selecionado
+      description: subProblemText,
       date: new Date().toLocaleDateString(),
       name: userInfo ? userInfo.name : '',
       position: userInfo ? userInfo.position : '',
       city: userInfo ? userInfo.city : '',
-      school: userInfo ? userInfo.school : ''
+      school: userInfo ? userInfo.school : '',
+      status: 'pending',
+      problemId: userInfo ? userInfo.problemId : null // Use the saved problem ID
     };
     reportedProblems.push(problemData);
-    saveProblemToDatabase(problemData);
-    sendStatusUpdateToMainProcess();
+    saveProblemToDatabase(problemData, io);
+    sendStatusUpdateToMainProcess(io);
+    io.emit('newProblemReported', problemData); // Emit event when a new problem is reported
   }
 }
 
-// Função para obter o texto do subtópico
+// Get sub-problem text
 function getSubProblemText(problem, subProblem) {
   const subProblemTexts = {
     'Falha no acesso ao sistema': {
@@ -308,121 +291,155 @@ function getSubProblemText(problem, subProblem) {
   return subProblemTexts[problem] ? subProblemTexts[problem][subProblem] : 'Outro problema';
 }
 
-// Função para obter o URL do vídeo para um subtópico
+// Get video URL for sub-problem
 function getVideoUrlForSubProblem(subProblem) {
   const videoUrls = {
-    '1': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Exemplo de URL de vídeo
+    '1': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     '2': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     '3': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    // Adicione mais URLs conforme necessário
   };
-  return videoUrls[subProblem] || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'; // URL padrão
+  return videoUrls[subProblem] || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 }
 
-// Função para lidar com o feedback do vídeo
-async function handleVideoFeedback(conn, chatId, messageText) {
+// Handle video feedback
+async function handleVideoFeedback(conn, chatId, messageText, io) {
   if (messageText === 'sim') {
     await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais alguma coisa, estamos à disposição.');
-    userCurrentTopic[chatId] = 'problema'; // Retorna à fase de problemas
-    await closeChat(chatId); // Close the chat
+    userCurrentTopic[chatId] = 'problema';
+    await closeChat(chatId, io);
   } else if (messageText === 'não') {
     await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
-    userCurrentTopic[chatId] = 'descricaoProblema'; // Define para a fase de descrição do problema
+    userCurrentTopic[chatId] = 'descricaoProblema';
   } else {
     await sendMessage(conn, chatId, 'Resposta inválida. Por favor, responda com "sim" ou "não".');
   }
 }
 
-// Função para lidar com a descrição do problema
-async function handleProblemDescription(conn, chatId, messageText) {
-  console.log(`Bot: handleProblemDescription called with chatId: ${chatId}`);
+// Handle problem description
+async function handleProblemDescription(conn, chatId, messageText, io) {
   const userInfo = activeChatsList.find(chat => chat.chatId === chatId);
   const problemData = { 
     chatId, 
-    description: messageText, 
+    description: messageText,
     date: new Date().toLocaleDateString(),
     name: userInfo ? userInfo.name : '',
     position: userInfo ? userInfo.position : '',
     city: userInfo ? userInfo.city : '',
-    school: userInfo ? userInfo.school : ''
-  }; // Add user info to problem data
-  reportedProblems.push(problemData); // Add problem to reportedProblems
-  saveProblemToDatabase(problemData); // Save problem to database
+    school: userInfo ? userInfo.school : '',
+    status: 'pending',
+    problemId: userInfo ? userInfo.problemId : null // Use the saved problem ID
+  };
+  reportedProblems.push(problemData);
+  saveProblemToDatabase(problemData, io);
   await sendMessage(conn, chatId, 'Sua descrição foi recebida. Um atendente entrará em contato em breve.');
-  sendProblemToFrontEnd(problemData);  // Envia a descrição do problema no formato original com o chatId
-  sendStatusUpdateToMainProcess(); // Update the status to include the new problem
-  attendNextUserInQueue(conn); // Attend the next user in the queue
+  sendProblemToFrontEnd(problemData);
+  sendStatusUpdateToMainProcess(io);
+  io.emit('newProblemReported', problemData); // Emit event when a new problem is reported
+  attendNextUserInQueue(conn, io);
 }
 
-// Função para salvar o problema no banco de dados
-function saveProblemToDatabase(problemData) {
-  db.run(`INSERT INTO problems (chatId, description, date, name, position, city, school) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-    [problemData.chatId, problemData.description, problemData.date, problemData.name, problemData.position, problemData.city, problemData.school], 
+// Save client information to the database
+function saveClientInfoToDatabase(userInfo, chatId, io) {
+  db.run(`INSERT INTO problems (chatId, name, position, city, school, status) VALUES (?, ?, ?, ?, ?, 'pending')`, 
+    [chatId, userInfo.name, userInfo.position, userInfo.city, userInfo.school], 
     function(err) {
       if (err) {
         return console.log(err.message);
       }
-      console.log(`A row has been inserted with rowid ${this.lastID}`);
+      console.log(`Client info inserted with rowid ${this.lastID}`);
+      // Find the user in the activeChatsList and update their problemId
+      const userIndex = activeChatsList.findIndex(chat => chat.chatId === chatId);
+      if (userIndex !== -1) {
+        activeChatsList[userIndex].problemId = this.lastID;
+      }
+      io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
     });
 }
 
-// Função para marcar o problema como concluído no banco de dados
-function markProblemAsCompleted(chatId) {
-  db.run(`UPDATE problems SET status = 'completed' WHERE chatId = ?`, [chatId], function(err) {
+// Save problem to the database
+function saveProblemToDatabase(problemData, io) {
+  db.run(`UPDATE problems SET description = ?, date = ? WHERE id = ?`, 
+    [problemData.description, problemData.date, problemData.problemId], 
+    function(err) {
+      if (err) {
+        return console.log(err.message);
+      }
+      console.log(`Problem description updated for id ${problemData.problemId}`);
+      io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
+    });
+}
+
+// Mark problem as completed in the database
+function markProblemAsCompleted(problemId, io) {
+  db.run(`UPDATE problems SET status = 'completed' WHERE id = ?`, [problemId], function(err) {
     if (err) {
       return console.log(err.message);
     }
-    console.log(`Problem with chatId ${chatId} marked as completed.`);
+    console.log(`Problem with id ${problemId} marked as completed.`);
+    io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
   });
 }
 
-// Função para enviar a atualização de status ao processo principal (front-end)
-function sendStatusUpdateToMainProcess() {
+// Send status update to the main process
+function sendStatusUpdateToMainProcess(io) {
   const activeChats = activeChatsList.filter(chat => !chat.isWaiting && userCurrentTopic[chat.chatId] !== 'atendente'); 
   const waitingList = activeChatsList.filter(chat => chat.isWaiting);  
   const attendedByAttendant = activeChatsList.filter(chat => userCurrentTopic[chat.chatId] === 'atendente');
   
-  ipcMain.emit('statusUpdate', null, {  // Corrected event name
+  ipcMain.emit('statusUpdate', null, { 
     activeChats,
     waitingList,
-    problems: reportedProblems, // Include reported problems in the status update
-    attendedByAttendant // Include chats attended by attendants
+    problems: reportedProblems,
+    attendedByAttendant
+  });
+  io.emit('statusUpdate', { 
+    activeChats,
+    waitingList,
+    problems: reportedProblems,
+    attendedByAttendant
   });
 }
 
-// Função para enviar o problema selecionado para o front-end
+// Send problem to the front-end
 function sendProblemToFrontEnd(problemData) {
-  console.log(`Bot: sendProblemToFrontEnd called with chatId: ${problemData.chatId}`);
   if (problemData.description.startsWith('Subtópico:')) {
-    return; // Não envia subtópicos para o front-end
+    return;
   }
   ipcMain.emit('userProblem', null, problemData.description, problemData.chatId, problemData.name);
 }
 
-// Função para encerrar o chat
-async function closeChat(chatId) {
+// Close the chat
+async function closeChat(chatId, io) {
   await sendMessage(botConnection, chatId, 'Atendimento encerrado. Obrigado!');
+  const userInfo = activeChatsList.find(chat => chat.chatId === chatId);
   activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
   delete userCurrentTopic[chatId];
-  reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId); // Remove the problem
-  markProblemAsCompleted(chatId); // Mark the problem as completed
-  sendStatusUpdateToMainProcess();
-  attendNextUserInQueue(botConnection);
+  reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId);
+  if (userInfo && userInfo.problemId) {
+    markProblemAsCompleted(userInfo.problemId, io); // Use the saved problem ID
+  }
+  sendStatusUpdateToMainProcess(io);
+  attendNextUserInQueue(botConnection, io);
 }
 
-// Função para atender o próximo usuário na fila
-async function attendNextUserInQueue(conn) {
+// Attend the next user in the queue
+async function attendNextUserInQueue(conn, io) {
   const nextUser = activeChatsList.find(chat => chat.isWaiting);
   if (nextUser) {
     nextUser.isWaiting = false;
     await sendMessage(conn, nextUser.chatId, `Obrigado por aguardar, ${nextUser.name}. Estamos iniciando seu atendimento.`);
     await sendProblemOptions(conn, nextUser.chatId);
     userCurrentTopic[nextUser.chatId] = 'problema';
-    sendStatusUpdateToMainProcess();
+    sendStatusUpdateToMainProcess(io);
   }
 }
 
-// Função para inicializar o banco de dados
+// Get the waiting list
+function getWaitingList() {
+  return activeChatsList.filter(chat => chat.isWaiting);
+}
+
+// Initialize the database
 function initializeDatabase() {
   db = new sqlite3.Database(path.join(__dirname, 'bot_data.db'), (err) => {
     if (err) {
@@ -433,13 +450,13 @@ function initializeDatabase() {
 
   db.run(`CREATE TABLE IF NOT EXISTS problems (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chatId TEXT,
-    description TEXT,
     date TEXT,
     name TEXT,
-    position TEXT,
     city TEXT,
+    position TEXT,
     school TEXT,
+    chatId TEXT,
+    description TEXT,
     status TEXT DEFAULT 'pending'
   )`, (err) => {
     if (err) {

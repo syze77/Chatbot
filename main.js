@@ -1,13 +1,18 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { startHydraBot } = require('./bot');
 const sqlite3 = require('sqlite3').verbose();
 const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
 
 let win;
 let db;
 const server = express();
+const httpServer = http.createServer(server);
+const io = socketIo(httpServer);
 
+// Create the main application window
 function createWindow() {
   win = new BrowserWindow({
     width: 800,
@@ -25,6 +30,7 @@ function createWindow() {
   });
 }
 
+// Initialize the SQLite database
 function initializeDatabase() {
   db = new sqlite3.Database(path.join(__dirname, 'bot_data.db'), (err) => {
     if (err) {
@@ -32,19 +38,21 @@ function initializeDatabase() {
     } else {
       console.log('Conectado ao banco de dados SQLite.');
       db.run(`CREATE TABLE IF NOT EXISTS problems (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT,
-        name TEXT,
-        position TEXT,
-        city TEXT,
-        school TEXT,
-        description TEXT,
-        status TEXT DEFAULT 'pending'
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       date TEXT,
+       name TEXT,
+       city TEXT,
+       position TEXT,
+       school TEXT,
+       chatId TEXT,
+       description TEXT,
+       status TEXT DEFAULT 'pending'
       )`);
     }
   });
 }
 
+// Set up the Express server to fetch problem data
 server.get('/getProblemsData', (req, res) => {
   db.all('SELECT * FROM problems', (err, rows) => {
     if (err) {
@@ -56,57 +64,47 @@ server.get('/getProblemsData', (req, res) => {
   });
 });
 
-ipcMain.on('statusUpdate', (event, statusData) => {
-  try {
-    if (win) {
-      win.webContents.send('statusUpdate', statusData);
-    }
-  } catch (err) {
-    console.error("Erro ao enviar status para a janela:", err);
-  }
-});
-
-ipcMain.on('userProblem', (event, problemDescription, chatId, userName) => {
-  try {
-    if (win) {
-      win.webContents.send('userProblem', problemDescription, chatId, userName);
-    }
-  } catch (err) {
-    console.error("Erro ao enviar problema para a janela:", err);
-  }
-});
-
-ipcMain.on('openWhatsAppChat', async (event, chatId) => {
-  const whatsappNumber = chatId.split('@')[0];
-  const whatsappUrl = `https://wa.me/${whatsappNumber}`;
-  console.log(`Main: Opening WhatsApp chat with URL: ${whatsappUrl}`);
-  const open = await import('open'); // Use dynamic import
-  open.default(whatsappUrl, { app: { name: 'chrome' } }); // Open the URL in Chrome
-});
-
-ipcMain.on('getCompletedAttendances', (event) => {
+server.get('/getCompletedAttendances', (req, res) => {
   db.all('SELECT * FROM problems WHERE status = "completed"', (err, rows) => {
     if (err) {
       console.error('Erro ao buscar atendimentos concluídos:', err);
-      event.sender.send('getCompletedAttendances', []);
+      res.status(500).send('Erro ao buscar atendimentos concluídos');
     } else {
-      event.sender.send('getCompletedAttendances', rows);
+      res.json(rows);
     }
   });
 });
 
-ipcMain.on('deleteCompletedAttendance', (event, chatId) => {
-  db.run('DELETE FROM problems WHERE id = ?', chatId, (err) => {
+server.delete('/deleteCompletedAttendance/:id', (req, res) => {
+  const id = req.params.id;
+  db.run('DELETE FROM problems WHERE id = ?', id, (err) => {
     if (err) {
       console.error('Erro ao deletar atendimento concluído:', err);
+      res.status(500).send('Erro ao deletar atendimento concluído');
+    } else {
+      res.sendStatus(200);
     }
   });
 });
 
+// Set up the Express server to fetch user information
+server.get('/getUserInfo/:chatId', (req, res) => {
+  const chatId = req.params.chatId;
+  db.get('SELECT * FROM problems WHERE chatId = ?', [chatId], (err, row) => {
+    if (err) {
+      console.error('Erro ao buscar informações do usuário:', err);
+      res.status(500).send('Erro ao buscar informações do usuário');
+    } else {
+      res.json(row);
+    }
+  });
+});
+
+// Start the application
 app.whenReady().then(() => {
   createWindow();
   initializeDatabase();
-  startHydraBot();
+  startHydraBot(io); // Pass the io instance to the bot
 
   win.webContents.once('did-finish-load', () => {
     if (win) {
@@ -114,7 +112,7 @@ app.whenReady().then(() => {
     }
   });
 
-  server.listen(3000, () => {
+  httpServer.listen(3000, () => {
     console.log('Server is running on port 3000');
   });
 });
