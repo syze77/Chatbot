@@ -79,41 +79,58 @@ function startListeningForMessages(conn, io) {
       if (messageText.startsWith("nome:")) {
         const userInfo = parseUserInfo(messageText);
         if (userInfo) {
-          if (activeChatsList.length < maxActiveChats) {
-            activeChatsList.push({ ...userInfo, chatId });
-            await sendMessage(conn, chatId, `Obrigado pelas informações, ${userInfo.name}! Estamos iniciando seu atendimento.`);
-            await sendProblemOptions(conn, chatId);
-            userCurrentTopic[chatId] = 'problema';
-            saveClientInfoToDatabase(userInfo, chatId, io);
-          } else {
-            userInfo.isWaiting = true;
-            activeChatsList.push({ ...userInfo, chatId });
-            await sendMessage(conn, chatId, `Você está na lista de espera. Sua posição na fila é: ${activeChatsList.filter(chat => chat.isWaiting).length}. Aguarde sua vez.`);
-          }
-          sendStatusUpdateToMainProcess(io);
+          handleNewUser(conn, chatId, userInfo, io);
         } else {
           await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
         }
-      } else if (userCurrentTopic[chatId] === 'problema') {
-        await handleProblemSelection(conn, chatId, messageText, io);
-      } else if (userCurrentTopic[chatId] && userCurrentTopic[chatId].stage === 'subproblema') {
-        await handleSubProblemSelection(conn, chatId, messageText, io);
-      } else if (userCurrentTopic[chatId] === 'descricaoProblema') {
-        await handleProblemDescription(conn, chatId, newMsg.result.body, io);
-      } else if (userCurrentTopic[chatId] === 'videoFeedback') {
-        await handleVideoFeedback(conn, chatId, messageText, io);
       } else {
-        await sendMessage(conn, chatId, defaultMessage);
+        handleUserMessage(conn, chatId, messageText, io);
       }
     }
   });
 
   conn.client.ev.on('chatClosed', async (chatId) => {
-    activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
-    delete userCurrentTopic[chatId];
-    sendStatusUpdateToMainProcess(io);
-    attendNextUserInQueue(conn, io);
+    handleChatClosed(chatId, io);
   });
+}
+
+// Handle new user
+async function handleNewUser(conn, chatId, userInfo, io) {
+  if (activeChatsList.length < maxActiveChats) {
+    activeChatsList.push({ ...userInfo, chatId });
+    await sendMessage(conn, chatId, `Obrigado pelas informações, ${userInfo.name}! Estamos iniciando seu atendimento.`);
+    await sendProblemOptions(conn, chatId);
+    userCurrentTopic[chatId] = 'problema';
+    saveClientInfoToDatabase(userInfo, chatId, io);
+  } else {
+    userInfo.isWaiting = true;
+    activeChatsList.push({ ...userInfo, chatId });
+    await sendMessage(conn, chatId, `Você está na lista de espera. Sua posição na fila é: ${activeChatsList.filter(chat => chat.isWaiting).length}. Aguarde sua vez.`);
+  }
+  sendStatusUpdateToMainProcess(io);
+}
+
+// Handle user message
+async function handleUserMessage(conn, chatId, messageText, io) {
+  if (userCurrentTopic[chatId] === 'problema') {
+    await handleProblemSelection(conn, chatId, messageText, io);
+  } else if (userCurrentTopic[chatId] && userCurrentTopic[chatId].stage === 'subproblema') {
+    await handleSubProblemSelection(conn, chatId, messageText, io);
+  } else if (userCurrentTopic[chatId] === 'descricaoProblema') {
+    await handleProblemDescription(conn, chatId, messageText, io);
+  } else if (userCurrentTopic[chatId] === 'videoFeedback') {
+    await handleVideoFeedback(conn, chatId, messageText, io);
+  } else {
+    await sendMessage(conn, chatId, defaultMessage);
+  }
+}
+
+// Handle chat closed
+async function handleChatClosed(chatId, io) {
+  activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
+  delete userCurrentTopic[chatId];
+  sendStatusUpdateToMainProcess(io);
+  attendNextUserInQueue(botConnection, io);
 }
 
 // Parse user information from the message
@@ -189,49 +206,44 @@ async function handleProblemSelection(conn, chatId, messageText, io) {
 
 // Send sub-problem options to the user
 async function sendSubProblemOptions(conn, chatId, problem) {
-  let subProblemOptions = '';
+  const subProblemOptions = getSubProblemOptions(problem);
+  userCurrentTopic[chatId] = { problem, stage: 'subproblema' }; 
+  await sendMessage(conn, chatId, subProblemOptions);
+}
 
-  switch (problem) {
-    case 'Falha no acesso ao sistema':
-      subProblemOptions = `Selecione o subtópico:
+// Get sub-problem options
+function getSubProblemOptions(problem) {
+  const options = {
+    'Falha no acesso ao sistema': `Selecione o subtópico:
 
 1️⃣ Não consigo acessar minha conta
 2️⃣ Sistema não carrega
 3️⃣ Outro problema relacionado ao acesso
 
-Digite 'voltar' para retornar ao menu anterior.`;
-      break;
-    case 'Erro ao cadastrar aluno/funcionário':
-      subProblemOptions = `Selecione o subtópico:
+Digite 'voltar' para retornar ao menu anterior.`,
+    'Erro ao cadastrar aluno/funcionário': `Selecione o subtópico:
 
 1️⃣ Erro ao inserir dados do aluno
 2️⃣ Erro ao inserir dados do funcionário
 3️⃣ Outro problema relacionado ao cadastro
 
-Digite 'voltar' para retornar ao menu anterior.`; 
-      break;
-    case 'Problemas com o diário de classe':
-      subProblemOptions = `Selecione o subtópico:
+Digite 'voltar' para retornar ao menu anterior.`,
+    'Problemas com o diário de classe': `Selecione o subtópico:
 
 1️⃣ Falha na inserção de notas
 2️⃣ Falha na visualização de registros
 3️⃣ Outro problema com o diário de classe
 
-Digite 'voltar' para retornar ao menu anterior.`; 
-      break;
-    case 'Falha no registro de notas':
-      subProblemOptions = `Selecione o subtópico:
+Digite 'voltar' para retornar ao menu anterior.`,
+    'Falha no registro de notas': `Selecione o subtópico:
 
 1️⃣ Não consigo registrar as notas
 2️⃣ Notas não estão sendo salvas
 3️⃣ Outro problema com o registro de notas
 
-Digite 'voltar' para retornar ao menu anterior.`; 
-      break;
-  }
-
-  userCurrentTopic[chatId] = { problem, stage: 'subproblema' }; 
-  await sendMessage(conn, chatId, subProblemOptions);
+Digite 'voltar' para retornar ao menu anterior.`
+  };
+  return options[problem] || 'Opção inválida. Por favor, selecione uma opção válida.';
 }
 
 // Handle sub-problem selection
@@ -344,7 +356,8 @@ function saveClientInfoToDatabase(userInfo, chatId, io) {
     [chatId, userInfo.name, userInfo.position, userInfo.city, userInfo.school], 
     function(err) {
       if (err) {
-        return console.log(err.message);
+        console.error('Erro ao salvar informações do cliente:', err.message);
+        return;
       }
       console.log(`Client info inserted with rowid ${this.lastID}`);
       // Find the user in the activeChatsList and update their problemId
@@ -362,7 +375,8 @@ function saveProblemToDatabase(problemData, io) {
     [problemData.description, problemData.date, problemData.problemId], 
     function(err) {
       if (err) {
-        return console.log(err.message);
+        console.error('Erro ao salvar problema:', err.message);
+        return;
       }
       console.log(`Problem description updated for id ${problemData.problemId}`);
       io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
@@ -373,7 +387,8 @@ function saveProblemToDatabase(problemData, io) {
 function markProblemAsCompleted(problemId, io) {
   db.run(`UPDATE problems SET status = 'completed' WHERE id = ?`, [problemId], function(err) {
     if (err) {
-      return console.log(err.message);
+      console.error('Erro ao marcar problema como concluído:', err.message);
+      return;
     }
     console.log(`Problem with id ${problemId} marked as completed.`);
     io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
