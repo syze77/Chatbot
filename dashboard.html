@@ -76,7 +76,7 @@
             background: #343a40;
             color: white;
             border: none;
-            cursor: pointer;
+            cursor: button;
             padding: 5px 10px;
             border-radius: 4px;
         }
@@ -101,6 +101,8 @@
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             transition: transform 0.3s ease;
+            padding: 20px;
+            margin-bottom: 30px;
         }
         .card:hover {
             transform: translateY(-5px);
@@ -117,7 +119,9 @@
         }
         .chart-container {
             width: 100%;
-            height: 600px; 
+            height: 400px; /* Reduzido de 600px para 400px */
+            padding: 20px;
+            position: relative;
         }
         .report-container {
             display: flex;
@@ -125,28 +129,102 @@
             align-items: center;
             margin-top: 30px;
         }
-        .report-container input {
-            margin: 0 10px;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #ced4da;
-            transition: border-color 0.3s;
-        }
-        .report-container input:focus {
-            border-color: #17a2b8;
-            outline: none;
-        }
-        .report-container button {
-            padding: 10px 20px;
+        
+        .generate-report-btn {
+            padding: 12px 30px;
             border-radius: 5px;
             background-color: #17a2b8;
             color: white;
             border: none;
             cursor: pointer;
-            transition: background-color 0.3s;
+            transition: all 0.3s ease;
+            font-size: 1.1rem;
+            font-weight: 500;
         }
-        .report-container button:hover {
+
+        .generate-report-btn:hover {
             background-color: #138496;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Add new styles for the overlay */
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .report-modal {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 400px;
+            max-width: 90%;
+        }
+
+        .report-modal h3 {
+            margin-top: 0;
+            color: #17a2b8;
+            margin-bottom: 20px;
+        }
+
+        .date-input-group {
+            margin-bottom: 15px;
+        }
+
+        .date-input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #495057;
+            font-weight: 500;
+        }
+
+        .date-input-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-buttons button {
+            padding: 8px 20px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .modal-buttons .cancel-btn {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .modal-buttons .generate-btn {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .modal-buttons button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
@@ -168,7 +246,7 @@
             <div class="col-lg-6">
                 <div class="card">
                     <div class="status-header">
-                        <i class="fas fa-chart-line"></i> Problemas por Dia
+                        <i class="fas fa-chart-line"></i> Problemas por Semana
                     </div>
                     <div class="chart-container">
                         <canvas id="dailyProblemsChart"></canvas>
@@ -187,36 +265,69 @@
             </div>
         </div>
         <div class="report-container">
-            <input type="date" id="startDate" class="form-control">
-            <input type="date" id="endDate" class="form-control">
-            <button class="btn btn-primary" onclick="generateReport()">Gerar Relatório</button>
+            <button class="generate-report-btn" onclick="showReportOverlay()">
+                <i class="fas fa-file-alt"></i> Gerar Relatório
+            </button>
+        </div>
+    </div>
+    <div class="overlay" id="reportOverlay">
+        <div class="report-modal">
+            <h3>Gerar Relatório</h3>
+            <div class="date-input-group">
+                <label for="startDate">Data Inicial</label>
+                <input type="date" id="startDate" class="form-control">
+            </div>
+            <div class="date-input-group">
+                <label for="endDate">Data Final</label>
+                <input type="date" id="endDate" class="form-control">
+            </div>
+            <div class="modal-buttons">
+                <button class="cancel-btn" onclick="closeReportOverlay()">Cancelar</button>
+                <button class="generate-btn" onclick="generateReport()">Gerar Relatório</button>
+            </div>
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="renderer.js"></script>
     <script>
-        // Initialize charts
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM fully loaded and parsed');
+            // Chame fetchDataAndUpdateCharts diretamente
+            fetchDataAndUpdateCharts();
+            
+            // Atualize os gráficos a cada 5 minutos
+            setInterval(fetchDataAndUpdateCharts, 300000);
+        });
+
+        // Initialize weekly problems chart
         const dailyProblemsChartCtx = document.getElementById('dailyProblemsChart').getContext('2d');
         const dailyProblemsChart = new Chart(dailyProblemsChartCtx, {
             type: 'bar',
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Problemas por Dia',
+                    label: 'Problemas por Dia Útil',
                     data: [],
                     backgroundColor: 'rgba(75, 192, 192, 0.2)',
                     borderColor: 'rgba(75, 192, 192, 1)',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    borderRadius: 5
                 }]
             },
             options: {
+                responsive: true,
+                maintainAspectRatio: false,
                 scales: {
                     y: {
                         beginAtZero: true,
-                        min: 1,
-                        max: 80,
                         ticks: {
-                            stepSize: 1 
+                            precision: 0,
+                            stepSize: 1
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
                         }
                     }
                 },
@@ -227,54 +338,175 @@
                     },
                     title: {
                         display: true,
-                        text: 'Problemas por Dia'
+                        text: 'Problemas por Dia Útil',
+                        font: {
+                            size: 16
+                        }
                     }
                 }
             }
         });
 
+        // Initialize monthly problems chart
         const monthlyProblemsChartCtx = document.getElementById('monthlyProblemsChart').getContext('2d');
         const monthlyProblemsChart = new Chart(monthlyProblemsChartCtx, {
             type: 'pie',
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Problemas por Mês',
                     data: [],
                     backgroundColor: [
-                        'rgb(255, 99, 132)',
-                        'rgb(54, 162, 235)',
-                        'rgb(255, 205, 86)',
-                        'rgb(75, 192, 192)',
-                        'rgb(153, 102, 255)',
-                        'rgb(255, 159, 64)',
-                        'rgb(255, 99, 132)',
-                        'rgb(54, 162, 235)',
-                        'rgb(255, 205, 86)',
-                        'rgb(75, 192, 192)',
-                        'rgb(153, 102, 255)',
-                        'rgb(255, 159, 64)'
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(255, 206, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)',
+                        'rgba(153, 102, 255, 0.8)',
+                        'rgba(255, 159, 64, 0.8)',
+                        'rgba(255, 0, 0, 0.8)',
+                        'rgba(0, 255, 0, 0.8)',
+                        'rgba(0, 0, 255, 0.8)',
+                        'rgba(128, 0, 128, 0.8)',
+                        'rgba(0, 128, 128, 0.8)',
+                        'rgba(128, 128, 0, 0.8)'
                     ],
-                    hoverOffset: 4
+                    borderWidth: 1
                 }]
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        left: 20,
+                        right: 50,
+                        top: 20,
+                        bottom: 20
+                    }
+                },
                 plugins: {
                     legend: {
                         display: true,
-                        position: 'top',
+                        position: 'right',
+                        labels: {
+                            padding: 20,
+                            font: {
+                                size: 12
+                            }
+                        }
                     },
                     title: {
                         display: true,
-                        text: 'Problemas por Mês'
+                        text: 'Distribuição Mensal de Problemas',
+                        font: {
+                            size: 16
+                        },
+                        padding: {
+                            top: 10,
+                            bottom: 30
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const value = context.raw;
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${context.label}: ${value} (${percentage}%)`;
+                            }
+                        }
                     }
                 }
             }
         });
 
-        // Fetch data and update charts
-        fetchDataAndUpdateCharts(dailyProblemsChart, monthlyProblemsChart);
+        // Update chart data function
+        function updateChartData(weeklyData, monthlyData) {
+            // Update weekly chart
+            dailyProblemsChart.data.labels = weeklyData.labels;
+            dailyProblemsChart.data.datasets[0].data = weeklyData.data;
+            dailyProblemsChart.update();
+
+            // Update monthly chart
+            monthlyProblemsChart.data.labels = monthlyData.labels;
+            monthlyProblemsChart.data.datasets[0].data = monthlyData.data;
+            monthlyProblemsChart.update();
+        }
+
+        // Substitua a função fetchDataAndUpdateCharts
+        async function fetchDataAndUpdateCharts() {
+            try {
+                const response = await fetch('http://localhost:3000/getChartData');
+                const data = await response.json();
+                
+                if (!data || !data.weekly || !data.monthly) {
+                    console.error('Dados inválidos recebidos:', data);
+                    return;
+                }
+
+                console.log('Dados recebidos:', data); // Debug
+
+                // Filtrar apenas os dias úteis (excluir sábado e domingo)
+                const workDays = data.weekly.labels.map((label, index) => ({
+                    label,
+                    count: data.weekly.data[index],
+                    isWorkDay: !['Sáb', 'Dom'].includes(label)
+                })).filter(day => day.isWorkDay);
+
+                // Atualizar gráfico semanal apenas com dias úteis
+                dailyProblemsChart.data.labels = workDays.map(day => day.label);
+                dailyProblemsChart.data.datasets[0].data = workDays.map(day => day.count);
+                dailyProblemsChart.update();
+
+                // Atualizar gráfico mensal
+                monthlyProblemsChart.data.labels = data.monthly.labels;
+                monthlyProblemsChart.data.datasets[0].data = data.monthly.data;
+                monthlyProblemsChart.update();
+            } catch (error) {
+                console.error('Erro ao buscar dados dos gráficos:', error);
+            }
+        }
+
+        // Process weekly data
+        function processWeeklyData(data) {
+            const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+            const today = new Date();
+            const labels = [];
+            const counts = new Array(7).fill(0);
+
+            // Get last 7 days
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date(today);
+                date.setDate(date.getDate() - i);
+                labels.push(weekDays[date.getDay()]);
+            }
+
+            // Count problems per day
+            data.forEach(problem => {
+                const problemDate = new Date(problem.date);
+                const dayDiff = Math.floor((today - problemDate) / (1000 * 60 * 60 * 24));
+                if (dayDiff < 7) {
+                    counts[6 - dayDiff]++;
+                }
+            });
+
+            return { labels, data: counts };
+        }
+
+        // Process monthly data
+        function processMonthlyData(data) {
+            const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            const counts = new Array(12).fill(0);
+            const currentYear = new Date().getFullYear();
+
+            data.forEach(problem => {
+                const problemDate = new Date(problem.date);
+                if (problemDate.getFullYear() === currentYear) {
+                    counts[problemDate.getMonth()]++;
+                }
+            });
+
+            return { labels: months, data: counts };
+        }
 
         function toggleSidebar() {
             const sidebar = document.querySelector('.sidebar');
@@ -286,16 +518,37 @@
             monthlyProblemsChart.resize();
         }
 
+        function showReportOverlay() {
+            document.getElementById('reportOverlay').style.display = 'flex';
+        }
+
+        function closeReportOverlay() {
+            document.getElementById('reportOverlay').style.display = 'none';
+        }
+
         function generateReport() {
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
-            if (startDate && endDate) {
-                // Implement the logic to generate the report based on the selected dates
-                console.log(`Generating report from ${startDate} to ${endDate}`);
-            } else {
+
+            if (!startDate || !endDate) {
                 alert('Por favor, selecione as datas de início e fim.');
+                return;
             }
+
+            if (new Date(startDate) > new Date(endDate)) {
+                alert('A data inicial não pode ser posterior à data final.');
+                return;
+            }
+
+            // Abrir o PDF em uma nova janela
+            window.open(`http://localhost:3000/generateReport?start=${startDate}&end=${endDate}`, '_blank');
+            
+            // Fechar o modal
+            closeReportOverlay();
         }
+
+        // Update the report button click handler
+        document.querySelector('.report-container button').onclick = showReportOverlay;
     </script>
 </body>
 </html>

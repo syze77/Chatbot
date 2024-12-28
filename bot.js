@@ -1,17 +1,25 @@
 const hydraBot = require('hydra-bot');
 const path = require('path');
 const { ipcMain } = require('electron');
-const sqlite3 = require('sqlite3').verbose();
+const express = require('express');
+const { getDatabase } = require('./database');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
 
 const cookiesPath = path.join(__dirname, 'cookies.json');
 const maxActiveChats = 3;
+
+// Initialize Express
+const server = express();
+
+// Add JSON middleware
+server.use(express.json());
 
 let bot;
 let activeChatsList = [];
 let userCurrentTopic = {};
 let botConnection = null;
 let reportedProblems = [];
-let db;
 
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
 
@@ -62,10 +70,89 @@ async function startHydraBot(io) {
       console.log('QR Code gerado pelo Hydra:', qrcode);
     });
 
-    initializeDatabase();
   } catch (error) {
     console.error('Erro ao iniciar o Hydra:', error);
   }
+
+  io.on('connection', (socket) => {
+    socket.on('attendProblem', async (data) => {
+      try {
+        const { chatId, attendantId } = data;
+
+        // Update problem status in database
+        await getDatabase().run(
+          `UPDATE problems 
+           SET status = 'active', 
+               attendant_id = ? 
+           WHERE chatId = ? AND status = 'pending'`,
+          [attendantId, chatId]
+        );
+
+        // Send status update to all clients
+        sendStatusUpdateToMainProcess(io);
+
+        // Send confirmation message to the user
+        if (botConnection) {
+          await sendMessage(
+            botConnection,
+            chatId,
+            'Um atendente está analisando seu problema e entrará em contato em breve.'
+          );
+        }
+      } catch (error) {
+        console.error('Erro ao atender problema:', error);
+      }
+    });
+
+    socket.on('endChat', async (data) => {
+      try {
+        const { chatId, id } = data;
+
+        // Update chat status to completed
+        await getDatabase().run(
+          `UPDATE problems 
+           SET status = 'completed', 
+               date_completed = DATETIME('now')
+           WHERE chatId = ? AND (id = ? OR status = 'pending')`, // Also update pending problems
+          [chatId, id]
+        );
+
+        // Send message to user
+        if (botConnection) {
+          await sendMessage(
+            botConnection,
+            chatId,
+            'Atendimento finalizado. Obrigado por utilizar nosso suporte!'
+          );
+        }
+
+        // Process next user in queue
+        const nextInLine = await getNextInWaitingList();
+        if (nextInLine) {
+          await getDatabase().run(
+            'UPDATE problems SET status = "active" WHERE chatId = ?',
+            [nextInLine.chatId]
+          );
+
+          await sendMessage(
+            botConnection,
+            nextInLine.chatId,
+            `Olá ${nextInLine.name}! Sua vez chegou. Estamos iniciando seu atendimento.`
+          );
+          await sendProblemOptions(botConnection, nextInLine.chatId);
+        }
+
+        // Update waiting users
+        await updateWaitingUsers(io);
+
+        // Send status update to all clients
+        sendStatusUpdateToMainProcess(io);
+
+      } catch (error) {
+        console.error('Erro ao finalizar atendimento:', error);
+      }
+    });
+  });
 }
 
 // Listen for incoming messages
@@ -96,33 +183,76 @@ function startListeningForMessages(conn, io) {
 
 // Handle new user
 async function handleNewUser(conn, chatId, userInfo, io) {
-  if (activeChatsList.length < maxActiveChats) {
-    activeChatsList.push({ ...userInfo, chatId });
-    await sendMessage(conn, chatId, `Obrigado pelas informações, ${userInfo.name}! Estamos iniciando seu atendimento.`);
-    await sendProblemOptions(conn, chatId);
-    userCurrentTopic[chatId] = 'problema';
-    saveClientInfoToDatabase(userInfo, chatId, io);
-  } else {
-    userInfo.isWaiting = true;
-    activeChatsList.push({ ...userInfo, chatId });
-    await sendMessage(conn, chatId, `Você está na lista de espera. Sua posição na fila é: ${activeChatsList.filter(chat => chat.isWaiting).length}. Aguarde sua vez.`);
-  }
-  sendStatusUpdateToMainProcess(io);
+    const activeCount = await getActiveChatsCount();
+    const status = activeCount < maxActiveChats ? 'active' : 'waiting';
+    
+    // Salvar no banco com status inicial
+    saveClientInfoToDatabase(userInfo, chatId, status, io);
+
+    if (status === 'active') {
+        await sendMessage(conn, chatId, `Olá ${userInfo.name}! Estamos iniciando seu atendimento.`);
+        await sendProblemOptions(conn, chatId);
+        userCurrentTopic[chatId] = 'problema';
+    } else {
+        const position = await getWaitingPosition(chatId);
+        const estimatedTime = position * 10; // Estimativa de 10 minutos por atendimento
+        
+        await sendMessage(
+            conn,
+            chatId,
+            `Olá ${userInfo.name}!\n\n` +
+            `No momento todos os nossos atendentes estão ocupados.\n` +
+            `Você está na ${position}ª posição da fila de espera.\n` +
+            `Tempo estimado de espera: aproximadamente ${estimatedTime} minutos.\n\n` +
+            `Você será notificado sobre sua posição na fila conforme os atendimentos forem finalizados.`
+        );
+    }
+}
+
+// Função para obter contagem de chats ativos
+async function getActiveChatsCount() {
+    return new Promise((resolve, reject) => {
+        getDatabase().get('SELECT COUNT(*) as count FROM problems WHERE status = "active"', (err, row) => {
+            if (err) reject(err);
+            else resolve(row.count);
+        });
+    });
+}
+
+// Função para obter posição na fila
+async function getWaitingPosition(chatId) {
+    return new Promise((resolve, reject) => {
+        getDatabase().all('SELECT chatId FROM problems WHERE status = "waiting" ORDER BY date ASC', (err, rows) => {
+            if (err) reject(err);
+            else {
+                const position = rows.findIndex(row => row.chatId === chatId) + 1;
+                resolve(position || rows.length + 1);
+            }
+        });
+    });
 }
 
 // Handle user message
 async function handleUserMessage(conn, chatId, messageText, io) {
-  if (userCurrentTopic[chatId] === 'problema') {
-    await handleProblemSelection(conn, chatId, messageText, io);
-  } else if (userCurrentTopic[chatId] && userCurrentTopic[chatId].stage === 'subproblema') {
-    await handleSubProblemSelection(conn, chatId, messageText, io);
-  } else if (userCurrentTopic[chatId] === 'descricaoProblema') {
-    await handleProblemDescription(conn, chatId, messageText, io);
-  } else if (userCurrentTopic[chatId] === 'videoFeedback') {
-    await handleVideoFeedback(conn, chatId, messageText, io);
-  } else {
-    await sendMessage(conn, chatId, defaultMessage);
-  }
+    const currentTopic = userCurrentTopic[chatId];
+    
+    if (!currentTopic) {
+        await sendMessage(conn, chatId, defaultMessage);
+        return;
+    }
+
+    if (typeof currentTopic === 'object' && currentTopic.state === 'descricaoProblema') {
+        await handleProblemDescription(conn, chatId, messageText, io);
+        userCurrentTopic[chatId] = 'problema'; // Reset to problema after description
+    } else if (currentTopic === 'problema') {
+        await handleProblemSelection(conn, chatId, messageText, io);
+    } else if (currentTopic.stage === 'subproblema') {
+        await handleSubProblemSelection(conn, chatId, messageText, io);
+    } else if (currentTopic === 'videoFeedback') {
+        await handleVideoFeedback(conn, chatId, messageText, io);
+    } else {
+        await sendMessage(conn, chatId, defaultMessage);
+    }
 }
 
 // Handle chat closed
@@ -248,32 +378,59 @@ Digite 'voltar' para retornar ao menu anterior.`
 
 // Handle sub-problem selection
 async function handleSubProblemSelection(conn, chatId, messageText, io) {
-  if (messageText === 'voltar') {
-    userCurrentTopic[chatId] = 'problema';
-    await sendProblemOptions(conn, chatId);
-  } else {
+    if (messageText === 'voltar') {
+        userCurrentTopic[chatId] = 'problema';
+        await sendProblemOptions(conn, chatId);
+        return;
+    }
+
+    const mainProblem = userCurrentTopic[chatId].problem;
+    const subProblemText = getSubProblemText(mainProblem, messageText);
     const videoUrl = getVideoUrlForSubProblem(messageText);
-    const subProblemText = getSubProblemText(userCurrentTopic[chatId].problem, messageText);
-    await sendMessage(conn, chatId, `Aqui está um vídeo que pode ajudar a resolver seu problema: ${videoUrl}`);
-    await sendMessage(conn, chatId, 'O vídeo foi suficiente para resolver seu problema? (sim/não)');
-    userCurrentTopic[chatId] = 'videoFeedback';
-    const userInfo = activeChatsList.find(chat => chat.chatId === chatId);
-    const problemData = { 
-      chatId, 
-      description: subProblemText,
-      date: new Date().toLocaleDateString(),
-      name: userInfo ? userInfo.name : '',
-      position: userInfo ? userInfo.position : '',
-      city: userInfo ? userInfo.city : '',
-      school: userInfo ? userInfo.school : '',
-      status: 'pending',
-      problemId: userInfo ? userInfo.problemId : null // Use the saved problem ID
-    };
-    reportedProblems.push(problemData);
-    saveProblemToDatabase(problemData, io);
-    sendStatusUpdateToMainProcess(io);
-    io.emit('newProblemReported', problemData); // Emit event when a new problem is reported
-  }
+
+    // Buscar informações do usuário
+    getDatabase().get('SELECT name, city, position, school FROM problems WHERE chatId = ?', [chatId], 
+        async (err, userInfo) => {
+            if (err) {
+                console.error('Erro ao buscar informações do usuário:', err);
+                return;
+            }
+
+            // Criar novo registro de problema
+            const problemDescription = `${mainProblem} - ${subProblemText}`;
+            const date = new Date().toISOString();
+
+            getDatabase().run(
+                `INSERT INTO problems 
+                (chatId, name, city, position, school, description, status, date) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    chatId,
+                    userInfo.name,
+                    userInfo.city,
+                    userInfo.position,
+                    userInfo.school,
+                    problemDescription,
+                    'pending',
+                    date
+                ],
+                async function(err) {
+                    if (err) {
+                        console.error('Erro ao salvar problema:', err);
+                        return;
+                    }
+
+                    await sendMessage(conn, chatId, `Aqui está um vídeo que pode ajudar a resolver seu problema: ${videoUrl}`);
+                    await sendMessage(conn, chatId, 'O vídeo foi suficiente para resolver seu problema? (sim/não)');
+                    userCurrentTopic[chatId] = 'videoFeedback';
+
+                    // Emitir evento com o novo problema
+                    io.emit('userProblem', problemDescription, chatId, userInfo.name);
+                    sendStatusUpdateToMainProcess(io);
+                }
+            );
+        }
+    );
 }
 
 // Get sub-problem text
@@ -315,63 +472,114 @@ function getVideoUrlForSubProblem(subProblem) {
 
 // Handle video feedback
 async function handleVideoFeedback(conn, chatId, messageText, io) {
-  if (messageText === 'sim') {
-    await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais alguma coisa, estamos à disposição.');
-    userCurrentTopic[chatId] = 'problema';
-    await closeChat(chatId, io);
-  } else if (messageText === 'não') {
-    await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
-    userCurrentTopic[chatId] = 'descricaoProblema';
-  } else {
-    await sendMessage(conn, chatId, 'Resposta inválida. Por favor, responda com "sim" ou "não".');
-  }
+    if (messageText === 'sim') {
+        await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais alguma coisa, estamos à disposição.');
+        userCurrentTopic[chatId] = 'problema';
+        await closeChat(chatId, io);
+    } else if (messageText === 'não') {
+        await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
+        userCurrentTopic[chatId] = {
+            state: 'descricaoProblema',
+            previousState: 'videoFeedback'
+        };
+    } else {
+        await sendMessage(conn, chatId, 'Resposta inválida. Por favor, responda com "sim" ou "não".');
+    }
 }
 
 // Handle problem description
 async function handleProblemDescription(conn, chatId, messageText, io) {
-  const userInfo = activeChatsList.find(chat => chat.chatId === chatId);
-  const problemData = { 
-    chatId, 
-    description: messageText,
-    date: new Date().toLocaleDateString(),
-    name: userInfo ? userInfo.name : '',
-    position: userInfo ? userInfo.position : '',
-    city: userInfo ? userInfo.city : '',
-    school: userInfo ? userInfo.school : '',
-    status: 'pending',
-    problemId: userInfo ? userInfo.problemId : null // Use the saved problem ID
-  };
-  reportedProblems.push(problemData);
-  saveProblemToDatabase(problemData, io);
-  await sendMessage(conn, chatId, 'Sua descrição foi recebida. Um atendente entrará em contato em breve.');
-  sendProblemToFrontEnd(problemData);
-  sendStatusUpdateToMainProcess(io);
-  io.emit('newProblemReported', problemData); // Emit event when a new problem is reported
-  attendNextUserInQueue(conn, io);
+    const currentTopic = userCurrentTopic[chatId];
+    const isFromVideoFeedback = currentTopic && 
+                               currentTopic.state === 'descricaoProblema' && 
+                               currentTopic.previousState === 'videoFeedback';
+
+    // Buscar o problema mais recente do usuário
+    getDatabase().get(
+        `SELECT id, name, city, position, school FROM problems 
+         WHERE chatId = ? AND status = 'pending' 
+         ORDER BY date DESC LIMIT 1`,
+        [chatId],
+        async (err, userInfo) => {
+            if (err) {
+                console.error('Erro ao buscar informações do usuário:', err);
+                return;
+            }
+
+            if (isFromVideoFeedback && userInfo) {
+                // Atualizar o problema existente
+                getDatabase().run(
+                    `UPDATE problems 
+                     SET description = ?, 
+                         date = ?
+                     WHERE id = ?`,
+                    [messageText, new Date().toISOString(), userInfo.id],
+                    async function(err) {
+                        if (err) {
+                            console.error('Erro ao atualizar problema:', err);
+                            return;
+                        }
+
+                        io.emit('userProblem', messageText, chatId, userInfo.name);
+                        await sendMessage(conn, chatId, 'Problema atualizado. Um atendente entrará em contato em breve.');
+                        sendStatusUpdateToMainProcess(io);
+                    }
+                );
+            } else {
+                // Criar novo registro de problema
+                const date = new Date().toISOString();
+                getDatabase().run(
+                    `INSERT INTO problems 
+                    (chatId, name, city, position, school, description, status, date) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        chatId,
+                        userInfo.name,
+                        userInfo.city,
+                        userInfo.position,
+                        userInfo.school,
+                        messageText,
+                        'pending',
+                        date
+                    ],
+                    async function(err) {
+                        if (err) {
+                            console.error('Erro ao salvar problema:', err);
+                            return;
+                        }
+
+                        io.emit('userProblem', messageText, chatId, userInfo.name);
+                        await sendMessage(conn, chatId, 'Problema registrado. Um atendente entrará em contato em breve.');
+                        sendStatusUpdateToMainProcess(io);
+                    }
+                );
+            }
+        }
+    );
 }
 
 // Save client information to the database
-function saveClientInfoToDatabase(userInfo, chatId, io) {
-  db.run(`INSERT INTO problems (chatId, name, position, city, school, status) VALUES (?, ?, ?, ?, ?, 'pending')`, 
-    [chatId, userInfo.name, userInfo.position, userInfo.city, userInfo.school], 
+function saveClientInfoToDatabase(userInfo, chatId, status, io) {
+  const date = new Date().toISOString();
+  
+  getDatabase().run(
+    `INSERT INTO problems (chatId, name, position, city, school, status, date) 
+     VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+    [chatId, userInfo.name, userInfo.position, userInfo.city, userInfo.school, status, date], 
     function(err) {
       if (err) {
         console.error('Erro ao salvar informações do cliente:', err.message);
         return;
       }
-      console.log(`Client info inserted with rowid ${this.lastID}`);
-      // Find the user in the activeChatsList and update their problemId
-      const userIndex = activeChatsList.findIndex(chat => chat.chatId === chatId);
-      if (userIndex !== -1) {
-        activeChatsList[userIndex].problemId = this.lastID;
-      }
-      io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
-    });
+      console.log(`Cliente inserido com ID ${this.lastID}`);
+      io.emit('statusUpdate');
+    }
+  );
 }
 
 // Save problem to the database
 function saveProblemToDatabase(problemData, io) {
-  db.run(`UPDATE problems SET description = ?, date = ? WHERE id = ?`, 
+  getDatabase().run(`UPDATE problems SET description = ?, date = ? WHERE id = ?`, 
     [problemData.description, problemData.date, problemData.problemId], 
     function(err) {
       if (err) {
@@ -385,7 +593,7 @@ function saveProblemToDatabase(problemData, io) {
 
 // Mark problem as completed in the database
 function markProblemAsCompleted(problemId, io) {
-  db.run(`UPDATE problems SET status = 'completed' WHERE id = ?`, [problemId], function(err) {
+  getDatabase().run(`UPDATE problems SET status = 'completed' WHERE id = ?`, [problemId], function(err) {
     if (err) {
       console.error('Erro ao marcar problema como concluído:', err.message);
       return;
@@ -397,22 +605,29 @@ function markProblemAsCompleted(problemId, io) {
 
 // Send status update to the main process
 function sendStatusUpdateToMainProcess(io) {
-  const activeChats = activeChatsList.filter(chat => !chat.isWaiting && userCurrentTopic[chat.chatId] !== 'atendente'); 
-  const waitingList = activeChatsList.filter(chat => chat.isWaiting);  
-  const attendedByAttendant = activeChatsList.filter(chat => userCurrentTopic[chat.chatId] === 'atendente');
-  
-  ipcMain.emit('statusUpdate', null, { 
-    activeChats,
-    waitingList,
-    problems: reportedProblems,
-    attendedByAttendant
-  });
-  io.emit('statusUpdate', { 
-    activeChats,
-    waitingList,
-    problems: reportedProblems,
-    attendedByAttendant
-  });
+    const queries = {
+        active: 'SELECT * FROM problems WHERE status = "active" AND description IS NOT NULL ORDER BY date DESC LIMIT 3',
+        waiting: 'SELECT * FROM problems WHERE status = "waiting" ORDER BY date ASC',
+        pending: 'SELECT * FROM problems WHERE status = "pending" AND description IS NOT NULL ORDER BY date DESC'
+    };
+
+    Promise.all([
+        new Promise((resolve, reject) => {
+            getDatabase().all(queries.active, [], (err, rows) => err ? reject(err) : resolve(rows || []));
+        }),
+        new Promise((resolve, reject) => {
+            getDatabase().all(queries.waiting, [], (err, rows) => err ? reject(err) : resolve(rows || []));
+        }),
+        new Promise((resolve, reject) => {
+            getDatabase().all(queries.pending, [], (err, rows) => err ? reject(err) : resolve(rows || []));
+        })
+    ]).then(([active, waiting, pending]) => {
+        const data = { activeChats: active, waitingList: waiting, problems: pending };
+        io.emit('statusUpdate', data);
+        console.log('Status atualizado:', data);
+    }).catch(err => {
+        console.error('Erro ao atualizar status:', err);
+    });
 }
 
 // Send problem to the front-end
@@ -425,16 +640,40 @@ function sendProblemToFrontEnd(problemData) {
 
 // Close the chat
 async function closeChat(chatId, io) {
-  await sendMessage(botConnection, chatId, 'Atendimento encerrado. Obrigado!');
-  const userInfo = activeChatsList.find(chat => chat.chatId === chatId);
-  activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
-  delete userCurrentTopic[chatId];
-  reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId);
-  if (userInfo && userInfo.problemId) {
-    markProblemAsCompleted(userInfo.problemId, io); // Use the saved problem ID
-  }
-  sendStatusUpdateToMainProcess(io);
-  attendNextUserInQueue(botConnection, io);
+    try {
+        await getDatabase().run('UPDATE problems SET status = "completed" WHERE chatId = ?', [chatId]);
+        const nextInLine = await getNextInWaitingList();
+        
+        if (nextInLine) {
+            await getDatabase().run('UPDATE problems SET status = "active" WHERE chatId = ?', [nextInLine.chatId]);
+            await sendMessage(botConnection, nextInLine.chatId, 
+                `Olá ${nextInLine.name}! Sua vez chegou. Estamos iniciando seu atendimento.`);
+            await sendProblemOptions(botConnection, nextInLine.chatId);
+            
+            // Update remaining users in queue
+            await updateWaitingUsers(io);
+        }
+        
+        sendStatusUpdateToMainProcess(io);
+    } catch (error) {
+        console.error('Erro ao finalizar atendimento:', error);
+    }
+}
+
+// Função para obter próximo da fila
+async function getNextInWaitingList() {
+    return new Promise((resolve, reject) => {
+        getDatabase().get(
+            `SELECT * FROM problems 
+             WHERE status = 'waiting' 
+             ORDER BY date ASC 
+             LIMIT 1`,
+            (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            }
+        );
+    });
 }
 
 // Attend the next user in the queue
@@ -454,31 +693,354 @@ function getWaitingList() {
   return activeChatsList.filter(chat => chat.isWaiting);
 }
 
-// Initialize the database
-function initializeDatabase() {
-  db = new sqlite3.Database(path.join(__dirname, 'bot_data.db'), (err) => {
-    if (err) {
-      return console.error(err.message);
-    }
-    console.log('Connected to the SQLite database.');
-  });
-
-  db.run(`CREATE TABLE IF NOT EXISTS problems (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT,
-    name TEXT,
-    city TEXT,
-    position TEXT,
-    school TEXT,
-    chatId TEXT,
-    description TEXT,
-    status TEXT DEFAULT 'pending'
-  )`, (err) => {
-    if (err) {
-      return console.log(err.message);
-    }
-    console.log('Table created.');
-  });
+// Adicionar função para redirecionar para WhatsApp
+function redirectToWhatsAppChat(chatId) {
+    const sanitizedChatId = chatId.replace('@c.us', '');
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${sanitizedChatId}`;
+    require('electron').shell.openExternal(whatsappUrl);
 }
 
-module.exports = { startHydraBot };
+// Add new function to update waiting users
+async function updateWaitingUsers(io) {
+    try {
+        const waitingUsers = await new Promise((resolve, reject) => {
+            getDatabase().all(
+                'SELECT chatId, name FROM problems WHERE status = "waiting" ORDER BY date ASC',
+                (err, rows) => err ? reject(err) : resolve(rows)
+            );
+        });
+
+        // Update each waiting user with their new position
+        for (let i = 0; i < waitingUsers.length; i++) {
+            const position = i + 1;
+            const user = waitingUsers[i];
+            await sendMessage(
+                botConnection,
+                user.chatId,
+                `Atualização: ${user.name}, sua posição atual na fila é ${position}º lugar.`
+            );
+        }
+    } catch (error) {
+        console.error('Erro ao atualizar usuários em espera:', error);
+    }
+}
+
+// Add report generation endpoint
+server.get('/generateReport', async (req, res) => {
+    const { start, end } = req.query;
+    
+    try {
+        const problems = await new Promise((resolve, reject) => {
+            getDatabase().all(
+                `SELECT * FROM problems 
+                 WHERE date BETWEEN ? AND ?
+                 ORDER BY date DESC`,
+                [start, end],
+                (err, rows) => err ? reject(err) : resolve(rows)
+            );
+        });
+
+        // Calculate statistics
+        const total = problems.length;
+        const completedProblems = problems.filter(p => p.status === 'completed');
+        
+        const averageTime = completedProblems.reduce((acc, p) => {
+            const start = new Date(p.date);
+            const end = new Date(p.date_completed);
+            return acc + (end - start);
+        }, 0) / (completedProblems.length || 1);
+
+        // Find most common problems
+        const problemTypes = problems.reduce((acc, p) => {
+            acc[p.description] = (acc[p.description] || 0) + 1;
+            return acc;
+        }, {});
+
+        const commonProblems = Object.entries(problemTypes)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 3)
+            .map(([problem]) => problem);
+
+        res.json({
+            total,
+            averageTime: Math.round(averageTime / (1000 * 60)), // Convert to minutes
+            commonProblems,
+            problems
+        });
+    } catch (error) {
+        console.error('Erro ao gerar relatório:', error);
+        res.status(500).json({ error: 'Erro ao gerar relatório' });
+    }
+});
+
+// Atualizar o endpoint getChartData
+server.get('/getChartData', async (req, res) => {
+    try {
+        const db = getDatabase();
+        
+        // Get weekly data (only workdays)
+        const weeklyData = await new Promise((resolve, reject) => {
+            const today = new Date();
+            const sevenDaysAgo = new Date(today);
+            sevenDaysAgo.setDate(today.getDate() - 6);
+            
+            db.all(
+                `WITH RECURSIVE dates(date) AS (
+                    SELECT date('now', '-6 days')
+                    UNION ALL
+                    SELECT date(date, '+1 day')
+                    FROM dates
+                    WHERE date < date('now')
+                )
+                SELECT dates.date, COALESCE(COUNT(problems.id), 0) as count
+                FROM dates
+                LEFT JOIN problems ON date(problems.date) = dates.date
+                    AND strftime('%w', problems.date) NOT IN ('0', '6') -- Excluir sábado (6) e domingo (0)
+                GROUP BY dates.date
+                ORDER BY dates.date`,
+                [],
+                (err, rows) => {
+                    if (err) {
+                        console.error('Erro na query semanal:', err);
+                        reject(err);
+                    } else {
+                        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                        const labels = rows.map(row => {
+                            const date = new Date(row.date);
+                            return weekDays[date.getDay()];
+                        });
+                        const data = rows.map(row => row.count);
+                        resolve({ labels, data });
+                    }
+                }
+            );
+        });
+
+        // Get monthly data
+        const monthlyData = await new Promise((resolve, reject) => {
+            const currentYear = new Date().getFullYear();
+            
+            db.all(
+                `WITH RECURSIVE months(month) AS (
+                    SELECT '01' as month
+                    UNION ALL
+                    SELECT printf('%02d', CAST(month AS INTEGER) + 1)
+                    FROM months
+                    WHERE CAST(month AS INTEGER) < 12
+                )
+                SELECT months.month, COALESCE(COUNT(problems.id), 0) as count
+                FROM months
+                LEFT JOIN problems ON strftime('%m', problems.date) = months.month
+                    AND strftime('%Y', problems.date) = ?
+                GROUP BY months.month
+                ORDER BY months.month`,
+                [currentYear.toString()],
+                (err, rows) => {
+                    if (err) {
+                        console.error('Erro na query mensal:', err);
+                        reject(err);
+                    } else {
+                        const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                                      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                        const data = rows.map(row => row.count);
+                        resolve({ labels: months, data });
+                    }
+                }
+            );
+        });
+
+        console.log('Dados enviados:', { weekly: weeklyData, monthly: monthlyData }); // Debug
+        res.json({ weekly: weeklyData, monthly: monthlyData });
+        
+    } catch (error) {
+        console.error('Erro ao buscar dados dos gráficos:', error);
+        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
+    }
+});
+
+// Update the getCompletedAttendances endpoint
+server.get('/getCompletedAttendances', async (req, res) => {
+    try {
+        const { date, position } = req.query;
+        let query = `
+            SELECT 
+                id, 
+                chatId, 
+                name, 
+                position, 
+                city, 
+                school, 
+                description,
+                strftime('%d/%m/%Y %H:%M', datetime(date, 'localtime')) as date,
+                strftime('%d/%m/%Y %H:%M', datetime(date_completed, 'localtime')) as date_completed,
+                status,
+                CAST(
+                    (julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER
+                ) as duration_minutes
+            FROM problems 
+            WHERE status = 'completed'`;
+        
+        const params = [];
+        
+        if (date) {
+            query += ` AND DATE(date_completed) = DATE(?)`;
+            params.push(date);
+        }
+        
+        if (position) {
+            query += ` AND position = ?`;
+            params.push(position);
+        }
+        
+        query += ` ORDER BY date_completed DESC`;
+
+        const completedAttendances = await new Promise((resolve, reject) => {
+            getDatabase().all(query, params, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            });
+        });
+
+        res.json(completedAttendances);
+    } catch (error) {
+        console.error('Erro ao buscar atendimentos concluídos:', error);
+        res.status(500).json({ error: 'Erro ao buscar atendimentos concluídos' });
+    }
+});
+
+// Add other necessary server routes
+server.get('/getCompletedAttendances', (req, res) => {
+    // ...existing code...
+});
+
+server.delete('/deleteCompletedAttendance/:id', (req, res) => {
+    // ...existing code...
+});
+
+server.get('/getUserInfo/:chatId', (req, res) => {
+    // ...existing code...
+});
+
+// Adicionar ao módulo exports
+module.exports = {
+    startHydraBot,
+    redirectToWhatsAppChat,
+    server
+};
+
+// Update the generateReport endpoint
+server.get('/generateReport', async (req, res) => {
+    try {
+        const { start, end } = req.query;
+        
+        // Criar consulta SQL com formatação de data adequada
+        const query = `
+            SELECT 
+                problems.*,
+                strftime('%d/%m/%Y %H:%M', datetime(date, 'localtime')) as formatted_date,
+                strftime('%d/%m/%Y %H:%M', datetime(date_completed, 'localtime')) as formatted_date_completed,
+                CAST((julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER) as duration_minutes
+            FROM problems 
+            WHERE date BETWEEN ? AND ?
+            ORDER BY date DESC
+        `;
+
+        const problems = await new Promise((resolve, reject) => {
+            getDatabase().all(query, [start, end], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            });
+        });
+
+        // Criar o PDF
+        const doc = new PDFDocument({
+            size: 'A4',
+            margin: 50
+        });
+
+        // Configurar cabeçalho do response
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.pdf`);
+
+        // Pipe o PDF para o response
+        doc.pipe(res);
+
+        // Adicionar título
+        doc.fontSize(20)
+           .text('Relatório de Atendimentos', { align: 'center' })
+           .moveDown(2);
+
+        // Adicionar período do relatório
+        doc.fontSize(12)
+           .text(`Período: ${new Date(start).toLocaleDateString()} a ${new Date(end).toLocaleDateString()}`)
+           .moveDown();
+
+        // Estatísticas gerais
+        const totalAtendimentos = problems.length;
+        const concluidos = problems.filter(p => p.status === 'completed').length;
+        const tempoMedioMinutos = Math.round(
+            problems.reduce((acc, p) => acc + (p.duration_minutes || 0), 0) / concluidos
+        );
+
+        doc.fontSize(14)
+           .text('Estatísticas Gerais', { underline: true })
+           .moveDown()
+           .fontSize(12)
+           .text(`Total de Atendimentos: ${totalAtendimentos}`)
+           .text(`Atendimentos Concluídos: ${concluidos}`)
+           .text(`Tempo Médio de Atendimento: ${Math.floor(tempoMedioMinutos/60)}h ${tempoMedioMinutos%60}min`)
+           .moveDown(2);
+
+        // Problemas mais comuns
+        const problemTypes = problems.reduce((acc, p) => {
+            acc[p.description] = (acc[p.description] || 0) + 1;
+            return acc;
+        }, {});
+
+        const topProblems = Object.entries(problemTypes)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 5);
+
+        doc.fontSize(14)
+           .text('Problemas Mais Frequentes', { underline: true })
+           .moveDown()
+           .fontSize(12);
+
+        topProblems.forEach(([problem, count], index) => {
+            doc.text(`${index + 1}. ${problem} (${count} ocorrências)`);
+        });
+        doc.moveDown(2);
+
+        // Lista detalhada de atendimentos
+        doc.fontSize(14)
+           .text('Detalhamento dos Atendimentos', { underline: true })
+           .moveDown();
+
+        problems.forEach((problem, index) => {
+            const duracao = problem.duration_minutes
+                ? `${Math.floor(problem.duration_minutes/60)}h ${problem.duration_minutes%60}min`
+                : 'Em andamento';
+
+            doc.fontSize(12)
+               .text(`Atendimento ${index + 1}`, { underline: true })
+               .text(`Usuário: ${problem.name}`)
+               .text(`Cargo: ${problem.position}`)
+               .text(`Escola: ${problem.school}`)
+               .text(`Início: ${problem.formatted_date}`)
+               .text(`Conclusão: ${problem.formatted_date_completed || 'Não concluído'}`)
+               .text(`Duração: ${duracao}`)
+               .text(`Problema: ${problem.description}`)
+               .text(`Status: ${problem.status === 'completed' ? 'Concluído' : 'Em andamento'}`)
+               .moveDown();
+        });
+
+        // Finalizar o PDF
+        doc.end();
+
+    } catch (error) {
+        console.error('Erro ao gerar relatório:', error);
+        res.status(500).json({ error: 'Erro ao gerar relatório' });
+    }
+});
+
+// ...existing code...

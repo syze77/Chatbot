@@ -1,8 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Expor apenas uma vez as funções necessárias
 contextBridge.exposeInMainWorld('electron', {
-    openWhatsAppChat: (chatId) => ipcRenderer.send('redirectToChat', chatId),
-    markProblemCompleted: (chatId) => ipcRenderer.send('markProblemCompleted', chatId),
-    getCompletedAttendances: (callback) => ipcRenderer.on('completedAttendances', callback),
-    deleteCompletedAttendance: (chatId) => ipcRenderer.send('deleteCompletedAttendance', chatId)
+    openWhatsAppChat: (chatId) => ipcRenderer.invoke('openWhatsAppChat', chatId),
+    // ...outros métodos...
 });
