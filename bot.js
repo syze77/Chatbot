@@ -874,51 +874,136 @@ async function updateWaitingUsers(io) {
     }
 }
 
+// Função auxiliar para converter status em texto legível
+function getStatusText(status) {
+    const statusMap = {
+        'active': 'Em atendimento',
+        'waiting': 'Em espera',
+        'completed': 'Concluído',
+        'pending': 'Pendente'
+    };
+    return statusMap[status] || status;
+}
+
 // Add report generation endpoint
 server.get('/generateReport', async (req, res) => {
-    const { start, end } = req.query;
-    
     try {
-        const problems = await new Promise((resolve, reject) => {
-            getDatabase().all(
-                `SELECT * FROM problems 
-                 WHERE date BETWEEN ? AND ?
-                 ORDER BY date DESC`,
-                [start, end],
-                (err, rows) => err ? reject(err) : resolve(rows)
-            );
-        });
-
-        // Calculate statistics
-        const total = problems.length;
-        const completedProblems = problems.filter(p => p.status === 'completed');
+        const { start, end } = req.query;
         
-        const averageTime = completedProblems.reduce((acc, p) => {
-            const start = new Date(p.date);
-            const end = new Date(p.date_completed);
-            return acc + (end - start);
-        }, 0) / (completedProblems.length || 1);
+        // Query para estatísticas básicas e todos os atendimentos
+        const query = `
+            SELECT 
+                name,
+                city,
+                school,
+                position,
+                description,
+                status,
+                strftime('%d/%m/%Y %H:%M', date) as formatted_date,
+                strftime('%d/%m/%Y %H:%M', date_completed) as formatted_date_completed,
+                CAST((julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER) as duration_minutes
+            FROM problems
+            WHERE date(date) >= date(?) 
+            AND date(date) <= date(?)
+            ORDER BY date DESC`;
 
-        // Find most common problems
-        const problemTypes = problems.reduce((acc, p) => {
-            acc[p.description] = (acc[p.description] || 0) + 1;
-            return acc;
-        }, {});
+        // Executar query
+        const attendances = await queryDatabase(query, [start, end]);
 
-        const commonProblems = Object.entries(problemTypes)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 3)
-            .map(([problem]) => problem);
+        // Calcular estatísticas
+        const stats = {
+            total_atendimentos: attendances.length,
+            total_cidades: new Set(attendances.map(a => a.city)).size,
+            total_escolas: new Set(attendances.map(a => a.school)).size,
+            tempo_medio_minutos: Math.round(
+                attendances.reduce((acc, a) => acc + (a.duration_minutes || 0), 0) / 
+                attendances.filter(a => a.duration_minutes).length || 0
+            )
+        };
 
-        res.json({
-            total,
-            averageTime: Math.round(averageTime / (1000 * 60)), // Convert to minutes
-            commonProblems,
-            problems
+        // Criar o PDF
+        const doc = new PDFDocument({
+            size: 'A4',
+            margin: 50,
+            bufferPages: true
         });
+
+        // Configurar response
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.pdf`);
+        res.setHeader('Access-Control-Allow-Origin', '*'); // Permitir CORS
+        doc.pipe(res);
+
+        // Título e período
+        doc.fontSize(20)
+           .text('Relatório de Atendimentos', { align: 'center' })
+           .fontSize(14)
+           .text(`Período: ${new Date(start).toLocaleDateString()} a ${new Date(end).toLocaleDateString()}`, { align: 'center' })
+           .moveDown(2);
+
+        // Resumo estatístico
+        doc.fontSize(14)
+           .text('Resumo', { underline: true })
+           .moveDown()
+           .fontSize(12)
+           .text(`Total de Atendimentos: ${stats.total_atendimentos}`)
+           .text(`Total de Cidades: ${stats.total_cidades}`)
+           .text(`Total de Escolas: ${stats.total_escolas}`)
+           .text(`Tempo Médio de Atendimento: ${Math.floor(stats.tempo_medio_minutos/60)}h ${Math.floor(stats.tempo_medio_minutos%60)}min`)
+           .moveDown(2);
+
+        // Lista detalhada dos atendimentos
+        doc.addPage()
+           .fontSize(16)
+           .text('Detalhamento dos Atendimentos', { align: 'center' })
+           .moveDown(2);
+
+        // Listar todos os atendimentos com todas as informações
+        attendances.forEach((attendance, index) => {
+            if (doc.y > 700) {
+                doc.addPage();
+            }
+
+            const duracao = attendance.duration_minutes
+                ? `${Math.floor(attendance.duration_minutes/60)}h ${attendance.duration_minutes%60}min`
+                : 'Em andamento';
+
+            doc.fontSize(12)
+               .text(`Atendimento ${index + 1}`, { underline: true })
+               .moveDown()
+               .text(`Nome: ${attendance.name}`)
+               .text(`Cargo: ${attendance.position}`)
+               .text(`Cidade: ${attendance.city}`)
+               .text(`Escola: ${attendance.school}`)
+               .text(`Data de Início: ${attendance.formatted_date}`)
+               .text(`Data de Conclusão: ${attendance.formatted_date_completed || 'Não concluído'}`)
+               .text(`Duração: ${duracao}`)
+               .text(`Status: ${getStatusText(attendance.status)}`)
+               .text(`Descrição do Problema: ${attendance.description}`)
+               .moveDown(2);
+        });
+
+        // Adicionar numeração de páginas
+        const pages = doc.bufferedPageRange();
+        for (let i = 0; i < pages.count; i++) {
+            doc.switchToPage(i);
+            doc.fontSize(10)
+               .text(
+                   `Página ${i + 1} de ${pages.count}`,
+                   50,
+                   doc.page.height - 50,
+                   { align: 'center' }
+               );
+        }
+
+        doc.end();
+
     } catch (error) {
         console.error('Erro ao gerar relatório:', error);
-        res.status(500).json({ error: 'Erro ao gerar relatório' });
+        res.status(500).json({ 
+            error: 'Erro ao gerar relatório', 
+            details: error.message 
+        });
     }
 });
 

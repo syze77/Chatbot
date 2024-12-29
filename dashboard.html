@@ -523,11 +523,24 @@
                 return;
             }
 
-            // Abrir o PDF em uma nova janela
-            window.open(`http://localhost:3000/generateReport?start=${startDate}&end=${endDate}`, '_blank');
-            
-            // Fechar o modal
-            closeReportOverlay();
+            // Fazer download direto do PDF
+            fetch(`http://localhost:3000/generateReport?start=${startDate}&end=${endDate}`)
+                .then(response => response.blob())
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `relatorio-${startDate}-a-${endDate}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    closeReportOverlay();
+                })
+                .catch(error => {
+                    console.error('Erro ao gerar relatório:', error);
+                    alert('Erro ao gerar relatório. Tente novamente.');
+                });
         }
 
         // Update the report button click handler
