@@ -13,21 +13,33 @@ let win;
 
 // Create the main application window
 function createWindow() {
-  win = new BrowserWindow({
-    width: 800,
-    height: 600,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
+    win = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js')
+        }
+    });
 
-  win.loadFile(path.join(__dirname, 'index.html'));
-  win.on('closed', () => {
-    win = null;
-  });
+    win.loadFile('index.html');
+
+    // Habilitar DevTools em desenvolvimento
+    if (process.env.NODE_ENV === 'development') {
+        win.webContents.openDevTools();
+    }
+
+    // Remover o intervalo de atualização automática
+    // setupAutoUpdate(); // Esta linha deve ser removida
 }
+
+// Handle navigation
+ipcMain.on('navigate', (event, path) => {
+    if (win) {
+        win.loadFile(path);
+    }
+});
 
 // Atualizar a função sendInitialData
 function sendInitialData() {
@@ -216,13 +228,72 @@ ipcMain.handle('openWhatsAppChat', async (event, chatId) => {
     }
 });
 
+// Atualizar o banco de dados e notificar os clientes
+async function updateDatabaseAndNotify(query, params, io, eventType = 'statusUpdate') {
+    return new Promise((resolve, reject) => {
+        getDatabase().run(query, params, async function(err) {
+            if (err) {
+                console.error('Erro na atualização:', err);
+                reject(err);
+                return;
+            }
+
+            try {
+                // Buscar dados atualizados
+                const data = await fetchCurrentStatus();
+                // Emitir atualização para todos os clientes
+                io.emit(eventType, data);
+                resolve(data);
+            } catch (error) {
+                console.error('Erro ao buscar dados atualizados:', error);
+                reject(error);
+            }
+        });
+    });
+}
+
+// Função para buscar o status atual
+async function fetchCurrentStatus() {
+    const queries = {
+        active: `SELECT * FROM problems WHERE status = 'active' ORDER BY date DESC LIMIT 3`,
+        waiting: `SELECT * FROM problems WHERE status = 'waiting' ORDER BY date ASC`,
+        pending: `SELECT * FROM problems WHERE status = 'pending' ORDER BY date DESC`
+    };
+
+    try {
+        const [active, waiting, pending] = await Promise.all([
+            queryDatabase(queries.active),
+            queryDatabase(queries.waiting),
+            queryDatabase(queries.pending)
+        ]);
+
+        return {
+            activeChats: active,
+            waitingList: waiting,
+            problems: pending
+        };
+    } catch (error) {
+        console.error('Erro ao buscar status:', error);
+        throw error;
+    }
+}
+
+// Função auxiliar para executar queries
+function queryDatabase(query, params = []) {
+    return new Promise((resolve, reject) => {
+        getDatabase().all(query, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+        });
+    });
+}
+
 // Start the application with proper error handling
 app.whenReady().then(async () => {
   try {
     createWindow();
     await initializeDatabase(); // Wait for database initialization
     startHydraBot(io); // Pass the io instance to the bot
-    setupAutoUpdate();
 
     win.webContents.once('did-finish-load', () => {
       if (win) {

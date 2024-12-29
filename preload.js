@@ -1,7 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expor apenas uma vez as funções necessárias
 contextBridge.exposeInMainWorld('electron', {
     openWhatsAppChat: (chatId) => ipcRenderer.invoke('openWhatsAppChat', chatId),
-    // ...outros métodos...
+    // ...existing electron APIs...
+    
+    // Add navigation methods
+    navigate: (path) => ipcRenderer.send('navigate', path),
+    
+    // Add theme methods
+    getTheme: () => localStorage.getItem('theme'),
+    setTheme: (theme) => localStorage.setItem('theme', theme)
 });

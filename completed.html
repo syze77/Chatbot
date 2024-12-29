@@ -76,25 +76,6 @@
         .toggle-btn:hover {
             background: #495057;
         }
-        .completed-list {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .completed-item {
-            padding: 25px;
-            margin-bottom: 20px;
-            border-radius: 12px;
-            background-color: #ffffff;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            display: grid;
-            grid-template-columns: 1fr 2fr 1fr;
-            gap: 20px;
-            align-items: start;
-        }
-        .completed-item:hover {
-            background-color: #e9ecef;
-        }
         .header {
             display: flex;
             justify-content: space-between;
@@ -253,55 +234,58 @@
     </style>
 </head>
 <body>
-    <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
-    <div class="sidebar">
-        <h1><i class="fas fa-cogs"></i> <span>Painel</span></h1>
-        <ul>
-            <li><a href="index.html"><i class="fas fa-home"></i> <span>Início</span></a></li>
-            <li><a href="dashboard.html"><i class="fas fa-chart-bar"></i> <span>Dashboard</span></a></li>
-            <li><a href="completed.html"><i class="fas fa-check-circle"></i> <span>Concluídos</span></a></li>
-        </ul>
-    </div>
+    <div id="sidebar-container"></div>
+
     <div class="content">
         <div class="header">
+            <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
             <h2>Atendimentos Concluídos</h2>
         </div>
         
-        <div class="completed-list">
-            <div class="filters-section">
-                <div class="filter-group">
-                    <label for="filterDate">Filtrar por Data</label>
-                    <input type="date" id="filterDate" class="form-control" onchange="filterByDate(this.value)">
-                </div>
-                <div class="filter-group">
-                    <label for="filterPosition">Filtrar por Cargo</label>
-                    <select id="filterPosition" class="form-control" onchange="filterByPosition(this.value)">
-                        <option value="">Todos os cargos</option>
-                        <option value="Aluno">Aluno</option>
-                        <option value="Professor">Professor</option>
-                        <option value="Supervisor">Supervisor</option>
-                        <option value="Secretário">Secretário</option>
-                        <option value="Administrador">Administrador</option>
-                        <option value="Responsável">Responsável</option>
-                    </select>
-                </div>
+        <div class="filters-section">
+            <div class="filter-group">
+                <label for="filterDate">Filtrar por Data</label>
+                <input type="date" id="filterDate" class="form-control" onchange="filterByDate(this.value)">
             </div>
+            <div class="filter-group">
+                <label for="filterPosition">Filtrar por Cargo</label>
+                <select id="filterPosition" class="form-control" onchange="filterByPosition(this.value)">
+                    <option value="">Todos os cargos</option>
+                    <option value="Aluno">Aluno</option>
+                    <option value="Professor">Professor</option>
+                    <option value="Supervisor">Supervisor</option>
+                    <option value="Secretário">Secretário</option>
+                    <option value="Administrador">Administrador</option>
+                    <option value="Responsável">Responsável</option>
+                </select>
+            </div>
+        </div>
 
-            <div id="completed-list">
-                <!-- Items will be added dynamically -->
-            </div>
+        <div id="completed-list" class="completed-list">
+            <!-- Items will be added dynamically -->
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/sidebar.js"></script>
     <script src="renderer.js"></script>
     <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            Sidebar.init();
+            
+            // Your existing completed items loading code...
+            loadCompletedAttendances();
+        });
+
         function toggleSidebar() {
-            const sidebar = document.querySelector('.sidebar');
-            const content = document.querySelector('.content');
-            sidebar.classList.toggle('collapsed');
-            content.classList.toggle('collapsed');
+            Sidebar.toggleSidebar();
+            document.querySelector('.content').classList.toggle('collapsed');
         }
 
+        function toggleTheme() {
+            Sidebar.toggleTheme();
+        }
+        
+        // Theme and Sidebar Management
         function deleteSelected() {
             const checkboxes = document.querySelectorAll('.completed-item input[type="checkbox"]:checked');
             checkboxes.forEach(checkbox => {

@@ -1,5 +1,9 @@
 const socket = io('http://localhost:3000');
 
+socket.on('connect', () => {
+    console.log('Conectado ao servidor de WebSocket');
+});
+
 socket.on('statusUpdate', (statusData) => {
     console.log('Status update received:', statusData); // Log status update
     updateUI(statusData);

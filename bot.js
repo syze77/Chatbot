@@ -181,31 +181,98 @@ function startListeningForMessages(conn, io) {
   });
 }
 
+// Add this function before handleNewUser
+async function updateDatabaseAndNotify(query, params, io) {
+    return new Promise((resolve, reject) => {
+        getDatabase().run(query, params, async function(err) {
+            if (err) {
+                console.error('Erro na atualização do banco:', err);
+                reject(err);
+                return;
+            }
+
+            try {
+                // Buscar dados atualizados
+                const statusData = await fetchCurrentStatus();
+                // Emitir atualização para todos os clientes
+                io.emit('statusUpdate', statusData);
+                resolve(this.lastID);
+            } catch (error) {
+                console.error('Erro ao buscar dados atualizados:', error);
+                reject(error);
+            }
+        });
+    });
+}
+
+// Add this helper function to fetch current status
+async function fetchCurrentStatus() {
+    return new Promise((resolve, reject) => {
+        const queries = {
+            active: 'SELECT * FROM problems WHERE status = "active" ORDER BY date DESC LIMIT 3',
+            waiting: 'SELECT * FROM problems WHERE status = "waiting" ORDER BY date ASC',
+            pending: 'SELECT * FROM problems WHERE status = "pending" ORDER BY date DESC'
+        };
+
+        Promise.all([
+            queryDatabase(queries.active),
+            queryDatabase(queries.waiting),
+            queryDatabase(queries.pending)
+        ])
+        .then(([active, waiting, pending]) => {
+            resolve({
+                activeChats: active,
+                waitingList: waiting,
+                problems: pending
+            });
+        })
+        .catch(reject);
+    });
+}
+
+// Add this helper function for database queries
+function queryDatabase(query, params = []) {
+    return new Promise((resolve, reject) => {
+        getDatabase().all(query, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+        });
+    });
+}
+
 // Handle new user
 async function handleNewUser(conn, chatId, userInfo, io) {
     const activeCount = await getActiveChatsCount();
     const status = activeCount < maxActiveChats ? 'active' : 'waiting';
     
-    // Salvar no banco com status inicial
-    saveClientInfoToDatabase(userInfo, chatId, status, io);
-
-    if (status === 'active') {
-        await sendMessage(conn, chatId, `Olá ${userInfo.name}! Estamos iniciando seu atendimento.`);
-        await sendProblemOptions(conn, chatId);
-        userCurrentTopic[chatId] = 'problema';
-    } else {
-        const position = await getWaitingPosition(chatId);
-        const estimatedTime = position * 10; // Estimativa de 10 minutos por atendimento
-        
-        await sendMessage(
-            conn,
-            chatId,
-            `Olá ${userInfo.name}!\n\n` +
-            `No momento todos os nossos atendentes estão ocupados.\n` +
-            `Você está na ${position}ª posição da fila de espera.\n` +
-            `Tempo estimado de espera: aproximadamente ${estimatedTime} minutos.\n\n` +
-            `Você será notificado sobre sua posição na fila conforme os atendimentos forem finalizados.`
+    try {
+        await updateDatabaseAndNotify(
+            `INSERT INTO problems (chatId, name, position, city, school, status, date) 
+             VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+            [chatId, userInfo.name, userInfo.position, userInfo.city, userInfo.school, status],
+            io
         );
+
+        if (status === 'active') {
+            await sendMessage(
+                conn, 
+                chatId, 
+                `Olá ${userInfo.name}! Um atendente está disponível para ajudá-lo.`
+            );
+            await sendProblemOptions(conn, chatId);
+        } else {
+            const position = await getWaitingPosition(chatId);
+            await sendMessage(
+                conn,
+                chatId,
+                `Olá ${userInfo.name}!\n\nTodos os nossos atendentes estão ocupados no momento.\n` +
+                `Você está na ${position}ª posição da fila.\n` +
+                `Aguarde, você será notificado assim que um atendente estiver disponível.`
+            );
+        }
+    } catch (error) {
+        console.error('Erro ao processar novo usuário:', error);
+        await sendMessage(conn, chatId, 'Desculpe, ocorreu um erro. Por favor, tente novamente mais tarde.');
     }
 }
 
@@ -257,10 +324,47 @@ async function handleUserMessage(conn, chatId, messageText, io) {
 
 // Handle chat closed
 async function handleChatClosed(chatId, io) {
-  activeChatsList = activeChatsList.filter(chat => chat.chatId !== chatId);
-  delete userCurrentTopic[chatId];
-  sendStatusUpdateToMainProcess(io);
-  attendNextUserInQueue(botConnection, io);
+    try {
+        // Mark chat as completed
+        await updateDatabaseAndNotify(
+            `UPDATE problems 
+             SET status = 'completed', 
+             date_completed = datetime('now') 
+             WHERE chatId = ? AND status = 'active'`,
+            [chatId],
+            io
+        );
+
+        // Get next user in waiting list
+        const nextUser = await getNextInWaitingList();
+        if (nextUser) {
+            // Update next user status
+            await updateDatabaseAndNotify(
+                `UPDATE problems 
+                 SET status = 'active' 
+                 WHERE chatId = ?`,
+                [nextUser.chatId],
+                io
+            );
+
+            // Send message to next user
+            await sendMessage(
+                botConnection,
+                nextUser.chatId,
+                `Olá ${nextUser.name}! Um atendente está disponível agora para ajudá-lo.`
+            );
+            await sendProblemOptions(botConnection, nextUser.chatId);
+        }
+
+        // Update all waiting users positions
+        await updateWaitingUsers(io);
+        
+        // Fetch and broadcast updated status to all clients
+        await sendStatusUpdateToMainProcess(io);
+
+    } catch (error) {
+        console.error('Erro ao finalizar atendimento:', error);
+    }
 }
 
 // Parse user information from the message
@@ -604,30 +708,52 @@ function markProblemAsCompleted(problemId, io) {
 }
 
 // Send status update to the main process
-function sendStatusUpdateToMainProcess(io) {
-    const queries = {
-        active: 'SELECT * FROM problems WHERE status = "active" AND description IS NOT NULL ORDER BY date DESC LIMIT 3',
-        waiting: 'SELECT * FROM problems WHERE status = "waiting" ORDER BY date ASC',
-        pending: 'SELECT * FROM problems WHERE status = "pending" AND description IS NOT NULL ORDER BY date DESC'
-    };
+async function sendStatusUpdateToMainProcess(io) {
+    try {
+        const queries = {
+            active: `SELECT * FROM problems 
+                     WHERE status = 'active' 
+                     ORDER BY date DESC`,
+            waiting: `SELECT * FROM problems 
+                      WHERE status = 'waiting' 
+                      ORDER BY date ASC`,
+            pending: `SELECT * FROM problems 
+                      WHERE status = 'pending' 
+                      ORDER BY date DESC`,
+            completed: `SELECT * FROM problems 
+                        WHERE status = 'completed' 
+                        ORDER BY date_completed DESC 
+                        LIMIT 10`
+        };
 
-    Promise.all([
-        new Promise((resolve, reject) => {
-            getDatabase().all(queries.active, [], (err, rows) => err ? reject(err) : resolve(rows || []));
-        }),
-        new Promise((resolve, reject) => {
-            getDatabase().all(queries.waiting, [], (err, rows) => err ? reject(err) : resolve(rows || []));
-        }),
-        new Promise((resolve, reject) => {
-            getDatabase().all(queries.pending, [], (err, rows) => err ? reject(err) : resolve(rows || []));
-        })
-    ]).then(([active, waiting, pending]) => {
-        const data = { activeChats: active, waitingList: waiting, problems: pending };
-        io.emit('statusUpdate', data);
-        console.log('Status atualizado:', data);
-    }).catch(err => {
-        console.error('Erro ao atualizar status:', err);
-    });
+        const [active, waiting, pending, completed] = await Promise.all([
+            queryDatabase(queries.active),
+            queryDatabase(queries.waiting),
+            queryDatabase(queries.pending),
+            queryDatabase(queries.completed)
+        ]);
+
+        const statusData = {
+            activeChats: active,
+            waitingList: waiting,
+            problems: pending,
+            completedChats: completed
+        };
+
+        // Emit update to all clients
+        io.emit('statusUpdate', statusData);
+        
+        // Debug log
+        console.log('Status atualizado:', {
+            activeCount: active.length,
+            waitingCount: waiting.length,
+            pendingCount: pending.length,
+            completedCount: completed.length
+        });
+
+    } catch (error) {
+        console.error('Erro ao atualizar status:', error);
+    }
 }
 
 // Send problem to the front-end
@@ -641,20 +767,43 @@ function sendProblemToFrontEnd(problemData) {
 // Close the chat
 async function closeChat(chatId, io) {
     try {
-        await getDatabase().run('UPDATE problems SET status = "completed" WHERE chatId = ?', [chatId]);
-        const nextInLine = await getNextInWaitingList();
-        
-        if (nextInLine) {
-            await getDatabase().run('UPDATE problems SET status = "active" WHERE chatId = ?', [nextInLine.chatId]);
-            await sendMessage(botConnection, nextInLine.chatId, 
-                `Olá ${nextInLine.name}! Sua vez chegou. Estamos iniciando seu atendimento.`);
-            await sendProblemOptions(botConnection, nextInLine.chatId);
-            
-            // Update remaining users in queue
-            await updateWaitingUsers(io);
+        // Mark chat as completed
+        await updateDatabaseAndNotify(
+            `UPDATE problems 
+             SET status = 'completed', 
+             date_completed = datetime('now') 
+             WHERE chatId = ?`,
+            [chatId],
+            io
+        );
+
+        // Get next user in waiting list
+        const nextUser = await getNextInWaitingList();
+        if (nextUser) {
+            // Update next user status
+            await updateDatabaseAndNotify(
+                `UPDATE problems 
+                 SET status = 'active' 
+                 WHERE chatId = ?`,
+                [nextUser.chatId],
+                io
+            );
+
+            // Send message to next user
+            await sendMessage(
+                botConnection,
+                nextUser.chatId,
+                `Olá ${nextUser.name}! Sua vez chegou. Estamos iniciando seu atendimento.`
+            );
+            await sendProblemOptions(botConnection, nextUser.chatId);
         }
+
+        // Update all waiting users positions
+        await updateWaitingUsers(io);
         
-        sendStatusUpdateToMainProcess(io);
+        // Fetch and broadcast final status update
+        await sendStatusUpdateToMainProcess(io);
+
     } catch (error) {
         console.error('Erro ao finalizar atendimento:', error);
     }
