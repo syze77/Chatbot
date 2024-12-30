@@ -30,6 +30,11 @@ Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor o
 
 ⚠️ Atenção: Certifique-se de preencher todas as informações corretamente para agilizar o atendimento.`;
 
+// Add these at the top with other global variables
+let messageQueue = [];
+let isProcessingQueue = false;
+const MESSAGE_DELAY = 1000; // 1 second delay between messages
+
 // Initialize the bot
 async function startHydraBot(io) {
   try {
@@ -260,6 +265,7 @@ async function handleNewUser(conn, chatId, userInfo, io) {
                 `Olá ${userInfo.name}! Um atendente está disponível para ajudá-lo.`
             );
             await sendProblemOptions(conn, chatId);
+            userCurrentTopic[chatId] = 'problema';
         } else {
             const position = await getWaitingPosition(chatId);
             await sendMessage(
@@ -308,17 +314,22 @@ async function handleUserMessage(conn, chatId, messageText, io) {
         return;
     }
 
-    if (typeof currentTopic === 'object' && currentTopic.state === 'descricaoProblema') {
-        await handleProblemDescription(conn, chatId, messageText, io);
-        userCurrentTopic[chatId] = 'problema'; // Reset to problema after description
-    } else if (currentTopic === 'problema') {
-        await handleProblemSelection(conn, chatId, messageText, io);
-    } else if (currentTopic.stage === 'subproblema') {
-        await handleSubProblemSelection(conn, chatId, messageText, io);
-    } else if (currentTopic === 'videoFeedback') {
-        await handleVideoFeedback(conn, chatId, messageText, io);
-    } else {
-        await sendMessage(conn, chatId, defaultMessage);
+    try {
+        if (currentTopic.state === 'descricaoProblema') {
+            await handleProblemDescription(conn, chatId, messageText, io);
+            userCurrentTopic[chatId] = 'problema';
+        } else if (currentTopic === 'problema') {
+            await handleProblemSelection(conn, chatId, messageText, io);
+        } else if (currentTopic.stage === 'subproblema') {
+            await handleSubProblemSelection(conn, chatId, messageText, io);
+        } else if (currentTopic === 'videoFeedback') {
+            await handleVideoFeedback(conn, chatId, messageText, io);
+        } else {
+            await sendMessage(conn, chatId, defaultMessage);
+        }
+    } catch (error) {
+        console.error('Error handling user message:', error);
+        await sendMessage(conn, chatId, 'Desculpe, ocorreu um erro. Por favor, tente novamente.');
     }
 }
 
@@ -393,9 +404,59 @@ function capitalize(str) {
   return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
 
-// Send a message to the user
+// Replace sendMessage function with this new version
 async function sendMessage(conn, chatId, message) {
-  await conn.client.sendMessage({ to: chatId, body: message, options: { type: 'sendText' } });
+  return new Promise((resolve, reject) => {
+    messageQueue.push({
+      conn,
+      chatId,
+      message,
+      resolve,
+      reject,
+      retries: 0
+    });
+
+    if (!isProcessingQueue) {
+      processMessageQueue();
+    }
+  });
+}
+
+// Add new function to process message queue
+async function processMessageQueue() {
+  if (messageQueue.length === 0) {
+    isProcessingQueue = false;
+    return;
+  }
+
+  isProcessingQueue = true;
+  const message = messageQueue[0];
+
+  try {
+    await message.conn.client.sendMessage({ 
+      to: message.chatId, 
+      body: message.message, 
+      options: { type: 'sendText' } 
+    });
+
+    message.resolve();
+    messageQueue.shift();
+    
+    // Add delay before next message
+    await new Promise(resolve => setTimeout(resolve, MESSAGE_DELAY));
+    
+  } catch (error) {
+    console.error('Error sending message:', error);
+    message.retries++;
+    
+    if (message.retries >= 3) {
+      message.reject(error);
+      messageQueue.shift();
+    }
+  }
+
+  // Process next message
+  processMessageQueue();
 }
 
 // Send problem options to the user
@@ -576,18 +637,22 @@ function getVideoUrlForSubProblem(subProblem) {
 
 // Handle video feedback
 async function handleVideoFeedback(conn, chatId, messageText, io) {
-    if (messageText === 'sim') {
-        await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais alguma coisa, estamos à disposição.');
-        userCurrentTopic[chatId] = 'problema';
-        await closeChat(chatId, io);
-    } else if (messageText === 'não') {
-        await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
-        userCurrentTopic[chatId] = {
-            state: 'descricaoProblema',
-            previousState: 'videoFeedback'
-        };
-    } else {
-        await sendMessage(conn, chatId, 'Resposta inválida. Por favor, responda com "sim" ou "não".');
+    try {
+        if (messageText === 'sim') {
+            await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais alguma coisa, estamos à disposição.');
+            userCurrentTopic[chatId] = 'problema';
+            await closeChat(chatId, io);
+        } else if (messageText === 'não') {
+            await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
+            userCurrentTopic[chatId] = {
+                state: 'descricaoProblema',
+                previousState: 'videoFeedback'
+            };
+        } else {
+            await sendMessage(conn, chatId, 'Resposta inválida. Por favor, responda com "sim" ou "não".');
+        }
+    } catch (error) {
+        console.error('Error in video feedback:', error);
     }
 }
 
