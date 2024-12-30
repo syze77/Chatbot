@@ -1,0 +1,27 @@
+2024/12/30-12:21:41.837 1910 Reusing MANIFEST C:\Users\thall\OneDrive\Área de Trabalho\whatsapp-electron-bot\token\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2024/12/30-12:21:41.839 1910 Recovering log #3030
+2024/12/30-12:21:41.844 1910 Reusing old log C:\Users\thall\OneDrive\Área de Trabalho\whatsapp-electron-bot\token\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/003030.log 
+2024/12/30-12:21:48.326 2fcc Level-0 table #3042: started
+2024/12/30-12:21:48.331 2fcc Level-0 table #3042: 120324 bytes OK
+2024/12/30-12:21:48.333 2fcc Delete type=0 #3030
+2024/12/30-12:21:48.333 1910 Manual compaction at level-0 from ' \xc0\x01\x00\x00\x00' @ 72057594037927935 : 1 .. ' \xc1\x01\x00\x00\x00' @ 0 : 0; will stop at (end)
+2024/12/30-12:21:49.525 1910 Compacting 1@1 + 8@2 files
+2024/12/30-12:21:49.611 1910 Generated table #3043@1: 84843 keys, 2233555 bytes
+2024/12/30-12:21:49.703 1910 Generated table #3044@1: 99356 keys, 2252177 bytes
+2024/12/30-12:21:49.766 1910 Generated table #3045@1: 40106 keys, 2215802 bytes
+2024/12/30-12:21:49.838 1910 Generated table #3046@1: 29354 keys, 2196874 bytes
+2024/12/30-12:21:49.882 1910 Generated table #3047@1: 8054 keys, 2132428 bytes
+2024/12/30-12:21:49.980 1910 Generated table #3048@1: 117293 keys, 2269515 bytes
+2024/12/30-12:21:50.081 1910 Generated table #3049@1: 117176 keys, 2268780 bytes
+2024/12/30-12:21:50.158 1910 Generated table #3050@1: 82920 keys, 1606935 bytes
+2024/12/30-12:21:50.158 1910 Compacted 1@1 + 8@2 files => 17176066 bytes
+2024/12/30-12:21:50.159 1910 compacted to: files[ 0 0 8 0 0 0 0 ]
+2024/12/30-12:21:50.159 1910 Delete type=2 #3032
+2024/12/30-12:21:50.159 1910 Delete type=2 #3033
+2024/12/30-12:21:50.159 1910 Delete type=2 #3034
+2024/12/30-12:21:50.159 1910 Delete type=2 #3035
+2024/12/30-12:21:50.159 1910 Delete type=2 #3036
+2024/12/30-12:21:50.159 1910 Delete type=2 #3037
+2024/12/30-12:21:50.159 1910 Delete type=2 #3038
+2024/12/30-12:21:50.159 1910 Delete type=2 #3039
+2024/12/30-12:21:50.159 1910 Delete type=2 #3042

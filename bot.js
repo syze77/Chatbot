@@ -1075,81 +1075,68 @@ server.get('/generateReport', async (req, res) => {
 // Atualizar o endpoint getChartData
 server.get('/getChartData', async (req, res) => {
     try {
-        const db = getDatabase();
+        const { city } = req.query;
+        const cityFilter = city ? 'AND city = ?' : '';
+        const params = city ? [city] : [];
         
-        // Get weekly data (only workdays)
-        const weeklyData = await new Promise((resolve, reject) => {
-            const today = new Date();
-            const sevenDaysAgo = new Date(today);
-            sevenDaysAgo.setDate(today.getDate() - 6);
-            
-            db.all(
-                `WITH RECURSIVE dates(date) AS (
-                    SELECT date('now', '-6 days')
-                    UNION ALL
-                    SELECT date(date, '+1 day')
-                    FROM dates
-                    WHERE date < date('now')
-                )
-                SELECT dates.date, COALESCE(COUNT(problems.id), 0) as count
+        // Query para dados semanais
+        const weeklyQuery = `
+            WITH RECURSIVE dates(date) AS (
+                SELECT date('now', '-6 days')
+                UNION ALL
+                SELECT date(date, '+1 day')
                 FROM dates
-                LEFT JOIN problems ON date(problems.date) = dates.date
-                    AND strftime('%w', problems.date) NOT IN ('0', '6') -- Excluir sábado (6) e domingo (0)
-                GROUP BY dates.date
-                ORDER BY dates.date`,
-                [],
-                (err, rows) => {
-                    if (err) {
-                        console.error('Erro na query semanal:', err);
-                        reject(err);
-                    } else {
-                        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-                        const labels = rows.map(row => {
-                            const date = new Date(row.date);
-                            return weekDays[date.getDay()];
-                        });
-                        const data = rows.map(row => row.count);
-                        resolve({ labels, data });
-                    }
-                }
-            );
-        });
+                WHERE date < date('now')
+            )
+            SELECT dates.date, COUNT(DISTINCT problems.id) as count
+            FROM dates
+            LEFT JOIN problems ON date(problems.date) = dates.date
+            ${city ? 'AND problems.city = ?' : ''}
+            GROUP BY dates.date
+            ORDER BY dates.date`;
 
-        // Get monthly data
-        const monthlyData = await new Promise((resolve, reject) => {
-            const currentYear = new Date().getFullYear();
-            
-            db.all(
-                `WITH RECURSIVE months(month) AS (
-                    SELECT '01' as month
-                    UNION ALL
-                    SELECT printf('%02d', CAST(month AS INTEGER) + 1)
-                    FROM months
-                    WHERE CAST(month AS INTEGER) < 12
-                )
-                SELECT months.month, COALESCE(COUNT(problems.id), 0) as count
+        // Query para dados mensais
+        const monthlyQuery = `
+            WITH RECURSIVE months(month) AS (
+                SELECT '01' as month
+                UNION ALL
+                SELECT printf('%02d', CAST(month AS INTEGER) + 1)
                 FROM months
-                LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-                    AND strftime('%Y', problems.date) = ?
-                GROUP BY months.month
-                ORDER BY months.month`,
-                [currentYear.toString()],
-                (err, rows) => {
-                    if (err) {
-                        console.error('Erro na query mensal:', err);
-                        reject(err);
-                    } else {
-                        const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                                      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                        const data = rows.map(row => row.count);
-                        resolve({ labels: months, data });
-                    }
-                }
-            );
-        });
+                WHERE CAST(month AS INTEGER) < 12
+            )
+            SELECT months.month, COUNT(DISTINCT problems.id) as count
+            FROM months
+            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
+                AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+                ${city ? 'AND problems.city = ?' : ''}
+            GROUP BY months.month
+            ORDER BY months.month`;
 
-        console.log('Dados enviados:', { weekly: weeklyData, monthly: monthlyData }); // Debug
-        res.json({ weekly: weeklyData, monthly: monthlyData });
+        // Executar as queries
+        const weeklyData = await queryDatabase(weeklyQuery, city ? [city] : []);
+        const monthlyData = await queryDatabase(monthlyQuery, city ? [city] : []);
+
+        // Processar os dados
+        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+        // Formatar a resposta
+        const response = {
+            weekly: {
+                labels: weeklyData.map(row => {
+                    const date = new Date(row.date);
+                    return weekDays[date.getDay()];
+                }),
+                data: weeklyData.map(row => row.count)
+            },
+            monthly: {
+                labels: monthNames,
+                data: monthlyData.map(row => row.count)
+            }
+        };
+
+        res.json(response);
         
     } catch (error) {
         console.error('Erro ao buscar dados dos gráficos:', error);
@@ -1218,6 +1205,92 @@ server.delete('/deleteCompletedAttendance/:id', (req, res) => {
 
 server.get('/getUserInfo/:chatId', (req, res) => {
     // ...existing code...
+});
+
+// Add new endpoint to get cities
+server.get('/getCities', async (req, res) => {
+    try {
+        const query = `SELECT DISTINCT city FROM problems ORDER BY city`;
+        const cities = await queryDatabase(query);
+        res.json(cities.map(row => row.city));
+    } catch (error) {
+        console.error('Erro ao buscar cidades:', error);
+        res.status(500).json({ error: 'Erro ao buscar cidades' });
+    }
+});
+
+// Update the getChartData endpoints
+server.get('/getChartData', async (req, res) => {
+    try {
+        const { city } = req.query;
+        const cityFilter = city ? 'AND problems.city = ?' : '';
+        const params = city ? [city] : [];
+        
+        // Get next 5 workdays
+        const weeklyQuery = `
+            WITH RECURSIVE dates(date) AS (
+                SELECT date('now')
+                UNION ALL
+                SELECT date(date, '+1 day')
+                FROM dates
+                WHERE (
+                    SELECT COUNT(*)
+                    FROM dates
+                    WHERE strftime('%w', date) NOT IN ('0', '6')
+                ) < 5
+            )
+            SELECT dates.date, COALESCE(COUNT(problems.id), 0) as count
+            FROM dates
+            LEFT JOIN problems ON date(problems.date) = dates.date
+            ${cityFilter}
+            WHERE strftime('%w', dates.date) NOT IN ('0', '6')
+            GROUP BY dates.date
+            ORDER BY dates.date
+            LIMIT 5`;
+
+        const monthlyQuery = `
+            WITH RECURSIVE months(month) AS (
+                SELECT '01' as month
+                UNION ALL
+                SELECT printf('%02d', CAST(month AS INTEGER) + 1)
+                FROM months
+                WHERE CAST(month AS INTEGER) < 12
+            )
+            SELECT months.month, COALESCE(COUNT(problems.id), 0) as count
+            FROM months
+            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
+            AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+            ${cityFilter}
+            GROUP BY months.month
+            ORDER BY months.month`;
+
+        const [weeklyData, monthlyData] = await Promise.all([
+            queryDatabase(weeklyQuery, params),
+            queryDatabase(monthlyQuery, params)
+        ]);
+
+        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+        res.json({
+            weekly: {
+                labels: weeklyData.map(row => {
+                    const date = new Date(row.date);
+                    return `${weekDays[date.getDay()]} ${date.getDate()}/${date.getMonth() + 1}`;
+                }),
+                data: weeklyData.map(row => row.count)
+            },
+            monthly: {
+                labels: monthNames,
+                data: monthlyData.map(row => row.count)
+            }
+        });
+        
+    } catch (error) {
+        console.error('Erro ao buscar dados dos gráficos:', error);
+        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
+    }
 });
 
 // Adicionar ao módulo exports

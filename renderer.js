@@ -10,10 +10,11 @@ socket.on('statusUpdate', (statusData) => {
     fetchDataAndUpdateCharts(dailyProblemsChart, monthlyProblemsChart);
 });
 
-socket.on('userProblem', (problemDescription, chatId, userName) => {
-    console.log('User problem received:', { problemDescription, chatId, userName }); // Log user problem
-    displayProblem(problemDescription, chatId, userName);
-    showNotification('Novo Problema Relatado', problemDescription);
+socket.on('userProblem', (problemData) => {
+    console.log('User problem received:', problemData);
+    displayProblem(problemData.description, problemData.chatId, problemData.name);
+    showNotification('Novo Problema Relatado', 
+        `${problemData.name} (${problemData.position}) - ${problemData.description}`);
     playNotificationSound();
     showBellIcon();
     fetchDataAndUpdateCharts(dailyProblemsChart, monthlyProblemsChart);
@@ -61,19 +62,18 @@ function updateUI(data) {
 }
 
 // Display a reported problem
-function displayProblem(problemDescription, chatId, userName) {
+function displayProblem(description, chatId, userName) {
     const emptyMessage = problemListContainer.querySelector('.empty-message');
     if (emptyMessage) {
         emptyMessage.remove();
     }
     
-    // Verificar se o problema já existe
     const existingProblem = Array.from(problemListContainer.children).find(
         item => item.dataset.chatId === chatId
     );
     
     if (existingProblem) {
-        return; // Se já existe, não adiciona novamente
+        return;
     }
     
     const problemItem = document.createElement('div');
@@ -82,19 +82,42 @@ function displayProblem(problemDescription, chatId, userName) {
     
     const content = `
         <div class="item-content">
-            <strong>${userName}</strong><br>
-            <span class="problem-description">${problemDescription}</span>
+            <div class="user-info">
+                <strong>${userName}</strong>
+                <span class="status-badge problem">Problema</span>
+            </div>
+            <div class="problem-description-container">
+                <i class="fas fa-exclamation-circle"></i>
+                <span class="problem-description">${description}</span>
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-primary btn-sm attend-btn">
+                    <i class="fas fa-headset"></i> Atender
+                </button>
+            </div>
         </div>
     `;
     
     problemItem.innerHTML = content;
-    problemItem.addEventListener('click', () => {
-        window.electron.openWhatsAppChat(chatId);
-    });
     
-    const bellIcon = document.createElement('i');
-    bellIcon.classList.add('fas', 'fa-bell', 'bell-icon');
-    problemItem.appendChild(bellIcon);
+    if (chatId) {
+        problemItem.addEventListener('click', () => {
+            window.electron.openWhatsAppChat(chatId);
+        });
+        problemItem.style.cursor = 'pointer';
+    }
+    
+    const attendBtn = problemItem.querySelector('.attend-btn');
+    if (attendBtn) {
+        attendBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            handleAttendProblem({
+                chatId: chatId,
+                name: userName,
+                description: description
+            });
+        });
+    }
     
     problemListContainer.insertBefore(problemItem, problemListContainer.firstChild);
 }
