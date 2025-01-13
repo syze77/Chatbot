@@ -1,3 +1,2 @@
-2024/12/30-12:21:41.277 1910 Reusing MANIFEST C:\Users\thall\OneDrive\Área de Trabalho\whatsapp-electron-bot\token\session\Default\shared_proto_db\metadata/MANIFEST-000001
-2024/12/30-12:21:41.278 1910 Recovering log #3
-2024/12/30-12:21:41.279 1910 Reusing old log C:\Users\thall\OneDrive\Área de Trabalho\whatsapp-electron-bot\token\session\Default\shared_proto_db\metadata/000003.log 
+2025/01/13-11:53:11.746 2cc Creating DB C:\Users\thall\Chatbot\token\session\Default\shared_proto_db\metadata since it was missing.
+2025/01/13-11:53:11.759 2cc Reusing MANIFEST C:\Users\thall\Chatbot\token\session\Default\shared_proto_db\metadata/MANIFEST-000001

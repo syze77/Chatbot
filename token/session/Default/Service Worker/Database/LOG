@@ -1,3 +1,2 @@
-2024/12/30-12:21:41.152 17ec Reusing MANIFEST C:\Users\thall\OneDrive\Área de Trabalho\whatsapp-electron-bot\token\session\Default\Service Worker\Database/MANIFEST-000001
-2024/12/30-12:21:41.152 17ec Recovering log #3
-2024/12/30-12:21:41.157 17ec Reusing old log C:\Users\thall\OneDrive\Área de Trabalho\whatsapp-electron-bot\token\session\Default\Service Worker\Database/000003.log 
+2025/01/13-11:53:12.700 2cc Creating DB C:\Users\thall\Chatbot\token\session\Default\Service Worker\Database since it was missing.
+2025/01/13-11:53:12.705 2cc Reusing MANIFEST C:\Users\thall\Chatbot\token\session\Default\Service Worker\Database/MANIFEST-000001

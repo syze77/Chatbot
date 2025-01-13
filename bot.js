@@ -953,9 +953,8 @@ function getStatusText(status) {
 // Add report generation endpoint
 server.get('/generateReport', async (req, res) => {
     try {
-        const { start, end } = req.query;
+        const { start, end, format } = req.query;
         
-        // Query para estatísticas básicas e todos os atendimentos
         const query = `
             SELECT 
                 name,
@@ -968,23 +967,48 @@ server.get('/generateReport', async (req, res) => {
                 strftime('%d/%m/%Y %H:%M', date_completed) as formatted_date_completed,
                 CAST((julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER) as duration_minutes
             FROM problems
-            WHERE date(date) >= date(?) 
-            AND date(date) <= date(?)
+            WHERE date >= datetime(?)
+            AND date <= datetime(?)
+            AND description IS NOT NULL
             ORDER BY date DESC`;
 
-        // Executar query
-        const attendances = await queryDatabase(query, [start, end]);
+        const problems = await queryDatabase(query, [start, end]);
 
-        // Calcular estatísticas
-        const stats = {
-            total_atendimentos: attendances.length,
-            total_cidades: new Set(attendances.map(a => a.city)).size,
-            total_escolas: new Set(attendances.map(a => a.school)).size,
-            tempo_medio_minutos: Math.round(
-                attendances.reduce((acc, a) => acc + (a.duration_minutes || 0), 0) / 
-                attendances.filter(a => a.duration_minutes).length || 0
-            )
-        };
+        if (format === 'xlsx') {
+            const Excel = require('exceljs');
+            const workbook = new Excel.Workbook();
+            const worksheet = workbook.addWorksheet('Atendimentos');
+
+            // Configure columns
+            worksheet.columns = [
+                { header: 'Nome', key: 'name', width: 30 },
+                { header: 'Cidade', key: 'city', width: 20 },
+                { header: 'Escola', key: 'school', width: 30 },
+                { header: 'Cargo', key: 'position', width: 20 },
+                { header: 'Problema', key: 'description', width: 50 },
+                { header: 'Status', key: 'status', width: 15 },
+                { header: 'Data Início', key: 'formatted_date', width: 20 },
+                { header: 'Data Conclusão', key: 'formatted_date_completed', width: 20 },
+                { header: 'Duração (min)', key: 'duration_minutes', width: 15 }
+            ];
+
+            // Add rows
+            worksheet.addRows(problems);
+
+            // Style header row
+            worksheet.getRow(1).font = { bold: true };
+            worksheet.getRow(1).fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFE0E0E0' }
+            };
+
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.xlsx`);
+
+            await workbook.xlsx.write(res);
+            return;
+        }
 
         // Criar o PDF
         const doc = new PDFDocument({
@@ -1082,15 +1106,19 @@ server.get('/getChartData', async (req, res) => {
         // Query para dados semanais
         const weeklyQuery = `
             WITH RECURSIVE dates(date) AS (
-                SELECT date('now', '-6 days')
+                -- Get Monday of current week
+                SELECT date('now', 'weekday 1', '-7 days')
                 UNION ALL
                 SELECT date(date, '+1 day')
                 FROM dates
                 WHERE date < date('now')
+                AND strftime('%w', date) NOT IN ('0', '6')
+                LIMIT 5
             )
             SELECT dates.date, COUNT(DISTINCT problems.id) as count
             FROM dates
             LEFT JOIN problems ON date(problems.date) = dates.date
+            WHERE description IS NOT NULL
             ${city ? 'AND problems.city = ?' : ''}
             GROUP BY dates.date
             ORDER BY dates.date`;
@@ -1108,6 +1136,7 @@ server.get('/getChartData', async (req, res) => {
             FROM months
             LEFT JOIN problems ON strftime('%m', problems.date) = months.month
                 AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+                AND description IS NOT NULL
                 ${city ? 'AND problems.city = ?' : ''}
             GROUP BY months.month
             ORDER BY months.month`;
@@ -1164,7 +1193,8 @@ server.get('/getCompletedAttendances', async (req, res) => {
                     (julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER
                 ) as duration_minutes
             FROM problems 
-            WHERE status = 'completed'`;
+            WHERE status = 'completed'
+            AND description IS NOT NULL`;
         
         const params = [];
         
@@ -1180,13 +1210,7 @@ server.get('/getCompletedAttendances', async (req, res) => {
         
         query += ` ORDER BY date_completed DESC`;
 
-        const completedAttendances = await new Promise((resolve, reject) => {
-            getDatabase().all(query, params, (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-        });
-
+        const completedAttendances = await queryDatabase(query, params);
         res.json(completedAttendances);
     } catch (error) {
         console.error('Erro ao buscar atendimentos concluídos:', error);
@@ -1219,35 +1243,39 @@ server.get('/getCities', async (req, res) => {
     }
 });
 
-// Update the getChartData endpoints
+// Remove todas as outras definições de getChartData e manter apenas esta
 server.get('/getChartData', async (req, res) => {
     try {
         const { city } = req.query;
         const cityFilter = city ? 'AND problems.city = ?' : '';
         const params = city ? [city] : [];
         
-        // Get next 5 workdays
+        // Get current week's workdays (Segunda a Sexta)
         const weeklyQuery = `
             WITH RECURSIVE dates(date) AS (
-                SELECT date('now')
+                -- Get Monday of current week
+                SELECT date('now', 'weekday 1', '-7 days')
                 UNION ALL
                 SELECT date(date, '+1 day')
                 FROM dates
-                WHERE (
-                    SELECT COUNT(*)
-                    FROM dates
-                    WHERE strftime('%w', date) NOT IN ('0', '6')
-                ) < 5
+                WHERE date < date('now')
+                AND strftime('%w', date) NOT IN ('0', '6')
+                LIMIT 5
             )
-            SELECT dates.date, COALESCE(COUNT(problems.id), 0) as count
+            SELECT 
+                dates.date,
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND date(problems.date) = dates.date 
+                    ${cityFilter}
+                    THEN problems.id 
+                END), 0) as count
             FROM dates
             LEFT JOIN problems ON date(problems.date) = dates.date
-            ${cityFilter}
-            WHERE strftime('%w', dates.date) NOT IN ('0', '6')
             GROUP BY dates.date
-            ORDER BY dates.date
-            LIMIT 5`;
+            ORDER BY dates.date`;
 
+        // Get monthly data for current year
         const monthlyQuery = `
             WITH RECURSIVE months(month) AS (
                 SELECT '01' as month
@@ -1256,11 +1284,16 @@ server.get('/getChartData', async (req, res) => {
                 FROM months
                 WHERE CAST(month AS INTEGER) < 12
             )
-            SELECT months.month, COALESCE(COUNT(problems.id), 0) as count
+            SELECT 
+                months.month,
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+                    ${cityFilter}
+                    THEN problems.id 
+                END), 0) as count
             FROM months
             LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-            AND strftime('%Y', problems.date) = strftime('%Y', 'now')
-            ${cityFilter}
             GROUP BY months.month
             ORDER BY months.month`;
 
@@ -1269,7 +1302,7 @@ server.get('/getChartData', async (req, res) => {
             queryDatabase(monthlyQuery, params)
         ]);
 
-        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const weekDays = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
         const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -1277,7 +1310,8 @@ server.get('/getChartData', async (req, res) => {
             weekly: {
                 labels: weeklyData.map(row => {
                     const date = new Date(row.date);
-                    return `${weekDays[date.getDay()]} ${date.getDate()}/${date.getMonth() + 1}`;
+                    const dayName = weekDays[date.getDay() - 1];
+                    return `${dayName} ${date.getDate()}/${date.getMonth() + 1}`;
                 }),
                 data: weeklyData.map(row => row.count)
             },
@@ -1314,6 +1348,7 @@ server.get('/generateReport', async (req, res) => {
                 CAST((julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER) as duration_minutes
             FROM problems 
             WHERE date BETWEEN ? AND ?
+            AND description IS NOT NULL
             ORDER BY date DESC
         `;
 
@@ -1415,4 +1450,337 @@ server.get('/generateReport', async (req, res) => {
     }
 });
 
+// Update the getChartData endpoint
+server.get('/getChartData', async (req, res) => {
+    try {
+        const { city } = req.query;
+        const cityFilter = city ? 'AND problems.city = ?' : '';
+        const params = city ? [city] : [];
+        
+        // Get current week's workdays
+        const weeklyQuery = `
+            WITH RECURSIVE dates(date) AS (
+                -- Get Monday of current week
+                SELECT date('now', 'weekday 1')
+                UNION ALL
+                SELECT date(date, '+1 day')
+                FROM dates
+                WHERE date <= date('now')
+                AND strftime('%w', date) NOT IN ('0', '6')
+                LIMIT 5
+            )
+            SELECT 
+                dates.date,
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND date(problems.date) = dates.date 
+                    ${cityFilter}
+                    THEN problems.id 
+                END), 0) as count,
+                strftime('%w', dates.date) as weekday,
+                strftime('%d/%m', dates.date) as formatted_date
+            FROM dates
+            LEFT JOIN problems ON date(problems.date) = dates.date
+            GROUP BY dates.date
+            ORDER BY dates.date`;
+
+        const monthlyQuery = `
+            WITH RECURSIVE months(month) AS (
+                SELECT strftime('%m', 'now') as month
+                UNION ALL
+                SELECT printf('%02d', CAST(month AS INTEGER) - 1)
+                FROM months
+                WHERE CAST(month AS INTEGER) > 1
+            )
+            SELECT 
+                months.month,
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+                    ${cityFilter}
+                    THEN problems.id 
+                END), 0) as count
+            FROM months
+            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
+            GROUP BY months.month
+            ORDER BY months.month`;
+
+        const [weeklyData, monthlyData] = await Promise.all([
+            queryDatabase(weeklyQuery, params),
+            queryDatabase(monthlyQuery, params)
+        ]);
+
+        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+        res.json({
+            weekly: {
+                labels: weeklyData.map(row => {
+                    return `${weekDays[row.weekday]} ${row.formatted_date}`;
+                }),
+                data: weeklyData.map(row => row.count)
+            },
+            monthly: {
+                labels: monthNames,
+                data: monthlyData.map(row => row.count)
+            }
+        });
+        
+    } catch (error) {
+        console.error('Erro ao buscar dados dos gráficos:', error);
+        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
+    }
+});
+
+// Update the getChartData endpoint
+server.get('/getChartData', async (req, res) => {
+    try {
+        const { city } = req.query;
+        const cityFilter = city ? 'AND problems.city = ?' : '';
+        const params = city ? [city] : [];
+        
+        // Get current week's workdays with proper date filter
+        const weeklyQuery = `
+            WITH RECURSIVE dates(date) AS (
+                SELECT date('now', 'weekday 0') as date
+                UNION ALL
+                SELECT date(date, '-1 day')
+                FROM dates
+                WHERE date > date('now', 'weekday 0', '-7 days')
+                AND strftime('%w', date) NOT IN ('0', '6')
+            )
+            SELECT 
+                dates.date,
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND date(problems.date) = dates.date 
+                    ${cityFilter}
+                    THEN problems.id 
+                END), 0) as count,
+                strftime('%w', dates.date) as weekday,
+                strftime('%d/%m', dates.date) as formatted_date
+            FROM dates
+            LEFT JOIN problems ON date(problems.date) = dates.date
+            AND date(problems.date) >= date('now', 'weekday 0')
+            AND date(problems.date) <= date('now')
+            GROUP BY dates.date
+            ORDER BY dates.date DESC
+            LIMIT 5`;
+
+        const monthlyQuery = `
+            WITH RECURSIVE months(month) AS (
+                SELECT strftime('%m', 'now') as month
+                UNION ALL
+                SELECT printf('%02d', CAST(month AS INTEGER) - 1)
+                FROM months
+                WHERE CAST(month AS INTEGER) > 1
+            )
+            SELECT 
+                months.month,
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+                    ${cityFilter}
+                    THEN problems.id 
+                END), 0) as count
+            FROM months
+            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
+            GROUP BY months.month
+            ORDER BY months.month`;
+
+        const [weeklyData, monthlyData] = await Promise.all([
+            queryDatabase(weeklyQuery, params),
+            queryDatabase(monthlyQuery, params)
+        ]);
+
+        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+        res.json({
+            weekly: {
+                labels: weeklyData.map(row => {
+                    return `${weekDays[row.weekday]} ${row.formatted_date}`;
+                }),
+                data: weeklyData.map(row => row.count)
+            },
+            monthly: {
+                labels: monthNames,
+                data: monthlyData.map(row => row.count)
+            }
+        });
+        
+    } catch (error) {
+        console.error('Erro ao buscar dados dos gráficos:', error);
+        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
+    }
+});
+
+// Adicionar ao módulo exports
+module.exports = {
+    startHydraBot,
+    redirectToWhatsAppChat,
+    server
+};
+
+// Update the getChartData endpoint
+server.get('/getChartData', async (req, res) => {
+    try {
+        const { city } = req.query;
+        const cityFilter = city ? 'AND city = ?' : '';
+        const params = city ? [city] : [];
+        
+        // Get current week's workdays
+        const weeklyQuery = `
+            WITH RECURSIVE dates(date) AS (
+                -- Começar da segunda-feira desta semana
+                SELECT date('now', 'weekday 1')
+                UNION ALL
+                SELECT date(date, '+1 day')
+                FROM dates
+                WHERE date < date('now')
+                AND strftime('%w', date) NOT IN ('0', '6')
+            )
+            SELECT 
+                dates.date,
+                COALESCE(COUNT(p.id), 0) as count,
+                strftime('%w', dates.date) as weekday,
+                strftime('%d/%m', dates.date) as formatted_date
+            FROM dates
+            LEFT JOIN (
+                SELECT id, date(date) as problem_date
+                FROM problems
+                WHERE description IS NOT NULL
+                ${cityFilter}
+                AND status != 'completed'
+                AND date >= date('now', 'weekday 1')
+                AND date <= date('now', 'localtime')
+            ) p ON dates.date = p.problem_date
+            GROUP BY dates.date
+            ORDER BY dates.date ASC`;
+
+        // Query para dados mensais (mantém a mesma lógica de filtro)
+        const monthlyQuery = `
+            WITH RECURSIVE months(month) AS (
+                SELECT '01' as month
+                UNION ALL
+                SELECT printf('%02d', CAST(month AS INTEGER) + 1)
+                FROM months
+                WHERE CAST(month AS INTEGER) < 12
+            )
+            SELECT 
+                months.month,
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+                    ${cityFilter}
+                    THEN problems.id 
+                END), 0) as count
+            FROM months
+            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
+            AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+            GROUP BY months.month
+            ORDER BY months.month`;
+
+        console.log('Executando query semanal:', weeklyQuery); // Debug
+
+        const [weeklyData, monthlyData] = await Promise.all([
+            queryDatabase(weeklyQuery, params),
+            queryDatabase(monthlyQuery, params)
+        ]);
+
+        console.log('Dados semanais:', weeklyData); // Debug
+
+        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+        
+        res.json({
+            weekly: {
+                labels: weeklyData.map(row => {
+                    return `${weekDays[row.weekday]} ${row.formatted_date}`;
+                }),
+                data: weeklyData.map(row => row.count)
+            },
+            monthly: {
+                labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                        'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+                data: monthlyData.map(row => row.count)
+            }
+        });
+        
+    } catch (error) {
+        console.error('Erro ao buscar dados dos gráficos:', error);
+        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
+    }
+});
+
 // ...existing code...
+
+server.get('/getChartData', async (req, res) => {
+    try {
+        const { city } = req.query;
+        const cityFilter = city ? 'AND problems.city = ?' : '';
+        const params = city ? [city] : [];
+        
+        // Query modificada para pegar dados da semana atual
+        const weeklyQuery = `
+            WITH RECURSIVE dates(date) AS (
+                SELECT date('now', 'weekday 1') as date
+                UNION ALL
+                SELECT date(date, '+1 day')
+                FROM dates
+                WHERE date <= date('now')
+                AND strftime('%w', date) BETWEEN '1' AND '5'
+            )
+            SELECT 
+                dates.date,
+                (
+                    SELECT COUNT(*)
+                    FROM problems
+                    WHERE date(problems.date) = dates.date
+                    AND problems.description IS NOT NULL
+                    ${cityFilter}
+                ) as count,
+                strftime('%w', dates.date) as weekday,
+                strftime('%d/%m', dates.date) as formatted_date
+            FROM dates
+            ORDER BY dates.date`;
+
+        console.log('Query SQL:', weeklyQuery); // Debug
+
+        // ...rest of monthly query remains the same...
+
+        const [weeklyData, monthlyData] = await Promise.all([
+            queryDatabase(weeklyQuery, params),
+            queryDatabase(monthlyQuery, params)
+        ]);
+
+        console.log('Dados semanais brutos:', weeklyData); // Debug
+
+        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+        
+        // Processar dados semanais
+        const processedWeeklyData = weeklyData.map(row => ({
+            label: `${weekDays[row.weekday]} ${row.formatted_date}`,
+            count: parseInt(row.count) || 0
+        }));
+
+        console.log('Dados processados:', processedWeeklyData); // Debug
+
+        res.json({
+            weekly: {
+                labels: processedWeeklyData.map(d => d.label),
+                data: processedWeeklyData.map(d => d.count)
+            },
+            monthly: {
+                labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                        'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+                data: monthlyData.map(row => row.count || 0)
+            }
+        });
+        
+    } catch (error) {
+        console.error('Erro ao buscar dados dos gráficos:', error);
+        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
+    }
+});

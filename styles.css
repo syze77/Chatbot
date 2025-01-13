@@ -1811,3 +1811,13 @@ body.dark-theme {
 .dark-theme .apply-filter-btn:hover {
     background-color: #1668cb;
 }
+
+@keyframes highlight {
+    0% { background-color: #fff; }
+    50% { background-color: #e3f2fd; }
+    100% { background-color: #fff; }
+}
+
+.updated {
+    animation: highlight 1s ease-in-out;
+}

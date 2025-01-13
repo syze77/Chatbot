@@ -1,3 +1,2 @@
-2024/12/30-12:21:41.146 4d78 Reusing MANIFEST C:\Users\thall\OneDrive\Área de Trabalho\whatsapp-electron-bot\token\session\Default\Sync Data\LevelDB/MANIFEST-000001
-2024/12/30-12:21:41.149 4d78 Recovering log #3
-2024/12/30-12:21:41.150 4d78 Reusing old log C:\Users\thall\OneDrive\Área de Trabalho\whatsapp-electron-bot\token\session\Default\Sync Data\LevelDB/000003.log 
+2025/01/13-11:53:11.605 2cc Creating DB C:\Users\thall\Chatbot\token\session\Default\Sync Data\LevelDB since it was missing.
+2025/01/13-11:53:11.621 2cc Reusing MANIFEST C:\Users\thall\Chatbot\token\session\Default\Sync Data\LevelDB/MANIFEST-000001
