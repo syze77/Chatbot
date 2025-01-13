@@ -367,8 +367,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             Sidebar.init();
             loadCities();
-            fetchDataAndUpdateCharts('');
-            setInterval(() => fetchDataAndUpdateCharts(document.getElementById('cityFilter').value), 300000);
+            fetchDataAndUpdateCharts(''); // Carrega dados iniciais sem filtro
+            
+            // Remover o setInterval que estava atualizando automaticamente
+            // setInterval(() => fetchDataAndUpdateCharts(document.getElementById('cityFilter').value), 300000);
             
             // Adicionar observer para mudanças no tema
             const observer = new MutationObserver((mutations) => {
@@ -803,9 +805,7 @@
                     cityFilter.appendChild(option);
                 });
 
-                cityFilter.addEventListener('change', () => {
-                    fetchDataAndUpdateCharts(cityFilter.value);
-                });
+                // Remover o evento de change que estava aqui
             } catch (error) {
                 console.error('Erro ao carregar cidades:', error);
             }
