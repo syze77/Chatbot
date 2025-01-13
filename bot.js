@@ -1302,7 +1302,7 @@ server.get('/getChartData', async (req, res) => {
             queryDatabase(monthlyQuery, params)
         ]);
 
-        const weekDays = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
         const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
