@@ -7,7 +7,7 @@ socket.on('connect', () => {
 socket.on('statusUpdate', (statusData) => {
     console.log('Status update received:', statusData); // Log status update
     updateUI(statusData);
-    fetchDataAndUpdateCharts(dailyProblemsChart, monthlyProblemsChart);
+    fetchDataAndUpdateCharts(document.getElementById('cityFilter')?.value || '');
 });
 
 socket.on('userProblem', (problemData) => {
@@ -513,12 +513,39 @@ async function createChatItem(user, status) {
 }
 
 // Fetch data from the SQLite database and update charts
-async function fetchDataAndUpdateCharts(dailyProblemsChart, monthlyProblemsChart) {
-    const response = await fetch('http://localhost:3000/getProblemsData');
-    const data = await response.json();
+async function fetchDataAndUpdateCharts(city = '') {
+    try {
+        const response = await fetch(`http://localhost:3000/getChartData?city=${encodeURIComponent(city)}`);
+        const data = await response.json();
+        
+        console.log('Dados recebidos:', data); // Debug log
 
-    updateDailyChart(data, dailyProblemsChart);
-    updateMonthlyChart(data, monthlyProblemsChart);
+        if (!data || !data.weekly || !data.monthly) {
+            console.error('Estrutura de dados inválida:', data);
+            return;
+        }
+
+        // Atualizar gráfico semanal
+        if (dailyProblemsChart) {
+            dailyProblemsChart.data.labels = data.weekly.labels;
+            dailyProblemsChart.data.datasets[0].data = data.weekly.data;
+            dailyProblemsChart.update('active');
+        } else {
+            console.error('Gráfico semanal não inicializado');
+        }
+
+        // Atualizar gráfico mensal
+        if (monthlyProblemsChart) {
+            monthlyProblemsChart.data.labels = data.monthly.labels;
+            monthlyProblemsChart.data.datasets[0].data = data.monthly.data;
+            monthlyProblemsChart.update('active');
+        } else {
+            console.error('Gráfico mensal não inicializado');
+        }
+
+    } catch (error) {
+        console.error('Erro ao buscar ou atualizar dados:', error);
+    }
 }
 
 // Improved dashboard charts
@@ -979,3 +1006,136 @@ function generateReport(startDate, endDate) {
         })
         .catch(error => console.error('Erro ao gerar relatório:', error));
 }
+
+// Adicionar função para validar dados do gráfico
+function validateChartData(data) {
+    console.log('Validando dados:', data);
+    if (!data) return false;
+    if (!Array.isArray(data.labels) || !Array.isArray(data.data)) return false;
+    if (data.labels.length !== data.data.length) return false;
+    if (data.data.some(item => typeof item !== 'number')) return false;
+    return true;
+}
+
+// Modificar a função updateChartData
+function updateChartData(weeklyData, monthlyData) {
+    console.log('Atualizando dados dos gráficos:', { weeklyData, monthlyData });
+
+    if (!validateChartData(weeklyData) || !validateChartData(monthlyData)) {
+        console.error('Dados inválidos para os gráficos');
+        return;
+    }
+
+    try {
+        // Atualizar gráfico semanal
+        dailyProblemsChart.data.labels = weeklyData.labels;
+        dailyProblemsChart.data.datasets[0].data = weeklyData.data;
+        dailyProblemsChart.update();
+
+        // Atualizar gráfico mensal
+        monthlyProblemsChart.data.labels = monthlyData.labels;
+        monthlyProblemsChart.data.datasets[0].data = monthlyData.data;
+        monthlyProblemsChart.update();
+
+        console.log('Gráficos atualizados com sucesso');
+    } catch (error) {
+        console.error('Erro ao atualizar gráficos:', error);
+    }
+}
+
+// Adicionar função para inicializar os gráficos
+function initializeCharts() {
+    console.log('Inicializando gráficos...');
+    
+    // Configuração comum para cores e estilos
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top',
+            }
+        }
+    };
+
+    // Inicializar gráfico semanal
+    const dailyCtx = document.getElementById('dailyProblemsChart');
+    if (dailyCtx) {
+        window.dailyProblemsChart = new Chart(dailyCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Problemas por Dia',
+                    data: [],
+                    backgroundColor: 'rgba(23, 162, 184, 0.2)',
+                    borderColor: 'rgba(23, 162, 184, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                ...commonOptions,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Inicializar gráfico mensal
+    const monthlyCtx = document.getElementById('monthlyProblemsChart');
+    if (monthlyCtx) {
+        window.monthlyProblemsChart = new Chart(monthlyCtx, {
+            type: 'pie',
+            data: {
+                labels: [],
+                datasets: [{
+                    data: [],
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(255, 206, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)',
+                        'rgba(153, 102, 255, 0.8)',
+                        'rgba(255, 159, 64, 0.8)'
+                    ]
+                }]
+            },
+            options: commonOptions
+        });
+    }
+
+    console.log('Gráficos inicializados');
+}
+
+// Modificar o evento DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM carregado, iniciando aplicação...');
+    
+    initializeCharts();
+    loadCities();
+    
+    // Carregar dados iniciais
+    fetchDataAndUpdateCharts('');
+    
+    // Configurar observer para tema
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.attributeName === 'class') {
+                updateChartsTheme();
+            }
+        });
+    });
+
+    observer.observe(document.body, {
+        attributes: true
+    });
+    
+    console.log('Aplicação iniciada');
+});

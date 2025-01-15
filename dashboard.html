@@ -269,7 +269,93 @@
         .format-icon i {
             font-size: 1.2em;
         }
+
+        /* Add these new styles for filters */
+        .filter-section {
+            transition: all 0.3s ease;
+        }
+
+        .form-label {
+            transition: color 0.3s ease;
+        }
+
+        .form-select {
+            transition: all 0.3s ease;
+            background-color: #fff;
+            color: #495057;
+            border: 1px solid #ced4da;
+        }
+
+        /* Dark theme styles */
+        body.dark-theme .form-label {
+            color: #e4e6ef;
+        }
+
+        body.dark-theme .form-select {
+            background-color: #2b2b2b;
+            color: #e4e6ef;
+            border-color: #444;
+        }
+
+        body.dark-theme .form-select:focus {
+            border-color: #17a2b8;
+            box-shadow: 0 0 0 0.2rem rgba(23, 162, 184, 0.25);
+        }
+
+        body.dark-theme .form-select option {
+            background-color: #2b2b2b;
+            color: #e4e6ef;
+        }
+
+        body.dark-theme .apply-filter-btn {
+            background-color: #17a2b8;
+            border-color: #17a2b8;
+        }
+
+        body.dark-theme .apply-filter-btn:hover {
+            background-color: #138496;
+            border-color: #117a8b;
+        }
+
+        /* Light theme hover and focus states */
+        .form-select:hover {
+            border-color: #80bdff;
+        }
+
+        .form-select:focus {
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+        /* Apply filter button states */
+        .apply-filter-btn {
+            transition: all 0.3s ease;
+        }
+
+        .apply-filter-btn:disabled {
+            opacity: 0.65;
+        }
+
+        /* Remove blue outline in dark theme */
+        body.dark-theme .btn-primary:focus,
+        body.dark-theme .apply-filter-btn:focus {
+            box-shadow: none;
+            outline: none;
+        }
+
+        body.dark-theme .btn-primary,
+        body.dark-theme .apply-filter-btn {
+            border: none;
+        }
+
+        /* Update hover state to maintain consistency */
+        body.dark-theme .btn-primary:hover,
+        body.dark-theme .apply-filter-btn:hover {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            border: none;
+        }
     </style>
+    <script src="js/charts.js"></script>
 </head>
 <body>
     <div id="sidebar-container"></div>
@@ -279,19 +365,29 @@
             <h2>Dashboard</h2>
         </div>
         
-        <!-- Add this new filter section -->
-        <div class="filter-section">
+        <!-- Atualizar a seção de filtros -->
+        <div class="filter-section mb-4">
             <div class="filter-container">
                 <div class="filter-group">
-                    <label for="cityFilter">Filtrar por Cidade:</label>
-                    <div class="filter-input-group">
-                        <select id="cityFilter" class="city-filter">
-                            <option value="">Todas as cidades</option>
-                        </select>
-                        <button class="apply-filter-btn" onclick="applyFilters()">
-                            <i class="fas fa-filter"></i>
-                            Aplicar Filtros
-                        </button>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="cityFilter" class="form-label">Cidade:</label>
+                            <select id="cityFilter" class="form-select">
+                                <option value="">Todas as cidades</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="schoolFilter" class="form-label">Escola:</label>
+                            <select id="schoolFilter" class="form-select">
+                                <option value="">Todas as escolas</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button class="btn btn-primary w-100 apply-filter-btn" onclick="applyFilters()">
+                                <i class="fas fa-filter"></i>
+                                Aplicar Filtros
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -366,17 +462,14 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             Sidebar.init();
+            Charts.init(); // Initialize charts
             loadCities();
-            fetchDataAndUpdateCharts(''); // Carrega dados iniciais sem filtro
+            fetchDataAndUpdateCharts('');
             
-            // Remover o setInterval que estava atualizando automaticamente
-            // setInterval(() => fetchDataAndUpdateCharts(document.getElementById('cityFilter').value), 300000);
-            
-            // Adicionar observer para mudanças no tema
             const observer = new MutationObserver((mutations) => {
                 mutations.forEach((mutation) => {
                     if (mutation.attributeName === 'class') {
-                        updateChartsTheme();
+                        Charts.updateTheme(document.body.classList.contains('dark-theme'));
                     }
                 });
             });
@@ -384,34 +477,28 @@
             observer.observe(document.body, {
                 attributes: true
             });
+
+            // Update city filter event listener
+            document.getElementById('cityFilter').addEventListener('change', async (e) => {
+                const city = e.target.value;
+                await loadSchools(city);
+                const filterBtn = document.querySelector('.apply-filter-btn');
+                filterBtn.innerHTML = '<i class="fas fa-filter"></i> Aplicar Filtros';
+                filterBtn.disabled = false;
+            });
+
+            // Add school filter event listener
+            document.getElementById('schoolFilter').addEventListener('change', () => {
+                const filterBtn = document.querySelector('.apply-filter-btn');
+                filterBtn.innerHTML = '<i class="fas fa-filter"></i> Aplicar Filtros';
+                filterBtn.disabled = false;
+            });
         });
 
-        function updateChartsTheme() {
-            const isDark = document.body.classList.contains('dark-theme');
-            
-            // Atualizar cores do gráfico diário
-            dailyProblemsChart.data.datasets[0].backgroundColor = isDark ? 
-                'rgba(45, 45, 45, 0.2)' : 'rgba(23, 162, 184, 0.2)';
-            dailyProblemsChart.data.datasets[0].borderColor = isDark ? 
-                'rgba(45, 45, 45, 1)' : 'rgba(23, 162, 184, 1)';
-            
-            // Atualizar cores dos textos
-            dailyProblemsChart.options.scales.y.ticks.color = isDark ? '#E4E6EF' : '#666';
-            dailyProblemsChart.options.scales.x.ticks.color = isDark ? '#E4E6EF' : '#666';
-            
-            // Atualizar legendas
-            dailyProblemsChart.options.plugins.legend.labels.color = isDark ? '#E4E6EF' : '#666';
-            monthlyProblemsChart.options.plugins.legend.labels.color = isDark ? '#E4E6EF' : '#666';
-            
-            // Atualizar os gráficos
-            dailyProblemsChart.update();
-            monthlyProblemsChart.update();
-        }
-
-        // Atualizar a função fetchDataAndUpdateCharts
-        async function fetchDataAndUpdateCharts(city = '') {
+        async function fetchDataAndUpdateCharts(city = '', school = '') {
             try {
-                const response = await fetch(`http://localhost:3000/getChartData?city=${city}`);
+                const params = new URLSearchParams({ city, school });
+                const response = await fetch(`http://localhost:3000/getChartData?${params}`);
                 const data = await response.json();
                 
                 if (!data || !data.weekly || !data.monthly) {
@@ -419,307 +506,11 @@
                     return;
                 }
 
-                // Atualizar os dados dos gráficos
-                updateChartData(data.weekly, data.monthly);
-                
-                // Atualizar o tema dos gráficos
-                updateChartsTheme();
+                Charts.updateData(data.weekly, data.monthly);
+                Charts.updateTheme(document.body.classList.contains('dark-theme'));
             } catch (error) {
                 console.error('Erro ao buscar dados dos gráficos:', error);
             }
-        }
-
-        // Initialize weekly problems chart
-        const dailyProblemsChartCtx = document.getElementById('dailyProblemsChart').getContext('2d');
-        const dailyProblemsChart = new Chart(dailyProblemsChartCtx, {
-            type: 'bar',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Problemas por Dia Útil',
-                    data: [],
-                    backgroundColor: 'rgba(23, 162, 184, 0.2)',
-                    borderColor: 'rgba(23, 162, 184, 1)',
-                    borderWidth: 2,
-                    borderRadius: 5,
-                    barThickness: 40
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            precision: 0,
-                            stepSize: 1,
-                            color: '#666',
-                            font: {
-                                weight: 'bold'
-                            }
-                        },
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.1)',
-                            drawBorder: false
-                        },
-                        title: {
-                            display: true,
-                            text: 'Quantidade de Problemas',
-                            color: '#666',
-                            font: {
-                                weight: 'bold'
-                            }
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            color: '#666',
-                            font: {
-                                weight: 'bold',
-                                size: 12
-                            },
-                            autoSkip: false,
-                            maxRotation: 0,
-                            minRotation: 0,
-                            padding: 10,
-                            callback: function(value, index) {
-                                const label = this.getLabelForValue(value);
-                                const [dia, data] = label.split(' ');
-                                return [dia, data]; // Retorna um array para criar duas linhas
-                            }
-                        },
-                        grid: {
-                            display: false,
-                            drawBorder: false
-                        },
-                        title: {
-                            display: true,
-                            text: 'Dias da Semana',
-                            color: '#666',
-                            font: {
-                                weight: 'bold'
-                            }
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            color: '#666',
-                            font: {
-                                size: 12,
-                                weight: 'bold'
-                            },
-                            padding: 20
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        titleFont: {
-                            size: 14,
-                            weight: 'bold'
-                        },
-                        bodyFont: {
-                            size: 13
-                        },
-                        padding: 15,
-                        callbacks: {
-                            title: function(context) {
-                                return context[0].label.replace(' ', '\n');
-                            },
-                            label: function(context) {
-                                const count = context.raw;
-                                return `Total: ${count} problema${count !== 1 ? 's' : ''}`;
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        // Initialize monthly problems chart
-        const monthlyProblemsChartCtx = document.getElementById('monthlyProblemsChart').getContext('2d');
-        const monthlyProblemsChart = new Chart(monthlyProblemsChartCtx, {
-            type: 'pie',
-            data: {
-                labels: [],
-                datasets: [{
-                    data: [],
-                    backgroundColor: [
-                        'rgba(255, 99, 132, 0.8)',
-                        'rgba(54, 162, 235, 0.8)',
-                        'rgba(255, 206, 86, 0.8)',
-                        'rgba(75, 192, 192, 0.8)',
-                        'rgba(153, 102, 255, 0.8)',
-                        'rgba(255, 159, 64, 0.8)',
-                        'rgba(255, 0, 0, 0.8)',
-                        'rgba(0, 255, 0, 0.8)',
-                        'rgba(0, 0, 255, 0.8)',
-                        'rgba(128, 0, 128, 0.8)',
-                        'rgba(0, 128, 128, 0.8)',
-                        'rgba(128, 128, 0, 0.8)'
-                    ],
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: {
-                    padding: {
-                        left: 10,
-                        right: 10,
-                        top: 10,
-                        bottom: 10
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'bottom',
-                        labels: {
-                            padding: 20,
-                            font: {
-                                size: 12
-                            }
-                        }
-                    },
-                    title: {
-                        display: false // Remove o título
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                const value = context.raw;
-                                const percentage = ((value / total) * 100).toFixed(1);
-                                return `${context.label}: ${value} (${percentage}%)`;
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        // Update chart data function
-        function updateChartData(weeklyData, monthlyData) {
-            console.log('Dados recebidos na função updateChartData:', { weeklyData, monthlyData }); // Debug
-
-            // Atualizar gráfico semanal
-            dailyProblemsChart.data.labels = weeklyData.labels;
-            dailyProblemsChart.data.datasets[0].data = weeklyData.data;
-
-            // Configurar formatação do eixo X
-            dailyProblemsChart.options.scales.x.ticks = {
-                color: document.body.classList.contains('dark-theme') ? '#E4E6EF' : '#666',
-                font: {
-                    weight: 'bold',
-                    size: 11
-                },
-                autoSkip: false,
-                maxRotation: 0,
-                minRotation: 0,
-                callback: function(value, index) {
-                    const label = this.getLabelForValue(value);
-                    if (!label) return '';
-                    const parts = label.split(' ');
-                    return parts; // Retorna array para criar quebra de linha
-                }
-            };
-
-            // Atualizar o tema baseado no modo atual
-            const isDark = document.body.classList.contains('dark-theme');
-            dailyProblemsChart.data.datasets[0].backgroundColor = isDark ? 
-                'rgba(255, 255, 255, 0.3)' : 'rgba(23, 162, 184, 0.2)';
-            dailyProblemsChart.data.datasets[0].borderColor = isDark ? 
-                'rgba(255, 255, 255, 0.8)' : 'rgba(23, 162, 184, 1)';
-
-            // Forçar atualização do gráfico
-            dailyProblemsChart.update();
-
-            // Atualizar gráfico mensal
-            monthlyProblemsChart.data.labels = monthlyData.labels;
-            monthlyProblemsChart.data.datasets[0].data = monthlyData.data;
-            monthlyProblemsChart.update();
-        }
-
-        // Substitua a função fetchDataAndUpdateCharts
-        async function fetchDataAndUpdateCharts(city = '') {
-            try {
-                const response = await fetch(`http://localhost:3000/getChartData?city=${city}`);
-                const data = await response.json();
-                
-                if (!data || !data.weekly || !data.monthly) {
-                    console.error('Dados inválidos recebidos:', data);
-                    return;
-                }
-
-                console.log('Dados recebidos:', data); // Debug
-
-                // Filtrar apenas os dias úteis (excluir sábado e domingo)
-                const workDays = data.weekly.labels.map((label, index) => ({
-                    label,
-                    count: data.weekly.data[index],
-                    isWorkDay: !['Sáb', 'Dom'].includes(label)
-                })).filter(day => day.isWorkDay);
-
-                // Atualizar gráfico semanal apenas com dias úteis
-                dailyProblemsChart.data.labels = workDays.map(day => day.label);
-                dailyProblemsChart.data.datasets[0].data = workDays.map(day => day.count);
-                dailyProblemsChart.update();
-
-                // Atualizar gráfico mensal
-                monthlyProblemsChart.data.labels = data.monthly.labels;
-                monthlyProblemsChart.data.datasets[0].data = data.monthly.data;
-                monthlyProblemsChart.update();
-            } catch (error) {
-                console.error('Erro ao buscar dados dos gráficos:', error);
-            }
-        }
-
-        // Process weekly data
-        function processWeeklyData(data) {
-            const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-            const today = new Date();
-            const labels = [];
-            const counts = new Array(7).fill(0);
-
-            // Get last 7 days
-            for (let i = 6; i >= 0; i--) {
-                const date = new Date(today);
-                date.setDate(date.getDate() - i);
-                labels.push(weekDays[date.getDay()]);
-            }
-
-            // Count problems per day
-            data.forEach(problem => {
-                const problemDate = new Date(problem.date);
-                const dayDiff = Math.floor((today - problemDate) / (1000 * 60 * 60 * 24));
-                if (dayDiff < 7) {
-                    counts[6 - dayDiff]++;
-                }
-            });
-
-            return { labels, data: counts };
-        }
-
-        // Process monthly data
-        function processMonthlyData(data) {
-            const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-            const counts = new Array(12).fill(0);
-            const currentYear = new Date().getFullYear();
-
-            data.forEach(problem => {
-                const problemDate = new Date(problem.date);
-                if (problemDate.getFullYear() === currentYear) {
-                    counts[problemDate.getMonth()]++;
-                }
-            });
-
-            return { labels: months, data: counts };
         }
 
         function toggleSidebar() {
@@ -735,10 +526,13 @@
             document.getElementById('reportOverlay').style.display = 'none';
         }
 
+        // Atualizar a função generateReport
         function generateReport() {
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
             const format = document.querySelector('input[name="reportFormat"]:checked').value;
+            const city = document.getElementById('cityFilter').value;
+            const school = document.getElementById('schoolFilter').value;
 
             if (!startDate || !endDate) {
                 alert('Por favor, selecione as datas de início e fim.');
@@ -753,8 +547,15 @@
                 return;
             }
 
-            // Use fetch API instead of window.open
-            fetch(`http://localhost:3000/generateReport?start=${startDate}&end=${endDate}&format=${format}`)
+            const params = new URLSearchParams({
+                start: startDate,
+                end: endDate,
+                format: format,
+                city: city,
+                school: school
+            });
+
+            fetch(`http://localhost:3000/generateReport?${params}`)
                 .then(response => response.blob())
                 .then(blob => {
                     const url = window.URL.createObjectURL(blob);
@@ -811,6 +612,28 @@
             }
         }
 
+        // Adicionar função para carregar escolas
+        async function loadSchools(city = '') {
+            try {
+                const url = city 
+                    ? `http://localhost:3000/getSchools?city=${encodeURIComponent(city)}`
+                    : 'http://localhost:3000/getSchools';
+                const response = await fetch(url);
+                const schools = await response.json();
+                const schoolFilter = document.getElementById('schoolFilter');
+                
+                schoolFilter.innerHTML = '<option value="">Todas as escolas</option>';
+                schools.forEach(school => {
+                    const option = document.createElement('option');
+                    option.value = school;
+                    option.textContent = school;
+                    schoolFilter.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Erro ao carregar escolas:', error);
+            }
+        }
+
         // Update notification handling
         function showNotification(title, message) {
             if (!('Notification' in window)) return;
@@ -832,71 +655,31 @@
             }
         }
 
-        // Update chart initialization for weekly data
-        function initWeeklyChart() {
-            const ctx = document.getElementById('dailyProblemsChart').getContext('2d');
-            return new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Problemas por Dia Útil',
-                        data: [],
-                        backgroundColor: document.body.classList.contains('dark-theme') 
-                            ? 'rgba(75, 192, 192, 0.2)'
-                            : 'rgba(54, 162, 235, 0.2)',
-                        borderColor: document.body.classList.contains('dark-theme')
-                            ? 'rgba(75, 192, 192, 1)'
-                            : 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1,
-                        borderRadius: 5
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                precision: 0,
-                                color: document.body.classList.contains('dark-theme') ? '#E4E6EF' : '#666'
-                            }
-                        },
-                        x: {
-                            ticks: {
-                                color: document.body.classList.contains('dark-theme') ? '#E4E6EF' : '#666'
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
         async function applyFilters() {
             const filterBtn = document.querySelector('.apply-filter-btn');
             const cityFilter = document.getElementById('cityFilter');
+            const schoolFilter = document.getElementById('schoolFilter');
             
-            // Desabilitar o botão e mostrar loading
             filterBtn.disabled = true;
             const originalText = filterBtn.innerHTML;
             filterBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Aplicando...';
             
             try {
-                // Buscar dados filtrados do servidor
-                const city = cityFilter.value;
-                const response = await fetch(`http://localhost:3000/getChartData?city=${encodeURIComponent(city)}`);
+                const params = new URLSearchParams({
+                    city: cityFilter.value,
+                    school: schoolFilter.value
+                });
+                
+                const response = await fetch(`http://localhost:3000/getChartData?${params}`);
                 const data = await response.json();
                 
                 if (!data || !data.weekly || !data.monthly) {
                     throw new Error('Dados inválidos recebidos');
                 }
 
-                // Atualizar os gráficos com os novos dados
-                updateChartData(data.weekly, data.monthly);
-                updateChartsTheme(); // Garantir que o tema está correto
+                Charts.updateData(data.weekly, data.monthly);
+                Charts.updateTheme(document.body.classList.contains('dark-theme'));
                 
-                // Feedback de sucesso
                 filterBtn.innerHTML = '<i class="fas fa-check"></i> Aplicado';
                 setTimeout(() => {
                     filterBtn.innerHTML = originalText;
@@ -930,7 +713,9 @@
         });
 
         // Add event listener for city filter changes
-        document.getElementById('cityFilter').addEventListener('change', () => {
+        document.getElementById('cityFilter').addEventListener('change', async (e) => {
+            const city = e.target.value;
+            await loadSchools(city);
             const filterBtn = document.querySelector('.apply-filter-btn');
             filterBtn.innerHTML = '<i class="fas fa-filter"></i> Aplicar Filtros';
             filterBtn.disabled = false;
@@ -939,6 +724,7 @@
         function applyFilters() {
             const filterBtn = document.querySelector('.apply-filter-btn');
             const cityFilter = document.getElementById('cityFilter');
+            const schoolFilter = document.getElementById('schoolFilter');
             
             // Disable button while processing
             filterBtn.disabled = true;
