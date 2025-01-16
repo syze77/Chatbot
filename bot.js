@@ -113,22 +113,30 @@ async function startHydraBot(io) {
       try {
         const { chatId, id } = data;
 
-        // Update chat status to completed
+        // Update chat status to completed in database
         await getDatabase().run(
           `UPDATE problems 
            SET status = 'completed', 
                date_completed = DATETIME('now')
-           WHERE chatId = ? AND (id = ? OR status = 'pending')`, // Also update pending problems
+           WHERE chatId = ? AND (id = ? OR status = 'active' OR status = 'pending')`,
           [chatId, id]
         );
 
-        // Send message to user
+        // Send completion message to user
         if (botConnection) {
           await sendMessage(
             botConnection,
             chatId,
-            'Atendimento finalizado. Obrigado por utilizar nosso suporte!'
+            'Atendimento finalizado. Se precisar de mais algum atendimento, envie suas informações novamente no formato:'
           );
+          await sendMessage(
+            botConnection,
+            chatId,
+            `Nome:\nCidade:\nCargo:\nEscola:`
+          );
+
+          // Reset user topic to allow new service
+          delete userCurrentTopic[chatId];
         }
 
         // Process next user in queue
@@ -147,11 +155,9 @@ async function startHydraBot(io) {
           await sendProblemOptions(botConnection, nextInLine.chatId);
         }
 
-        // Update waiting users
+        // Update waiting users and status
         await updateWaitingUsers(io);
-
-        // Send status update to all clients
-        sendStatusUpdateToMainProcess(io);
+        await sendStatusUpdateToMainProcess(io);
 
       } catch (error) {
         console.error('Erro ao finalizar atendimento:', error);
