@@ -1,45 +1,5 @@
 const weekDays = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-function getLastFiveWorkdays() {
-    const dates = [];
-    let currentDate = new Date();
-    
-    while (dates.length < 5) {
-        const dayOfWeek = currentDate.getDay();
-        // Check if it's not weekend (0 = Sunday, 6 = Saturday)
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-            dates.unshift({
-                date: new Date(currentDate),
-                label: `${weekDays[dayOfWeek]} ${currentDate.getDate()}/${currentDate.getMonth() + 1}`
-            });
-        }
-        currentDate.setDate(currentDate.getDate() - 1);
-    }
-    return dates;
-}
-
-function formatDate(date) {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    return `${day}/${month}`;
-}
-
-function getWorkdaysInRange(startDate, endDate) {
-    const days = [];
-    const currentDate = new Date(startDate);
-    
-    while (currentDate <= endDate) {
-        const dayOfWeek = currentDate.getDay();
-        if (dayOfWeek > 0 && dayOfWeek < 6) { // Mon-Fri only
-            days.push({
-                date: new Date(currentDate),
-                label: `${weekDays[dayOfWeek - 1]} ${formatDate(currentDate)}`
-            });
-        }
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
-    return days;
-}
 
 let dailyProblemsChart;
 let monthlyProblemsChart;
@@ -49,6 +9,22 @@ function initCharts() {
     initMonthlyChart();
 }
 
+function generateDatasetColors(count) {
+    const baseColors = [
+        { bg: 'rgba(54, 162, 235, 0.5)', border: 'rgba(54, 162, 235, 1)' },
+        { bg: 'rgba(255, 99, 132, 0.5)', border: 'rgba(255, 99, 132, 1)' },
+        { bg: 'rgba(75, 192, 192, 0.5)', border: 'rgba(75, 192, 192, 1)' },
+        { bg: 'rgba(255, 206, 86, 0.5)', border: 'rgba(255, 206, 86, 1)' },
+        { bg: 'rgba(153, 102, 255, 0.5)', border: 'rgba(153, 102, 255, 1)' }
+    ];
+    
+    const colors = [];
+    for (let i = 0; i < count; i++) {
+        colors.push(baseColors[i % baseColors.length]);
+    }
+    return colors;
+}
+
 function initDailyChart() {
     const ctx = document.getElementById('dailyProblemsChart').getContext('2d');
     dailyProblemsChart = new Chart(ctx, {
@@ -56,10 +32,10 @@ function initDailyChart() {
         data: {
             labels: [],
             datasets: [{
-                label: 'Problemas por Dia',
+                label: 'Problemas',
                 data: [],
-                backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(75, 192, 192, 0.6)', 
+                borderColor: 'rgba(75, 192, 192, 1)',
                 borderWidth: 1,
                 borderRadius: 5,
                 maxBarThickness: 50
@@ -73,7 +49,19 @@ function initDailyChart() {
                     beginAtZero: true,
                     ticks: {
                         stepSize: 1,
-                        precision: 0
+                        precision: 0,
+                        color: '#E4E6EF' // Cor do texto no eixo Y para dark theme
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)' // Grade mais visível no dark theme
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: '#E4E6EF' // Cor do texto no eixo X para dark theme
+                    },
+                    grid: {
+                        display: false
                     }
                 }
             },
@@ -82,6 +70,7 @@ function initDailyChart() {
                     display: false
                 },
                 tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
                     callbacks: {
                         label: function(context) {
                             const value = context.parsed.y;
@@ -131,42 +120,48 @@ function initMonthlyChart() {
 }
 
 function updateChartData(weeklyData, monthlyData) {
-    if (weeklyData && Array.isArray(weeklyData.labels) && Array.isArray(weeklyData.data)) {
-        // Garantir que os dados estejam em ordem cronológica
-        const labels = [...weeklyData.labels];
-        const data = [...weeklyData.data];
+    if (weeklyData) {
+        // Ensure we're only showing workdays (Monday to Friday)
+        const filteredData = {
+            labels: weeklyData.labels.filter((_, index) => {
+                const dayLabel = weeklyData.labels[index].split(' ')[0];
+                return !['DOM', 'SAB'].includes(dayLabel);
+            }),
+            data: weeklyData.data.filter((_, index) => {
+                const dayLabel = weeklyData.labels[index].split(' ')[0];
+                return !['DOM', 'SAB'].includes(dayLabel);
+            })
+        };
 
-        // Mapear os labels para o formato correto
-        dailyProblemsChart.data.labels = labels.map(label => label.split('|').reverse().join(' '));
-        dailyProblemsChart.data.datasets[0].data = data;
-        dailyProblemsChart.update();
+        // Update chart with filtered data
+        dailyProblemsChart.data.labels = filteredData.labels;
+        dailyProblemsChart.data.datasets[0].data = filteredData.data;
+        dailyProblemsChart.update('none');
 
-        console.log('Dados processados:', {
-            labels: dailyProblemsChart.data.labels,
-            data: dailyProblemsChart.data.datasets[0].data
-        });
+        console.log('Filtered chart data:', filteredData);
     }
 
-    // Update monthly chart
-    if (monthlyData && monthlyData.labels && monthlyData.data) {
+    if (monthlyData) {
         monthlyProblemsChart.data.labels = monthlyData.labels;
         monthlyProblemsChart.data.datasets[0].data = monthlyData.data;
-        monthlyProblemsChart.update();
+        monthlyProblemsChart.update('none');
     }
 }
 
 function updateChartsTheme(isDark) {
     const chartColor = isDark ? 
-        { bg: 'rgba(45, 45, 45, 0.2)', border: 'rgba(45, 45, 45, 1)' } : 
-        { bg: 'rgba(23, 162, 184, 0.2)', border: 'rgba(23, 162, 184, 1)' };
+        { bg: 'rgba(75, 192, 192, 0.6)', border: 'rgba(75, 192, 192, 1)' } : 
+        { bg: 'rgba(54, 162, 235, 0.5)', border: 'rgba(54, 162, 235, 1)' };
     
     const textColor = isDark ? '#E4E6EF' : '#666';
+    const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
 
     // Update daily chart
     dailyProblemsChart.data.datasets[0].backgroundColor = chartColor.bg;
     dailyProblemsChart.data.datasets[0].borderColor = chartColor.border;
     dailyProblemsChart.options.scales.y.ticks.color = textColor;
     dailyProblemsChart.options.scales.x.ticks.color = textColor;
+    dailyProblemsChart.options.scales.y.grid.color = gridColor;
     
     // Update monthly chart
     monthlyProblemsChart.options.plugins.legend.labels.color = textColor;

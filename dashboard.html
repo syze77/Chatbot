@@ -286,7 +286,6 @@
             border: 1px solid #ced4da;
         }
 
-        /* Dark theme styles */
         body.dark-theme .form-label {
             color: #e4e6ef;
         }
@@ -317,26 +316,6 @@
             border-color: #117a8b;
         }
 
-        /* Light theme hover and focus states */
-        .form-select:hover {
-            border-color: #80bdff;
-        }
-
-        .form-select:focus {
-            border-color: #80bdff;
-            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-        }
-
-        /* Apply filter button states */
-        .apply-filter-btn {
-            transition: all 0.3s ease;
-        }
-
-        .apply-filter-btn:disabled {
-            opacity: 0.65;
-        }
-
-        /* Remove blue outline in dark theme */
         body.dark-theme .btn-primary:focus,
         body.dark-theme .apply-filter-btn:focus {
             box-shadow: none;
@@ -348,11 +327,49 @@
             border: none;
         }
 
-        /* Update hover state to maintain consistency */
         body.dark-theme .btn-primary:hover,
         body.dark-theme .apply-filter-btn:hover {
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
             border: none;
+        }
+
+        .form-select:hover, .apply-filter-btn:hover {
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+        .apply-filter-btn {
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+
+        .apply-filter-btn:hover {
+            border-color: #80bdff;
+            background-color: #138496;
+        }
+
+        .apply-filter-btn {
+            transition: all 0.3s ease;
+            border: 1px solid #ced4da;
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .apply-filter-btn:hover {
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+            background-color: #138496;
+        }
+
+        .form-select, .apply-filter-btn {
+            border: 1px solid #ced4da;
+            transition: all 0.3s ease;
+        }
+
+        .form-select:hover, .form-select:focus, 
+        .apply-filter-btn:hover, .apply-filter-btn:focus {
+            border-color: #80bdff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
         }
     </style>
     <script src="js/charts.js"></script>
@@ -671,8 +688,9 @@
                 });
                 
                 const response = await fetch(`http://localhost:3000/getChartData?${params}`);
-                const data = await response.json();
+                if (!response.ok) throw new Error('Erro na resposta do servidor');
                 
+                const data = await response.json();
                 if (!data || !data.weekly || !data.monthly) {
                     throw new Error('Dados inválidos recebidos');
                 }
@@ -697,7 +715,7 @@
 
         // Atualizar o manipulador de eventos do filtro
         document.addEventListener('DOMContentLoaded', () => {
-            // ...existing initialization code...
+        
 
             // Adicionar listener para o select de cidades
             const cityFilter = document.getElementById('cityFilter');

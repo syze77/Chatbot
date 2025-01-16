@@ -309,12 +309,22 @@ async function getWaitingPosition(chatId) {
 async function handleUserMessage(conn, chatId, messageText, io) {
     const currentTopic = userCurrentTopic[chatId];
     
-    if (!currentTopic) {
-        await sendMessage(conn, chatId, defaultMessage);
-        // Adicionar uma pequena pausa entre as mensagens
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        // Enviar o template de preenchimento
-        await sendMessage(conn, chatId, `Nome:\nCidade:\nCargo:\nEscola:`);
+    // Se não há tópico atual ou se uma nova mensagem começa com "nome:"
+    if (!currentTopic || messageText.toLowerCase().startsWith('nome:')) {
+        if (messageText.toLowerCase().startsWith('nome:')) {
+            const userInfo = parseUserInfo(messageText);
+            if (userInfo) {
+                await handleNewUser(conn, chatId, userInfo, io);
+            } else {
+                await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
+            }
+        } else {
+            await sendMessage(conn, chatId, defaultMessage);
+            // Adicionar uma pequena pausa entre as mensagens
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Enviar o template de preenchimento
+            await sendMessage(conn, chatId, `Nome:\nCidade:\nCargo:\nEscola:`);
+        }
         return;
     }
 
@@ -547,28 +557,35 @@ Digite 'voltar' para retornar ao menu anterior.`
 
 // Handle sub-problem selection
 async function handleSubProblemSelection(conn, chatId, messageText, io) {
-    if (messageText === 'voltar') {
-        userCurrentTopic[chatId] = 'problema';
-        await sendProblemOptions(conn, chatId);
-        return;
-    }
+    try {
+        if (messageText === 'voltar') {
+            userCurrentTopic[chatId] = 'problema';
+            await sendProblemOptions(conn, chatId);
+            return;
+        }
 
-    const mainProblem = userCurrentTopic[chatId].problem;
-    const subProblemText = getSubProblemText(mainProblem, messageText);
-    const videoUrl = getVideoUrlForSubProblem(messageText);
+        const mainProblem = userCurrentTopic[chatId].problem;
+        const subProblemText = getSubProblemText(mainProblem, messageText);
+        const videoUrl = getVideoUrlForSubProblem(messageText);
 
-    // Buscar informações do usuário
-    getDatabase().get('SELECT name, city, position, school FROM problems WHERE chatId = ?', [chatId], 
-        async (err, userInfo) => {
-            if (err) {
-                console.error('Erro ao buscar informações do usuário:', err);
-                return;
-            }
+        // Buscar informações do usuário
+        const userInfo = await new Promise((resolve, reject) => {
+            getDatabase().get(
+                'SELECT name, city, position, school FROM problems WHERE chatId = ?', 
+                [chatId], 
+                (err, row) => {
+                    if (err) reject(err);
+                    else if (!row) reject(new Error('Usuário não encontrado'));
+                    else resolve(row);
+                }
+            );
+        });
 
-            // Criar novo registro de problema
-            const problemDescription = `${mainProblem} - ${subProblemText}`;
-            const date = new Date().toISOString();
+        // Criar novo registro de problema
+        const problemDescription = `${mainProblem} - ${subProblemText}`;
+        const date = new Date().toISOString();
 
+        await new Promise((resolve, reject) => {
             getDatabase().run(
                 `INSERT INTO problems 
                 (chatId, name, city, position, school, description, status, date) 
@@ -583,23 +600,26 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
                     'pending',
                     date
                 ],
-                async function(err) {
-                    if (err) {
-                        console.error('Erro ao salvar problema:', err);
-                        return;
-                    }
-
-                    await sendMessage(conn, chatId, `Aqui está um vídeo que pode ajudar a resolver seu problema: ${videoUrl}`);
-                    await sendMessage(conn, chatId, 'O vídeo foi suficiente para resolver seu problema? (sim/não)');
-                    userCurrentTopic[chatId] = 'videoFeedback';
-
-                    // Emitir evento com o novo problema
-                    io.emit('userProblem', problemDescription, chatId, userInfo.name);
-                    sendStatusUpdateToMainProcess(io);
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
                 }
             );
-        }
-    );
+        });
+
+        await sendMessage(conn, chatId, `Aqui está um vídeo que pode ajudar a resolver seu problema: ${videoUrl}`);
+        await sendMessage(conn, chatId, 'O vídeo foi suficiente para resolver seu problema? (sim/não)');
+        userCurrentTopic[chatId] = 'videoFeedback';
+
+        // Emitir evento com o novo problema
+        io.emit('userProblem', problemDescription, chatId, userInfo.name);
+        await sendStatusUpdateToMainProcess(io);
+
+    } catch (error) {
+        console.error('Erro em handleSubProblemSelection:', error);
+        await sendMessage(conn, chatId, 'Ocorreu um erro ao processar sua solicitação. Por favor, tente novamente.');
+        userCurrentTopic[chatId] = 'problema';
+    }
 }
 
 // Get sub-problem text
@@ -642,11 +662,13 @@ function getVideoUrlForSubProblem(subProblem) {
 // Handle video feedback
 async function handleVideoFeedback(conn, chatId, messageText, io) {
     try {
-        if (messageText === 'sim') {
-            await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais alguma coisa, estamos à disposição.');
-            userCurrentTopic[chatId] = 'problema';
+        if (messageText.toLowerCase() === 'sim') {
+            await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais algum atendimento, envie suas informações novamente no formato:');
+            await sendMessage(conn, chatId, `Nome:\nCidade:\nCargo:\nEscola:`);
+            // Resetar o tópico para permitir novo atendimento
+            delete userCurrentTopic[chatId];
             await closeChat(chatId, io);
-        } else if (messageText === 'não') {
+        } else if (messageText.toLowerCase() === 'não') {
             await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
             userCurrentTopic[chatId] = {
                 state: 'descricaoProblema',
@@ -662,45 +684,50 @@ async function handleVideoFeedback(conn, chatId, messageText, io) {
 
 // Handle problem description
 async function handleProblemDescription(conn, chatId, messageText, io) {
-    const currentTopic = userCurrentTopic[chatId];
-    const isFromVideoFeedback = currentTopic && 
-                               currentTopic.state === 'descricaoProblema' && 
-                               currentTopic.previousState === 'videoFeedback';
+    try {
+        const currentTopic = userCurrentTopic[chatId];
+        const isFromVideoFeedback = currentTopic && 
+                                   currentTopic.state === 'descricaoProblema' && 
+                                   currentTopic.previousState === 'videoFeedback';
 
-    // Buscar o problema mais recente do usuário
-    getDatabase().get(
-        `SELECT id, name, city, position, school FROM problems 
-         WHERE chatId = ? AND status = 'pending' 
-         ORDER BY date DESC LIMIT 1`,
-        [chatId],
-        async (err, userInfo) => {
-            if (err) {
-                console.error('Erro ao buscar informações do usuário:', err);
-                return;
-            }
+        // Buscar o problema mais recente do usuário
+        const userInfo = await new Promise((resolve, reject) => {
+            getDatabase().get(
+                `SELECT id, name, city, position, school FROM problems 
+                 WHERE chatId = ? AND status = 'pending' 
+                 ORDER BY date DESC LIMIT 1`,
+                [chatId],
+                (err, row) => {
+                    if (err) reject(err);
+                    else if (!row) reject(new Error('Usuário não encontrado'));
+                    else resolve(row);
+                }
+            );
+        });
 
-            if (isFromVideoFeedback && userInfo) {
-                // Atualizar o problema existente
+        if (isFromVideoFeedback && userInfo) {
+            // Atualizar o problema existente
+            await new Promise((resolve, reject) => {
                 getDatabase().run(
                     `UPDATE problems 
                      SET description = ?, 
                          date = ?
                      WHERE id = ?`,
                     [messageText, new Date().toISOString(), userInfo.id],
-                    async function(err) {
-                        if (err) {
-                            console.error('Erro ao atualizar problema:', err);
-                            return;
-                        }
-
-                        io.emit('userProblem', messageText, chatId, userInfo.name);
-                        await sendMessage(conn, chatId, 'Problema atualizado. Um atendente entrará em contato em breve.');
-                        sendStatusUpdateToMainProcess(io);
+                    function(err) {
+                        if (err) reject(err);
+                        else resolve();
                     }
                 );
-            } else {
-                // Criar novo registro de problema
-                const date = new Date().toISOString();
+            });
+
+            io.emit('userProblem', messageText, chatId, userInfo.name);
+            await sendMessage(conn, chatId, 'Problema atualizado. Um atendente entrará em contato em breve.');
+            await sendStatusUpdateToMainProcess(io);
+        } else {
+            // Criar novo registro de problema
+            const date = new Date().toISOString();
+            await new Promise((resolve, reject) => {
                 getDatabase().run(
                     `INSERT INTO problems 
                     (chatId, name, city, position, school, description, status, date) 
@@ -715,20 +742,22 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
                         'pending',
                         date
                     ],
-                    async function(err) {
-                        if (err) {
-                            console.error('Erro ao salvar problema:', err);
-                            return;
-                        }
-
-                        io.emit('userProblem', messageText, chatId, userInfo.name);
-                        await sendMessage(conn, chatId, 'Problema registrado. Um atendente entrará em contato em breve.');
-                        sendStatusUpdateToMainProcess(io);
+                    function(err) {
+                        if (err) reject(err);
+                        else resolve(this.lastID);
                     }
                 );
-            }
+            });
+
+            io.emit('userProblem', messageText, chatId, userInfo.name);
+            await sendMessage(conn, chatId, 'Problema registrado. Um atendente entrará em contato em breve.');
+            await sendStatusUpdateToMainProcess(io);
         }
-    );
+    } catch (error) {
+        console.error('Erro em handleProblemDescription:', error);
+        await sendMessage(conn, chatId, 'Ocorreu um erro ao processar sua solicitação. Por favor, tente novamente.');
+        userCurrentTopic[chatId] = 'problema';
+    }
 }
 
 // Save client information to the database
@@ -1247,732 +1276,7 @@ server.get('/getCities', async (req, res) => {
     }
 });
 
-// Remove todas as outras definições de getChartData e manter apenas esta
-server.get('/getChartData', async (req, res) => {
-    try {
-        const { city } = req.query;
-        const cityFilter = city ? 'AND problems.city = ?' : '';
-        const params = city ? [city] : [];
-        
-        // Get current week's workdays (Segunda a Sexta)
-        const weeklyQuery = `
-            WITH RECURSIVE dates(date) AS (
-                -- Get Monday of current week
-                SELECT date('now', 'weekday 1', '-7 days')
-                UNION ALL
-                SELECT date(date, '+1 day')
-                FROM dates
-                WHERE date < date('now')
-                AND strftime('%w', date) NOT IN ('0', '6')
-                LIMIT 5
-            )
-            SELECT 
-                dates.date,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND date(problems.date) = dates.date 
-                    ${cityFilter}
-                    THEN problems.id 
-                END), 0) as count
-            FROM dates
-            LEFT JOIN problems ON date(problems.date) = dates.date
-            GROUP BY dates.date
-            ORDER BY dates.date`;
-
-        // Get monthly data for current year
-        const monthlyQuery = `
-            WITH RECURSIVE months(month) AS (
-                SELECT '01' as month
-                UNION ALL
-                SELECT printf('%02d', CAST(month AS INTEGER) + 1)
-                FROM months
-                WHERE CAST(month AS INTEGER) < 12
-            )
-            SELECT 
-                months.month,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
-                    ${cityFilter}
-                    THEN problems.id 
-                END), 0) as count
-            FROM months
-            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-            GROUP BY months.month
-            ORDER BY months.month`;
-
-        const [weeklyData, monthlyData] = await Promise.all([
-            queryDatabase(weeklyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        res.json({
-            weekly: {
-                labels: weeklyData.map(row => {
-                    return `${weekDays[row.weekday]} ${row.formatted_date}`;
-                }),
-                data: weeklyData.map(row => row.count)
-            },
-            monthly: {
-                labels: monthNames,
-                data: monthlyData.map(row => row.count)
-            }
-        });
-        
-    } catch (error) {
-        console.error('Erro ao buscar dados dos gráficos:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
-    }
-});
-
-// Adicionar ao módulo exports
-module.exports = {
-    startHydraBot,
-    redirectToWhatsAppChat,
-    server
-};
-
-// Update the generateReport endpoint
-server.get('/generateReport', async (req, res) => {
-    try {
-        const { start, end } = req.query;
-        
-        // Criar consulta SQL com formatação de data adequada
-        const query = `
-            SELECT 
-                problems.*,
-                strftime('%d/%m/%Y %H:%M', datetime(date, 'localtime')) as formatted_date,
-                strftime('%d/%m/%Y %H:%M', datetime(date_completed, 'localtime')) as formatted_date_completed,
-                CAST((julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER) as duration_minutes
-            FROM problems 
-            WHERE date BETWEEN ? AND ?
-            AND description IS NOT NULL
-            ORDER BY date DESC
-        `;
-
-        const problems = await new Promise((resolve, reject) => {
-            getDatabase().all(query, [start, end], (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-        });
-
-        // Criar o PDF
-        const doc = new PDFDocument({
-            size: 'A4',
-            margin: 50
-        });
-
-        // Configurar cabeçalho do response
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.pdf`);
-
-        // Pipe o PDF para o response
-        doc.pipe(res);
-
-        // Adicionar título
-        doc.fontSize(20)
-           .text('Relatório de Atendimentos', { align: 'center' })
-           .moveDown(2);
-
-        // Adicionar período do relatório
-        doc.fontSize(12)
-           .text(`Período: ${new Date(start).toLocaleDateString()} a ${new Date(end).toLocaleDateString()}`)
-           .moveDown();
-
-        // Estatísticas gerais
-        const totalAtendimentos = problems.length;
-        const concluidos = problems.filter(p => p.status === 'completed').length;
-        const tempoMedioMinutos = Math.round(
-            problems.reduce((acc, p) => acc + (p.duration_minutes || 0), 0) / concluidos
-        );
-
-        doc.fontSize(14)
-           .text('Estatísticas Gerais', { underline: true })
-           .moveDown()
-           .fontSize(12)
-           .text(`Total de Atendimentos: ${totalAtendimentos}`)
-           .text(`Atendimentos Concluídos: ${concluidos}`)
-           .text(`Tempo Médio de Atendimento: ${Math.floor(tempoMedioMinutos/60)}h ${tempoMedioMinutos%60}min`)
-           .moveDown(2);
-
-        // Problemas mais comuns
-        const problemTypes = problems.reduce((acc, p) => {
-            acc[p.description] = (acc[p.description] || 0) + 1;
-            return acc;
-        }, {});
-
-        const topProblems = Object.entries(problemTypes)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 5);
-
-        doc.fontSize(14)
-           .text('Problemas Mais Frequentes', { underline: true })
-           .moveDown()
-           .fontSize(12);
-
-        topProblems.forEach(([problem, count], index) => {
-            doc.text(`${index + 1}. ${problem} (${count} ocorrências)`);
-        });
-        doc.moveDown(2);
-
-        // Lista detalhada de atendimentos
-        doc.fontSize(14)
-           .text('Detalhamento dos Atendimentos', { underline: true })
-           .moveDown();
-
-        problems.forEach((problem, index) => {
-            const duracao = problem.duration_minutes
-                ? `${Math.floor(problem.duration_minutes/60)}h ${problem.duration_minutes%60}min`
-                : 'Em andamento';
-
-            doc.fontSize(12)
-               .text(`Atendimento ${index + 1}`, { underline: true })
-               .text(`Usuário: ${problem.name}`)
-               .text(`Cargo: ${problem.position}`)
-               .text(`Escola: ${problem.school}`)
-               .text(`Início: ${problem.formatted_date}`)
-               .text(`Conclusão: ${problem.formatted_date_completed || 'Não concluído'}`)
-               .text(`Duração: ${duracao}`)
-               .text(`Problema: ${problem.description}`)
-               .text(`Status: ${problem.status === 'completed' ? 'Concluído' : 'Em andamento'}`)
-               .moveDown();
-        });
-
-        // Finalizar o PDF
-        doc.end();
-
-    } catch (error) {
-        console.error('Erro ao gerar relatório:', error);
-        res.status(500).json({ error: 'Erro ao gerar relatório' });
-    }
-});
-
-// Update the getChartData endpoint
-server.get('/getChartData', async (req, res) => {
-    try {
-        const { city } = req.query;
-        const cityFilter = city ? 'AND problems.city = ?' : '';
-        const params = city ? [city] : [];
-        
-        // Get current week's workdays
-        const weeklyQuery = `
-            WITH RECURSIVE dates(date) AS (
-                -- Get Monday of current week
-                SELECT date('now', 'weekday 1')
-                UNION ALL
-                SELECT date(date, '+1 day')
-                FROM dates
-                WHERE date <= date('now')
-                AND strftime('%w', date) NOT IN ('0', '6')
-                LIMIT 5
-            )
-            SELECT 
-                dates.date,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND date(problems.date) = dates.date 
-                    ${cityFilter}
-                    THEN problems.id 
-                END), 0) as count,
-                strftime('%w', dates.date) as weekday,
-                strftime('%d/%m', dates.date) as formatted_date
-            FROM dates
-            LEFT JOIN problems ON date(problems.date) = dates.date
-            GROUP BY dates.date
-            ORDER BY dates.date`;
-
-        const monthlyQuery = `
-            WITH RECURSIVE months(month) AS (
-                SELECT strftime('%m', 'now') as month
-                UNION ALL
-                SELECT printf('%02d', CAST(month AS INTEGER) - 1)
-                FROM months
-                WHERE CAST(month AS INTEGER) > 1
-            )
-            SELECT 
-                months.month,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
-                    ${cityFilter}
-                    THEN problems.id 
-                END), 0) as count
-            FROM months
-            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-            GROUP BY months.month
-            ORDER BY months.month`;
-
-        const [weeklyData, monthlyData] = await Promise.all([
-            queryDatabase(weeklyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        res.json({
-            weekly: {
-                labels: weeklyData.map(row => {
-                    return `${weekDays[row.weekday]} ${row.formatted_date}`;
-                }),
-                data: weeklyData.map(row => row.count)
-            },
-            monthly: {
-                labels: monthNames,
-                data: monthlyData.map(row => row.count)
-            }
-        });
-        
-    } catch (error) {
-        console.error('Erro ao buscar dados dos gráficos:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
-    }
-});
-
-// Update the getChartData endpoint
-server.get('/getChartData', async (req, res) => {
-    try {
-        const { city } = req.query;
-        const cityFilter = city ? 'AND problems.city = ?' : '';
-        const params = city ? [city] : [];
-        
-        // Get current week's workdays with proper date filter
-        const weeklyQuery = `
-            WITH RECURSIVE dates(date) AS (
-                SELECT date('now', 'weekday 0') as date
-                UNION ALL
-                SELECT date(date, '-1 day')
-                FROM dates
-                WHERE date > date('now', 'weekday 0', '-7 days')
-                AND strftime('%w', date) NOT IN ('0', '6')
-            )
-            SELECT 
-                dates.date,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND date(problems.date) = dates.date 
-                    ${cityFilter}
-                    THEN problems.id 
-                END), 0) as count,
-                strftime('%w', dates.date) as weekday,
-                strftime('%d/%m', dates.date) as formatted_date
-            FROM dates
-            LEFT JOIN problems ON date(problems.date) = dates.date
-            AND date(problems.date) >= date('now', 'weekday 0')
-            AND date(problems.date) <= date('now')
-            GROUP BY dates.date
-            ORDER BY dates.date DESC
-            LIMIT 5`;
-
-        const monthlyQuery = `
-            WITH RECURSIVE months(month) AS (
-                SELECT strftime('%m', 'now') as month
-                UNION ALL
-                SELECT printf('%02d', CAST(month AS INTEGER) - 1)
-                FROM months
-                WHERE CAST(month AS INTEGER) > 1
-            )
-            SELECT 
-                months.month,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
-                    ${cityFilter}
-                    THEN problems.id 
-                END), 0) as count
-            FROM months
-            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-            GROUP BY months.month
-            ORDER BY months.month`;
-
-        const [weeklyData, monthlyData] = await Promise.all([
-            queryDatabase(weeklyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        res.json({
-            weekly: {
-                labels: weeklyData.map(row => {
-                    return `${weekDays[row.weekday]} ${row.formatted_date}`;
-                }),
-                data: weeklyData.map(row => row.count)
-            },
-            monthly: {
-                labels: monthNames,
-                data: monthlyData.map(row => row.count)
-            }
-        });
-        
-    } catch (error) {
-        console.error('Erro ao buscar dados dos gráficos:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
-    }
-});
-
-// Adicionar ao módulo exports
-module.exports = {
-    startHydraBot,
-    redirectToWhatsAppChat,
-    server
-};
-
-// Update the getChartData endpoint
-server.get('/getChartData', async (req, res) => {
-    try {
-        const { city } = req.query;
-        const cityFilter = city ? 'AND city = ?' : '';
-        const params = city ? [city] : [];
-        
-        // Query semanal melhorada
-        const weeklyQuery = `
-            WITH RECURSIVE dates(date) AS (
-                SELECT date('now', 'weekday 0', '-6 days') -- Começa do domingo da semana atual
-                UNION ALL
-                SELECT date(date, '+1 day')
-                FROM dates
-                WHERE date < date('now')
-            )
-            SELECT 
-                dates.date,
-                strftime('%w', dates.date) as weekday,
-                strftime('%d/%m', dates.date) as formatted_date,
-                COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    ${cityFilter}
-                    THEN problems.id 
-                END) as count
-            FROM dates
-            LEFT JOIN problems ON date(problems.date) = dates.date
-            GROUP BY dates.date
-            ORDER BY dates.date`;
-
-        // Query mensal (mantida a mesma)
-        const monthlyQuery = `
-            WITH RECURSIVE months(month) AS (
-                SELECT '01' as month
-                UNION ALL
-                SELECT printf('%02d', CAST(month AS INTEGER) + 1)
-                FROM months
-                WHERE CAST(month AS INTEGER) < 12
-            )
-            SELECT 
-                months.month,
-                COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
-                    ${cityFilter}
-                    THEN problems.id 
-                END) as count
-            FROM months
-            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-            GROUP BY months.month
-            ORDER BY months.month`;
-
-        const [weeklyData, monthlyData] = await Promise.all([
-            queryDatabase(weeklyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        // Processar dados semanais - apenas dias úteis
-        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-        const processedWeeklyData = weeklyData
-            .filter(row => row.weekday > 0 && row.weekday < 6) // Filtra apenas dias úteis (1-5)
-            .map(row => ({
-                label: `${weekDays[row.weekday]} ${row.formatted_date}`,
-                count: parseInt(row.count) || 0
-            }));
-
-        // Processar dados mensais
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        res.json({
-            weekly: {
-                labels: processedWeeklyData.map(d => d.label),
-                data: processedWeeklyData.map(d => d.count)
-            },
-            monthly: {
-                labels: monthNames,
-                data: monthlyData.map(row => parseInt(row.count) || 0)
-            }
-        });
-        
-    } catch (error) {
-        console.error('Erro ao buscar dados dos gráficos:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
-    }
-});
-
-// ...existing code...
-
-server.get('/getChartData', async (req, res) => {
-    try {
-        const { city } = req.query;
-        const cityFilter = city ? 'AND city = ?' : '';
-        const params = city ? [city] : [];
-        
-        // Query semanal simplificada e mais precisa
-        const weeklyQuery = `
-            WITH RECURSIVE dates(date) AS (
-                SELECT date('now', '-4 days') as date  -- Começa 4 dias atrás
-                UNION ALL
-                SELECT date(date, '+1 day')
-                FROM dates
-                WHERE date < date('now')  -- Até hoje
-            )
-            SELECT 
-                dates.date,
-                strftime('%w', dates.date) as weekday,
-                strftime('%d/%m', dates.date) as formatted_date,
-                COUNT(DISTINCT CASE WHEN problems.description IS NOT NULL ${cityFilter} 
-                    THEN problems.id END) as count
-            FROM dates
-            LEFT JOIN problems ON date(problems.date) = dates.date
-            GROUP BY dates.date
-            ORDER BY dates.date`;
-
-        const monthlyQuery = `
-            WITH RECURSIVE months(month) AS (
-                SELECT '01' as month
-                UNION ALL
-                SELECT printf('%02d', CAST(month AS INTEGER) + 1)
-                FROM months
-                WHERE CAST(month AS INTEGER) < 12
-            )
-            SELECT 
-                months.month,
-                COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
-                    ${cityFilter}
-                    THEN problems.id 
-                END) as count
-            FROM months
-            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-            GROUP BY months.month
-            ORDER BY months.month`;
-
-        const [weeklyData, monthlyData] = await Promise.all([
-            queryDatabase(weeklyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        res.json({
-            weekly: {
-                labels: weeklyData.map(row => {
-                    return `${weekDays[row.weekday]} ${row.formatted_date}`;
-                }),
-                data: weeklyData.map(row => row.count)
-            },
-            monthly: {
-                labels: monthNames,
-                data: monthlyData.map(row => row.count)
-            }
-        });
-        
-    } catch (error) {
-        console.error('Erro ao buscar dados dos gráficos:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
-    }
-});
-
-// ...existing code...
-
-server.get('/getChartData', async (req, res) => {
-    try {
-        const { city } = req.query;
-        const cityFilter = city ? 'AND problems.city = ?' : '';
-        const params = city ? [city] : [];
-        
-        // Query otimizada para dados semanais
-        const weeklyQuery = `
-            WITH RECURSIVE dates(date) AS (
-                SELECT date('now', '-4 days') as date  -- Começa 4 dias atrás
-                UNION ALL
-                SELECT date(date, '+1 day')
-                FROM dates
-                WHERE date < date('now')  -- Até hoje
-            )
-            SELECT 
-                dates.date,
-                strftime('%w', dates.date) as weekday,
-                strftime('%d/%m', dates.date) as formatted_date,
-                COUNT(DISTINCT CASE WHEN problems.description IS NOT NULL ${cityFilter} 
-                    THEN problems.id END) as count
-            FROM dates
-            LEFT JOIN problems ON date(problems.date) = dates.date
-            GROUP BY dates.date
-            ORDER BY dates.date`;
-
-        const monthlyQuery = `
-            SELECT 
-                strftime('%m', date) as month,
-                COUNT(DISTINCT id) as count
-            FROM problems
-            WHERE strftime('%Y', date) = strftime('%Y', 'now')
-            AND description IS NOT NULL
-            ${cityFilter}
-            GROUP BY month
-            ORDER BY month`;
-
-        const [weeklyData, monthlyData] = await Promise.all([
-            queryDatabase(weeklyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        const response = {
-            weekly: {
-                labels: weeklyData.map(row => `${weekDays[parseInt(row.weekday)]} ${row.formatted_date}`),
-                data: weeklyData.map(row => parseInt(row.count) || 0)
-            },
-            monthly: {
-                labels: monthNames,
-                data: Array(12).fill(0).map((_, i) => {
-                    const month = monthlyData.find(row => parseInt(row.month) === i + 1);
-                    return month ? parseInt(month.count) : 0;
-                })
-            }
-        };
-
-        res.json(response);
-        
-    } catch (error) {
-        console.error('Erro ao buscar dados dos gráficos:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
-    }
-});
-
-// ...existing code...
-
-server.get('/getChartData', async (req, res) => {
-    try {
-        const { city } = req.query;
-        const cityFilter = city ? 'AND city = ?' : '';
-        const params = city ? [city] : [];
-        
-        // Query para últimos 5 dias úteis
-        const dailyQuery = `
-            WITH RECURSIVE dates(date) AS (
-                SELECT date('now') as date
-                UNION ALL
-                SELECT date(date, '-1 day')
-                FROM dates
-                WHERE date > date('now', '-7 days')
-            )
-            SELECT 
-                dates.date,
-                strftime('%w', dates.date) as weekday,
-                strftime('%d/%m', dates.date) as formatted_date,
-                COALESCE(COUNT(p.id), 0) as count
-            FROM dates
-            LEFT JOIN (
-                SELECT id, date(date) as problem_date
-                FROM problems
-                WHERE description IS NOT NULL
-                ${cityFilter}
-            ) p ON dates.date = p.problem_date
-            GROUP BY dates.date
-            HAVING weekday NOT IN ('0', '6')
-            ORDER BY dates.date DESC
-            LIMIT 5`;
-
-        // Query para meses (mantida igual)
-        const monthlyQuery = `
-            WITH RECURSIVE months(month) AS (
-                SELECT '01' as month
-                UNION ALL
-                SELECT printf('%02d', CAST(month AS INTEGER) + 1)
-                FROM months
-                WHERE CAST(month AS INTEGER) < 12
-            )
-            SELECT 
-                months.month,
-                COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
-                    ${cityFilter}
-                    THEN problems.id 
-                END) as count
-            FROM months
-            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-            GROUP BY months.month
-            ORDER BY months.month`;
-
-        const [dailyData, monthlyData] = await Promise.all([
-            queryDatabase(dailyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        // Processar dados
-        const response = {
-            weekly: {
-                labels: dailyData.map(row => `${weekDays[parseInt(row.weekday)]} ${row.formatted_date}`).reverse(),
-                data: dailyData.map(row => parseInt(row.count)).reverse()
-            },
-            monthly: {
-                labels: monthNames,
-                data: Array(12).fill(0).map((_, i) => {
-                    const month = monthlyData.find(row => parseInt(row.month) === i + 1);
-                    return month ? parseInt(month.count) : 0;
-                })
-            }
-        };
-
-        res.json(response);
-        
-    } catch (error) {
-        console.error('Erro ao buscar dados dos gráficos:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
-    }
-});
-
-// ...existing code...
-
-// Adicionar novo endpoint para obter escolas
-server.get('/getSchools', async (req, res) => {
-    try {
-        const { city } = req.query;
-        let query = 'SELECT DISTINCT school FROM problems WHERE school IS NOT NULL';
-        const params = [];
-        
-        if (city) {
-            query += ' AND city = ?';
-            params.push(city);
-        }
-        
-        query += ' ORDER BY school';
-        
-        const schools = await queryDatabase(query, params);
-        res.json(schools.map(row => row.school));
-    } catch (error) {
-        console.error('Erro ao buscar escolas:', error);
-        res.status(500).json({ error: 'Erro ao buscar escolas' });
-    }
-});
-
-// Atualizar o endpoint getChartData
+// Remove all other getChartData endpoints and keep only this one
 server.get('/getChartData', async (req, res) => {
     try {
         const { city, school } = req.query;
@@ -1989,55 +1293,57 @@ server.get('/getChartData', async (req, res) => {
             params.push(school);
         }
 
-        // Atualizar as queries existentes com o novo filtro
+        // Query otimizada para últimos 5 dias úteis com fuso horário local
         const weeklyQuery = `
             WITH RECURSIVE dates(date) AS (
-                SELECT date('now') as date
+                SELECT datetime('now', 'localtime', 'start of day') as date
                 UNION ALL
-                SELECT date(date, '-1 day')
+                SELECT datetime(date, '-1 day')
                 FROM dates
-                WHERE date > date('now', '-7 days')
+                WHERE date > datetime('now', 'localtime', 'start of day', '-7 days')
             )
             SELECT 
                 dates.date,
                 strftime('%w', dates.date) as weekday,
                 strftime('%d/%m', dates.date) as formatted_date,
-                COALESCE(COUNT(p.id), 0) as count
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND date(problems.date, 'localtime') = date(dates.date, 'localtime')
+                    ${filter}
+                    THEN problems.id 
+                END), 0) as count
             FROM dates
-            LEFT JOIN (
-                SELECT id, date(date) as problem_date
-                FROM problems
-                WHERE description IS NOT NULL
-                ${filter}
-            ) p ON dates.date = p.problem_date
+            LEFT JOIN problems 
+                ON date(problems.date, 'localtime') = date(dates.date, 'localtime')
             GROUP BY dates.date
-            HAVING weekday NOT IN ('0', '6')
+            HAVING CAST(weekday AS INTEGER) BETWEEN 1 AND 5
             ORDER BY dates.date DESC
             LIMIT 5`;
 
-        // Resto do código permanece o mesmo
+        // Query para dados mensais do ano atual
         const monthlyQuery = `
-            WITH RECURSIVE months(month) AS (
-                SELECT '01' as month
+            WITH RECURSIVE months(month_date) AS (
+                SELECT datetime('now', 'localtime', 'start of year')
                 UNION ALL
-                SELECT printf('%02d', CAST(month AS INTEGER) + 1)
+                SELECT datetime(month_date, '+1 month')
                 FROM months
-                WHERE CAST(month AS INTEGER) < 12
+                WHERE strftime('%Y', month_date) = strftime('%Y', 'now', 'localtime')
             )
             SELECT 
-                months.month,
-                COUNT(DISTINCT CASE 
+                strftime('%m', month_date) as month,
+                COALESCE(COUNT(DISTINCT CASE 
                     WHEN problems.description IS NOT NULL 
-                    AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+                    AND strftime('%Y-%m', problems.date, 'localtime') = strftime('%Y-%m', month_date)
                     ${filter}
                     THEN problems.id 
-                END) as count
+                END), 0) as count
             FROM months
-            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-            GROUP BY months.month
-            ORDER BY months.month`;
+            LEFT JOIN problems 
+                ON strftime('%Y-%m', problems.date, 'localtime') = strftime('%Y-%m', month_date)
+            GROUP BY strftime('%m', month_date)
+            ORDER BY month`;
 
-        const [dailyData, monthlyData] = await Promise.all([
+        const [weeklyData, monthlyData] = await Promise.all([
             queryDatabase(weeklyQuery, params),
             queryDatabase(monthlyQuery, params)
         ]);
@@ -2046,17 +1352,24 @@ server.get('/getChartData', async (req, res) => {
         const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
-        // Processar dados
+        // Processar dados semanais
+        const processedWeeklyData = weeklyData
+            .sort((a, b) => b.date.localeCompare(a.date)) // Ordenar por data decrescente
+            .map(row => ({
+                label: `${weekDays[parseInt(row.weekday)]} ${row.formatted_date}`,
+                count: parseInt(row.count)
+            }));
+
         const response = {
             weekly: {
-                labels: dailyData.map(row => `${weekDays[parseInt(row.weekday)]} ${row.formatted_date}`).reverse(),
-                data: dailyData.map(row => parseInt(row.count)).reverse()
+                labels: processedWeeklyData.map(d => d.label),
+                data: processedWeeklyData.map(d => d.count)
             },
             monthly: {
                 labels: monthNames,
                 data: Array(12).fill(0).map((_, i) => {
-                    const month = monthlyData.find(row => parseInt(row.month) === i + 1);
-                    return month ? parseInt(month.count) : 0;
+                    const monthData = monthlyData.find(row => parseInt(row.month) === i + 1);
+                    return monthData ? parseInt(monthData.count) : 0;
                 })
             }
         };
@@ -2069,7 +1382,14 @@ server.get('/getChartData', async (req, res) => {
     }
 });
 
-// Atualizar o endpoint generateReport
+// Adicionar ao módulo exports
+module.exports = {
+    startHydraBot,
+    redirectToWhatsAppChat,
+    server
+};
+
+// Update the generateReport endpoint
 server.get('/generateReport', async (req, res) => {
     try {
         const { start, end, format, city, school } = req.query;
@@ -2195,5 +1515,111 @@ server.get('/generateReport', async (req, res) => {
     } catch (error) {
         console.error('Erro ao gerar relatório:', error);
         res.status(500).json({ error: 'Erro ao gerar relatório' });
+    }
+});
+
+// Update the getChartData endpoint
+server.get('/getChartData', async (req, res) => {
+    try {
+        const { city, school } = req.query;
+        let filter = '';
+        const params = [];
+        
+        if (city) {
+            filter += ' AND problems.city = ?';
+            params.push(city);
+        }
+        
+        if (school) {
+            filter += ' AND problems.school = ?';
+            params.push(school);
+        }
+
+        // Query otimizada para últimos 5 dias úteis com fuso horário local
+        const weeklyQuery = `
+            WITH RECURSIVE dates(date) AS (
+                SELECT datetime('now', 'localtime', 'start of day') as date
+                UNION ALL
+                SELECT datetime(date, '-1 day')
+                FROM dates
+                WHERE date > datetime('now', 'localtime', 'start of day', '-7 days')
+            )
+            SELECT 
+                dates.date,
+                strftime('%w', dates.date) as weekday,
+                strftime('%d/%m', dates.date) as formatted_date,
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND date(problems.date, 'localtime') = date(dates.date, 'localtime')
+                    ${filter}
+                    THEN problems.id 
+                END), 0) as count
+            FROM dates
+            LEFT JOIN problems 
+                ON date(problems.date, 'localtime') = date(dates.date, 'localtime')
+            GROUP BY dates.date
+            HAVING CAST(weekday AS INTEGER) BETWEEN 1 AND 5
+            ORDER BY dates.date DESC
+            LIMIT 5`;
+
+        // Query para dados mensais do ano atual
+        const monthlyQuery = `
+            WITH RECURSIVE months(month_date) AS (
+                SELECT datetime('now', 'localtime', 'start of year')
+                UNION ALL
+                SELECT datetime(month_date, '+1 month')
+                FROM months
+                WHERE strftime('%Y', month_date) = strftime('%Y', 'now', 'localtime')
+            )
+            SELECT 
+                strftime('%m', month_date) as month,
+                COALESCE(COUNT(DISTINCT CASE 
+                    WHEN problems.description IS NOT NULL 
+                    AND strftime('%Y-%m', problems.date, 'localtime') = strftime('%Y-%m', month_date)
+                    ${filter}
+                    THEN problems.id 
+                END), 0) as count
+            FROM months
+            LEFT JOIN problems 
+                ON strftime('%Y-%m', problems.date, 'localtime') = strftime('%Y-%m', month_date)
+            GROUP BY strftime('%m', month_date)
+            ORDER BY month`;
+
+        const [weeklyData, monthlyData] = await Promise.all([
+            queryDatabase(weeklyQuery, params),
+            queryDatabase(monthlyQuery, params)
+        ]);
+
+        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+        // Processar dados semanais
+        const processedWeeklyData = weeklyData
+            .sort((a, b) => b.date.localeCompare(a.date)) // Ordenar por data decrescente
+            .map(row => ({
+                label: `${weekDays[parseInt(row.weekday)]} ${row.formatted_date}`,
+                count: parseInt(row.count)
+            }));
+
+        const response = {
+            weekly: {
+                labels: processedWeeklyData.map(d => d.label),
+                data: processedWeeklyData.map(d => d.count)
+            },
+            monthly: {
+                labels: monthNames,
+                data: Array(12).fill(0).map((_, i) => {
+                    const monthData = monthlyData.find(row => parseInt(row.month) === i + 1);
+                    return monthData ? parseInt(monthData.count) : 0;
+                })
+            }
+        };
+
+        res.json(response);
+        
+    } catch (error) {
+        console.error('Erro ao buscar dados dos gráficos:', error);
+        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
     }
 });
