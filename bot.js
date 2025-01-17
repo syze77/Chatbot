@@ -43,8 +43,7 @@ async function startHydraBot(io) {
         headless: false,
         devtools: false,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      },
-      printQRInTerminal: true,
+      }
     });
 
     console.log('Servidor Hydra iniciado!');
@@ -69,10 +68,6 @@ async function startHydraBot(io) {
       reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId);
       markProblemAsCompleted(chatId, io);
       sendStatusUpdateToMainProcess(io);
-    });
-
-    bot.on('qrcode', (qrcode) => {
-      console.log('QR Code gerado pelo Hydra:', qrcode);
     });
 
   } catch (error) {
@@ -992,27 +987,37 @@ function getStatusText(status) {
 // Add report generation endpoint
 server.get('/generateReport', async (req, res) => {
     try {
-        const { start, end, format } = req.query;
+        const { start, end, format, city, school } = req.query;
+        
+        let filter = '';
+        const params = [start, end];
+        
+        if (city) {
+            filter += ' AND city = ?';
+            params.push(city);
+        }
+        
+        if (school) {
+            filter += ' AND school = ?';
+            params.push(school);
+        }
         
         const query = `
             SELECT 
-                name,
-                city,
-                school,
-                position,
-                description,
-                status,
-                strftime('%d/%m/%Y %H:%M', date) as formatted_date,
-                strftime('%d/%m/%Y %H:%M', date_completed) as formatted_date_completed,
+                problems.*,
+                strftime('%d/%m/%Y %H:%M', datetime(date, 'localtime')) as formatted_date,
+                strftime('%d/%m/%Y %H:%M', datetime(date_completed, 'localtime')) as formatted_date_completed,
                 CAST((julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER) as duration_minutes
-            FROM problems
-            WHERE date >= datetime(?)
-            AND date <= datetime(?)
+            FROM problems 
+            WHERE date BETWEEN ? AND ?
             AND description IS NOT NULL
-            ORDER BY date DESC`;
+            ${filter}
+            ORDER BY date DESC
+        `;
 
-        const problems = await queryDatabase(query, [start, end]);
+        const problems = await queryDatabase(query, params);
 
+        // Handle Excel export format
         if (format === 'xlsx') {
             const Excel = require('exceljs');
             const workbook = new Excel.Workbook();
@@ -1049,89 +1054,55 @@ server.get('/generateReport', async (req, res) => {
             return;
         }
 
-        // Criar o PDF
-        const doc = new PDFDocument({
-            size: 'A4',
-            margin: 50,
-            bufferPages: true
-        });
-
-        // Configurar response
+        // PDF Generation
+        const doc = new PDFDocument({ size: 'A4', margin: 50 });
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.pdf`);
-        res.setHeader('Access-Control-Allow-Origin', '*'); // Permitir CORS
         doc.pipe(res);
 
-        // Título e período
-        doc.fontSize(20)
-           .text('Relatório de Atendimentos', { align: 'center' })
-           .fontSize(14)
-           .text(`Período: ${new Date(start).toLocaleDateString()} a ${new Date(end).toLocaleDateString()}`, { align: 'center' })
+        // Calculate statistics
+        const totalAtendimentos = problems.length;
+        const concluidos = problems.filter(p => p.status === 'completed').length;
+        const tempoMedioMinutos = concluidos ? Math.round(
+            problems.reduce((acc, p) => acc + (p.duration_minutes || 0), 0) / concluidos
+        ) : 0;
+
+        // Header and statistics
+        doc.fontSize(20).text('Relatório de Atendimentos', { align: 'center' }).moveDown(1);
+        doc.fontSize(12).text(`Período: ${new Date(start).toLocaleDateString()} a ${new Date(end).toLocaleDateString()}`).moveDown(2);
+        
+        doc.fontSize(14).text('Estatísticas', { underline: true }).moveDown(1);
+        doc.fontSize(12)
+           .text(`Total de Atendimentos: ${totalAtendimentos}`)
+           .text(`Atendimentos Concluídos: ${concluidos}`)
+           .text(`Tempo Médio: ${Math.floor(tempoMedioMinutos/60)}h ${tempoMedioMinutos%60}min`)
            .moveDown(2);
 
-        // Resumo estatístico
-        doc.fontSize(14)
-           .text('Resumo', { underline: true })
-           .moveDown()
-           .fontSize(12)
-           .text(`Total de Atendimentos: ${stats.total_atendimentos}`)
-           .text(`Total de Cidades: ${stats.total_cidades}`)
-           .text(`Total de Escolas: ${stats.total_escolas}`)
-           .text(`Tempo Médio de Atendimento: ${Math.floor(stats.tempo_medio_minutos/60)}h ${Math.floor(stats.tempo_medio_minutos%60)}min`)
-           .moveDown(2);
+        // Problems listing
+        doc.fontSize(14).text('Detalhamento', { underline: true }).moveDown(1);
 
-        // Lista detalhada dos atendimentos
-        doc.addPage()
-           .fontSize(16)
-           .text('Detalhamento dos Atendimentos', { align: 'center' })
-           .moveDown(2);
-
-        // Listar todos os atendimentos com todas as informações
-        attendances.forEach((attendance, index) => {
-            if (doc.y > 700) {
-                doc.addPage();
-            }
-
-            const duracao = attendance.duration_minutes
-                ? `${Math.floor(attendance.duration_minutes/60)}h ${attendance.duration_minutes%60}min`
+        problems.forEach((problem) => {
+            const duracao = problem.duration_minutes
+                ? `${Math.floor(problem.duration_minutes/60)}h ${problem.duration_minutes%60}min`
                 : 'Em andamento';
 
             doc.fontSize(12)
-               .text(`Atendimento ${index + 1}`, { underline: true })
-               .moveDown()
-               .text(`Nome: ${attendance.name}`)
-               .text(`Cargo: ${attendance.position}`)
-               .text(`Cidade: ${attendance.city}`)
-               .text(`Escola: ${attendance.school}`)
-               .text(`Data de Início: ${attendance.formatted_date}`)
-               .text(`Data de Conclusão: ${attendance.formatted_date_completed || 'Não concluído'}`)
+               .text(`Data: ${problem.formatted_date}`)
+               .text(`Nome: ${problem.name}`)
+               .text(`Cargo: ${problem.position}`)
+               .text(`Escola: ${problem.school}`)
+               .text(`Cidade: ${problem.city}`)
+               .text(`Problema: ${problem.description}`)
+               .text(`Status: ${getStatusText(problem.status)}`)
                .text(`Duração: ${duracao}`)
-               .text(`Status: ${getStatusText(attendance.status)}`)
-               .text(`Descrição do Problema: ${attendance.description}`)
-               .moveDown(2);
+               .moveDown(1);
         });
-
-        // Adicionar numeração de páginas
-        const pages = doc.bufferedPageRange();
-        for (let i = 0; i < pages.count; i++) {
-            doc.switchToPage(i);
-            doc.fontSize(10)
-               .text(
-                   `Página ${i + 1} de ${pages.count}`,
-                   50,
-                   doc.page.height - 50,
-                   { align: 'center' }
-               );
-        }
 
         doc.end();
 
     } catch (error) {
         console.error('Erro ao gerar relatório:', error);
-        res.status(500).json({ 
-            error: 'Erro ao gerar relatório', 
-            details: error.message 
-        });
+        res.status(500).json({ error: 'Erro ao gerar relatório' });
     }
 });
 
@@ -1255,19 +1226,6 @@ server.get('/getCompletedAttendances', async (req, res) => {
         console.error('Erro ao buscar atendimentos concluídos:', error);
         res.status(500).json({ error: 'Erro ao buscar atendimentos concluídos' });
     }
-});
-
-// Add other necessary server routes
-server.get('/getCompletedAttendances', (req, res) => {
-    // ...existing code...
-});
-
-server.delete('/deleteCompletedAttendance/:id', (req, res) => {
-    // ...existing code...
-});
-
-server.get('/getUserInfo/:chatId', (req, res) => {
-    // ...existing code...
 });
 
 // Add new endpoint to get cities
@@ -1394,238 +1352,3 @@ module.exports = {
     redirectToWhatsAppChat,
     server
 };
-
-// Update the generateReport endpoint
-server.get('/generateReport', async (req, res) => {
-    try {
-        const { start, end, format, city, school } = req.query;
-        
-        let filter = '';
-        const params = [start, end];
-        
-        if (city) {
-            filter += ' AND city = ?';
-            params.push(city);
-        }
-        
-        if (school) {
-            filter += ' AND school = ?';
-            params.push(school);
-        }
-        
-        const query = `
-            SELECT 
-                problems.*,
-                strftime('%d/%m/%Y %H:%M', datetime(date, 'localtime')) as formatted_date,
-                strftime('%d/%m/%Y %H:%M', datetime(date_completed, 'localtime')) as formatted_date_completed,
-                CAST((julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER) as duration_minutes
-            FROM problems 
-            WHERE date BETWEEN ? AND ?
-            AND description IS NOT NULL
-            ${filter}
-            ORDER BY date DESC
-        `;
-
-        const problems = await new Promise((resolve, reject) => {
-            getDatabase().all(query, params, (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-        });
-
-        // Criar o PDF
-        const doc = new PDFDocument({
-            size: 'A4',
-            margin: 50
-        });
-
-        // Configurar cabeçalho do response
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.pdf`);
-
-        // Pipe o PDF para o response
-        doc.pipe(res);
-
-        // Adicionar título
-        doc.fontSize(20)
-           .text('Relatório de Atendimentos', { align: 'center' })
-           .moveDown(2);
-
-        // Adicionar período do relatório
-        doc.fontSize(12)
-           .text(`Período: ${new Date(start).toLocaleDateString()} a ${new Date(end).toLocaleDateString()}`)
-           .moveDown();
-
-        // Estatísticas gerais
-        const totalAtendimentos = problems.length;
-        const concluidos = problems.filter(p => p.status === 'completed').length;
-        const tempoMedioMinutos = Math.round(
-            problems.reduce((acc, p) => acc + (p.duration_minutes || 0), 0) / concluidos
-        );
-
-        doc.fontSize(14)
-           .text('Estatísticas Gerais', { underline: true })
-           .moveDown()
-           .fontSize(12)
-           .text(`Total de Atendimentos: ${totalAtendimentos}`)
-           .text(`Atendimentos Concluídos: ${concluidos}`)
-           .text(`Tempo Médio de Atendimento: ${Math.floor(tempoMedioMinutos/60)}h ${tempoMedioMinutos%60}min`)
-           .moveDown(2);
-
-        // Problemas mais comuns
-        const problemTypes = problems.reduce((acc, p) => {
-            acc[p.description] = (acc[p.description] || 0) + 1;
-            return acc;
-        }, {});
-
-        const topProblems = Object.entries(problemTypes)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 5);
-
-        doc.fontSize(14)
-           .text('Problemas Mais Frequentes', { underline: true })
-           .moveDown()
-           .fontSize(12);
-
-        topProblems.forEach(([problem, count], index) => {
-            doc.text(`${index + 1}. ${problem} (${count} ocorrências)`);
-        });
-        doc.moveDown(2);
-
-        // Lista detalhada de atendimentos
-        doc.fontSize(14)
-           .text('Detalhamento dos Atendimentos', { underline: true })
-           .moveDown();
-
-        problems.forEach((problem, index) => {
-            const duracao = problem.duration_minutes
-                ? `${Math.floor(problem.duration_minutes/60)}h ${problem.duration_minutes%60}min`
-                : 'Em andamento';
-
-            doc.fontSize(12)
-               .text(`Atendimento ${index + 1}`, { underline: true })
-               .text(`Usuário: ${problem.name}`)
-               .text(`Cargo: ${problem.position}`)
-               .text(`Escola: ${problem.school}`)
-               .text(`Início: ${problem.formatted_date}`)
-               .text(`Conclusão: ${problem.formatted_date_completed || 'Não concluído'}`)
-               .text(`Duração: ${duracao}`)
-               .text(`Problema: ${problem.description}`)
-               .text(`Status: ${problem.status === 'completed' ? 'Concluído' : 'Em andamento'}`)
-               .moveDown();
-        });
-
-        // Finalizar o PDF
-        doc.end();
-
-    } catch (error) {
-        console.error('Erro ao gerar relatório:', error);
-        res.status(500).json({ error: 'Erro ao gerar relatório' });
-    }
-});
-
-// Update the getChartData endpoint
-server.get('/getChartData', async (req, res) => {
-    try {
-        const { city, school } = req.query;
-        let filter = '';
-        const params = [];
-        
-        if (city) {
-            filter += ' AND problems.city = ?';
-            params.push(city);
-        }
-        
-        if (school) {
-            filter += ' AND problems.school = ?';
-            params.push(school);
-        }
-
-        // Query otimizada para últimos 5 dias úteis com fuso horário local
-        const weeklyQuery = `
-            WITH RECURSIVE dates(date) AS (
-                SELECT datetime('now', 'localtime', 'start of day') as date
-                UNION ALL
-                SELECT datetime(date, '-1 day')
-                FROM dates
-                WHERE date > datetime('now', 'localtime', 'start of day', '-7 days')
-            )
-            SELECT 
-                dates.date,
-                strftime('%w', dates.date) as weekday,
-                strftime('%d/%m', dates.date) as formatted_date,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND date(problems.date, 'localtime') = date(dates.date, 'localtime')
-                    ${filter}
-                    THEN problems.id 
-                END), 0) as count
-            FROM dates
-            LEFT JOIN problems 
-                ON date(problems.date, 'localtime') = date(dates.date, 'localtime')
-            GROUP BY dates.date
-            HAVING CAST(weekday AS INTEGER) BETWEEN 1 AND 5
-            ORDER BY dates.date DESC
-            LIMIT 5`;
-
-        // Query para dados mensais do ano atual
-        const monthlyQuery = `
-            WITH RECURSIVE months(month_date) AS (
-                SELECT datetime('now', 'localtime', 'start of year')
-                UNION ALL
-                SELECT datetime(month_date, '+1 month')
-                FROM months
-                WHERE strftime('%Y', month_date) = strftime('%Y', 'now', 'localtime')
-            )
-            SELECT 
-                strftime('%m', month_date) as month,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND strftime('%Y-%m', problems.date, 'localtime') = strftime('%Y-%m', month_date)
-                    ${filter}
-                    THEN problems.id 
-                END), 0) as count
-            FROM months
-            LEFT JOIN problems 
-                ON strftime('%Y-%m', problems.date, 'localtime') = strftime('%Y-%m', month_date)
-            GROUP BY strftime('%m', month_date)
-            ORDER BY month`;
-
-        const [weeklyData, monthlyData] = await Promise.all([
-            queryDatabase(weeklyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        // Processar dados semanais
-        const processedWeeklyData = weeklyData
-            .sort((a, b) => b.date.localeCompare(a.date)) // Ordenar por data decrescente
-            .map(row => ({
-                label: `${weekDays[parseInt(row.weekday)]} ${row.formatted_date}`,
-                count: parseInt(row.count)
-            }));
-
-        const response = {
-            weekly: {
-                labels: processedWeeklyData.map(d => d.label),
-                data: processedWeeklyData.map(d => d.count)
-            },
-            monthly: {
-                labels: monthNames,
-                data: Array(12).fill(0).map((_, i) => {
-                    const monthData = monthlyData.find(row => parseInt(row.month) === i + 1);
-                    return monthData ? parseInt(monthData.count) : 0;
-                })
-            }
-        };
-
-        res.json(response);
-        
-    } catch (error) {
-        console.error('Erro ao buscar dados dos gráficos:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
-    }
-});
