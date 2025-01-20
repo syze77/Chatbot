@@ -221,6 +221,56 @@
             border-radius: 15px;
             font-size: 0.8rem;
         }
+        .action-buttons {
+        margin-top: 10px;
+        display: flex;
+        justify-content: flex-end;
+        }
+
+        .attend-btn {
+            background-color: #28a745;
+            border: none;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .attend-btn:hover {
+            background-color: #218838;
+            transform: translateY(-1px);
+        }
+
+        .attend-btn i {
+            font-size: 0.9em;
+        }
+        
+        .end-chat-btn {
+            background-color: #dc3545;
+            border: none;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .end-chat-btn:hover {
+            background-color: #c82333;
+            transform: translateY(-1px);
+        }
+
+        .end-chat-btn i {
+            font-size: 0.9em;
+        }
     </style>
     <!-- Add Socket.IO script -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js"></script>

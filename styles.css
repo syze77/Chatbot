@@ -657,6 +657,12 @@ button {
     margin-bottom: 20px;
 }
 
+.dark-theme .status-header {
+    background-color: #2D2D2D;
+    color: #E4E6EF;
+    border: 1px solid #3a3b3c;
+}
+
 .toggle-btn {
     position: absolute;
     top: 15px;
@@ -782,6 +788,7 @@ body:not(.dark-theme) .completed-item .problem-description {
     height: 400px;
     padding: 20px;
     position: relative;
+    background-color: transparent !important; /* Força background transparente */
 }
 
 .report-container {

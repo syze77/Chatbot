@@ -6,21 +6,18 @@ const { getDatabase } = require('./database');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 
-const cookiesPath = path.join(__dirname, 'cookies.json');
-const maxActiveChats = 3;
+// Constantes globais
+const MESSAGE_DELAY = 1000; // 1 segundo entre mensagens
+const MAX_ACTIVE_CHATS = 3;
 
-// Initialize Express
-const server = express();
-
-// Add JSON middleware
-server.use(express.json());
-
+// Estado global da aplicação
 let bot;
-let activeChatsList = [];
-let userCurrentTopic = {};
 let botConnection = null;
-let reportedProblems = [];
+let messageQueue = [];
+let isProcessingQueue = false;
+let userCurrentTopic = {};
 
+// Mensagem padrão para novos usuários
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
 
 Nome:
@@ -30,10 +27,14 @@ Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor o
 
 ⚠️ Atenção: Certifique-se de preencher todas as informações corretamente para agilizar o atendimento.`;
 
-// Add these at the top with other global variables
-let messageQueue = [];
-let isProcessingQueue = false;
-const MESSAGE_DELAY = 1000; // 1 second delay between messages
+// Initialize Express
+const server = express();
+
+// Add JSON middleware
+server.use(express.json());
+
+let activeChatsList = [];
+let reportedProblems = [];
 
 // Initialize the bot
 async function startHydraBot(io) {
@@ -187,7 +188,13 @@ function startListeningForMessages(conn, io) {
   });
 }
 
-// Add this function before handleNewUser
+/**
+ * Atualiza o banco de dados e notifica os clientes
+ * @param {string} query - Query SQL
+ * @param {Array} params - Parâmetros da query
+ * @param {Object} io - Objeto Socket.IO
+ * @returns {Promise<number>} ID do registro inserido/atualizado
+ */
 async function updateDatabaseAndNotify(query, params, io) {
     return new Promise((resolve, reject) => {
         getDatabase().run(query, params, async function(err) {
@@ -211,7 +218,7 @@ async function updateDatabaseAndNotify(query, params, io) {
     });
 }
 
-// Add this helper function to fetch current status
+// Função auxiliar para buscar status atual
 async function fetchCurrentStatus() {
     return new Promise((resolve, reject) => {
         const queries = {
@@ -236,7 +243,7 @@ async function fetchCurrentStatus() {
     });
 }
 
-// Add this helper function for database queries
+// Função auxiliar para consultas no banco de dados
 function queryDatabase(query, params = []) {
     return new Promise((resolve, reject) => {
         getDatabase().all(query, params, (err, rows) => {
@@ -246,10 +253,10 @@ function queryDatabase(query, params = []) {
     });
 }
 
-// Handle new user
+// Processa novo usuário
 async function handleNewUser(conn, chatId, userInfo, io) {
     const activeCount = await getActiveChatsCount();
-    const status = activeCount < maxActiveChats ? 'active' : 'waiting';
+    const status = activeCount < MAX_ACTIVE_CHATS ? 'active' : 'waiting';
     
     try {
         await updateDatabaseAndNotify(
@@ -306,7 +313,7 @@ async function getWaitingPosition(chatId) {
     });
 }
 
-// Handle user message
+// Processa mensagem do usuário
 async function handleUserMessage(conn, chatId, messageText, io) {
     const currentTopic = userCurrentTopic[chatId];
     
@@ -348,7 +355,7 @@ async function handleUserMessage(conn, chatId, messageText, io) {
     }
 }
 
-// Handle chat closed
+// Processa fechamento do chat
 async function handleChatClosed(chatId, io) {
     try {
         // Mark chat as completed
@@ -393,7 +400,7 @@ async function handleChatClosed(chatId, io) {
     }
 }
 
-// Parse user information from the message
+// Analisa informações do usuário da mensagem
 function parseUserInfo(messageText) {
   const info = {};
   const lines = messageText.split('\n');
@@ -414,12 +421,18 @@ function parseUserInfo(messageText) {
   return null;
 }
 
-// Capitalize the first letters of words
+// Capitaliza primeiras letras das palavras
 function capitalize(str) {
   return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
 
-// Replace sendMessage function with this new version
+/**
+ * Envia uma mensagem para o usuário através do WhatsApp
+ * @param {Object} conn - Conexão com o WhatsApp
+ * @param {string} chatId - ID do chat
+ * @param {string} message - Mensagem a ser enviada
+ * @returns {Promise<void>}
+ */
 async function sendMessage(conn, chatId, message) {
   return new Promise((resolve, reject) => {
     messageQueue.push({
@@ -437,7 +450,11 @@ async function sendMessage(conn, chatId, message) {
   });
 }
 
-// Add new function to process message queue
+/**
+ * Processa a fila de mensagens com delay entre elas
+ * @param {void}
+ * @returns {Promise<void>}
+ */
 async function processMessageQueue() {
   if (messageQueue.length === 0) {
     isProcessingQueue = false;
@@ -474,7 +491,7 @@ async function processMessageQueue() {
   processMessageQueue();
 }
 
-// Send problem options to the user
+// Envia opções de problema para o usuário
 async function sendProblemOptions(conn, chatId) {
   const problemOptions = `Por favor, selecione o tipo de problema que você está enfrentando:
 
@@ -487,7 +504,7 @@ async function sendProblemOptions(conn, chatId) {
   await sendMessage(conn, chatId, problemOptions);
 }
 
-// Handle problem selection
+// Processa seleção de problema
 async function handleProblemSelection(conn, chatId, messageText, io) {
   switch (messageText) {
     case '1':
@@ -514,14 +531,14 @@ async function handleProblemSelection(conn, chatId, messageText, io) {
   }
 }
 
-// Send sub-problem options to the user
+// Envia opções de subproblema para o usuário
 async function sendSubProblemOptions(conn, chatId, problem) {
   const subProblemOptions = getSubProblemOptions(problem);
   userCurrentTopic[chatId] = { problem, stage: 'subproblema' }; 
   await sendMessage(conn, chatId, subProblemOptions);
 }
 
-// Get sub-problem options
+// Obtém opções de subproblema
 function getSubProblemOptions(problem) {
   const options = {
     'Falha no acesso ao sistema': `Selecione o subtópico:
@@ -556,7 +573,7 @@ Digite 'voltar' para retornar ao menu anterior.`
   return options[problem] || 'Opção inválida. Por favor, selecione uma opção válida.';
 }
 
-// Handle sub-problem selection
+// Processa seleção de subproblema
 async function handleSubProblemSelection(conn, chatId, messageText, io) {
     try {
         if (messageText === 'voltar') {
@@ -623,7 +640,7 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
     }
 }
 
-// Get sub-problem text
+// Obtém texto do subproblema
 function getSubProblemText(problem, subProblem) {
   const subProblemTexts = {
     'Falha no acesso ao sistema': {
@@ -650,7 +667,7 @@ function getSubProblemText(problem, subProblem) {
   return subProblemTexts[problem] ? subProblemTexts[problem][subProblem] : 'Outro problema';
 }
 
-// Get video URL for sub-problem
+// Obtém URL do vídeo para subproblema
 function getVideoUrlForSubProblem(subProblem) {
   const videoUrls = {
     '1': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -660,7 +677,7 @@ function getVideoUrlForSubProblem(subProblem) {
   return videoUrls[subProblem] || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 }
 
-// Handle video feedback
+// Processa feedback do vídeo
 async function handleVideoFeedback(conn, chatId, messageText, io) {
     try {
         if (messageText.toLowerCase() === 'sim') {
@@ -683,7 +700,7 @@ async function handleVideoFeedback(conn, chatId, messageText, io) {
     }
 }
 
-// Handle problem description
+// Processa descrição do problema
 async function handleProblemDescription(conn, chatId, messageText, io) {
     try {
         const currentTopic = userCurrentTopic[chatId];
@@ -712,7 +729,7 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
                 getDatabase().run(
                     `UPDATE problems 
                      SET description = ?, 
-                         date = ?
+                         date = ? 
                      WHERE id = ?`,
                     [messageText, new Date().toISOString(), userInfo.id],
                     function(err) {
@@ -1106,62 +1123,81 @@ server.get('/generateReport', async (req, res) => {
     }
 });
 
-// Atualizar o endpoint getChartData
+// Atualizar o endpoint getChartData com query corrigida
 server.get('/getChartData', async (req, res) => {
     try {
-        const { city } = req.query;
-        const cityFilter = city ? 'AND city = ?' : '';
-        const params = city ? [city] : [];
+        const { city, school } = req.query;
+        let conditions = ['description IS NOT NULL'];
+        const params = [];
         
-        // Query para dados semanais
+        if (city) {
+            conditions.push('problems.city = ?');
+            params.push(city);
+        }
+        
+        if (school) {
+            conditions.push('problems.school = ?');
+            params.push(school);
+        }
+        
+        const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+        
+        // Query para dados mensais (modificada para garantir todos os meses)
+        const monthlyQuery = `
+            WITH RECURSIVE 
+            months(month_num) AS (
+                SELECT 1
+                UNION ALL
+                SELECT month_num + 1
+                FROM months
+                WHERE month_num < 12
+            ),
+            month_data AS (
+                SELECT 
+                    strftime('%m', problems.date) as month,
+                    COUNT(DISTINCT problems.id) as count
+                FROM problems
+                ${whereClause}
+                AND strftime('%Y', problems.date) = strftime('%Y', 'now')
+                GROUP BY strftime('%m', problems.date)
+            )
+            SELECT 
+                printf('%02d', months.month_num) as month,
+                COALESCE(month_data.count, 0) as count
+            FROM months
+            LEFT JOIN month_data ON printf('%02d', months.month_num) = month_data.month
+            ORDER BY months.month_num`;
+
+        // Query para dados semanais (mantida como está)
         const weeklyQuery = `
             WITH RECURSIVE dates(date) AS (
-                -- Get Monday of current week
                 SELECT date('now', 'weekday 1', '-7 days')
                 UNION ALL
                 SELECT date(date, '+1 day')
                 FROM dates
                 WHERE date < date('now')
-                AND strftime('%w', date) NOT IN ('0', '6')
-                LIMIT 5
+                LIMIT 7
             )
-            SELECT dates.date, COUNT(DISTINCT problems.id) as count
+            SELECT 
+                dates.date,
+                COUNT(DISTINCT problems.id) as count
             FROM dates
             LEFT JOIN problems ON date(problems.date) = dates.date
-            WHERE description IS NOT NULL
-            ${city ? 'AND problems.city = ?' : ''}
+            ${whereClause}
             GROUP BY dates.date
             ORDER BY dates.date`;
 
-        // Query para dados mensais
-        const monthlyQuery = `
-            WITH RECURSIVE months(month) AS (
-                SELECT '01' as month
-                UNION ALL
-                SELECT printf('%02d', CAST(month AS INTEGER) + 1)
-                FROM months
-                WHERE CAST(month AS INTEGER) < 12
-            )
-            SELECT months.month, COUNT(DISTINCT problems.id) as count
-            FROM months
-            LEFT JOIN problems ON strftime('%m', problems.date) = months.month
-                AND strftime('%Y', problems.date) = strftime('%Y', 'now')
-                AND description IS NOT NULL
-                ${city ? 'AND problems.city = ?' : ''}
-            GROUP BY months.month
-            ORDER BY months.month`;
-
-        // Executar as queries
-        const weeklyData = await queryDatabase(weeklyQuery, city ? [city] : []);
-        const monthlyData = await queryDatabase(monthlyQuery, city ? [city] : []);
+        const [weeklyData, monthlyData] = await Promise.all([
+            queryDatabase(weeklyQuery, params),
+            queryDatabase(monthlyQuery, params)
+        ]);
 
         // Processar os dados
-        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
         const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-        // Formatar a resposta
-        const response = {
+        const processed = {
             weekly: {
                 labels: weeklyData.map(row => {
                     const date = new Date(row.date);
@@ -1175,7 +1211,7 @@ server.get('/getChartData', async (req, res) => {
             }
         };
 
-        res.json(response);
+        res.json(processed);
         
     } catch (error) {
         console.error('Erro ao buscar dados dos gráficos:', error);
@@ -1186,7 +1222,7 @@ server.get('/getChartData', async (req, res) => {
 // Update the getCompletedAttendances endpoint
 server.get('/getCompletedAttendances', async (req, res) => {
     try {
-        const { date, position } = req.query;
+        const { date, position, city, school } = req.query;
         let query = `
             SELECT 
                 id, 
@@ -1217,6 +1253,16 @@ server.get('/getCompletedAttendances', async (req, res) => {
             query += ` AND position = ?`;
             params.push(position);
         }
+
+        if (city) {
+            query += ` AND city = ?`;
+            params.push(city);
+        }
+
+        if (school) {
+            query += ` AND school = ?`;
+            params.push(school);
+        }
         
         query += ` ORDER BY date_completed DESC`;
 
@@ -1228,10 +1274,15 @@ server.get('/getCompletedAttendances', async (req, res) => {
     }
 });
 
-// Add new endpoint to get cities
+// Adicionar novo endpoint para obter cidades
 server.get('/getCities', async (req, res) => {
     try {
-        const query = `SELECT DISTINCT city FROM problems ORDER BY city`;
+        const query = `
+            SELECT DISTINCT city 
+            FROM problems 
+            WHERE city IS NOT NULL 
+            ORDER BY city`;
+        
         const cities = await queryDatabase(query);
         res.json(cities.map(row => row.city));
     } catch (error) {
@@ -1240,109 +1291,28 @@ server.get('/getCities', async (req, res) => {
     }
 });
 
-// Remove all other getChartData endpoints and keep only this one
-server.get('/getChartData', async (req, res) => {
+// Adicionar novo endpoint para obter escolas por cidade
+server.get('/getSchools', async (req, res) => {
     try {
-        const { city, school } = req.query;
-        let filter = '';
-        const params = [];
+        const { city } = req.query;
+        let query = `
+            SELECT DISTINCT school 
+            FROM problems 
+            WHERE school IS NOT NULL`;
         
+        const params = [];
         if (city) {
-            filter += ' AND problems.city = ?';
+            query += ` AND city = ?`;
             params.push(city);
         }
         
-        if (school) {
-            filter += ' AND problems.school = ?';
-            params.push(school);
-        }
-
-        // Query otimizada para últimos 5 dias úteis com fuso horário local
-        const weeklyQuery = `
-            WITH RECURSIVE dates(date) AS (
-                SELECT datetime('now', 'localtime', 'start of day') as date
-                UNION ALL
-                SELECT datetime(date, '-1 day')
-                FROM dates
-                WHERE date > datetime('now', 'localtime', 'start of day', '-7 days')
-            )
-            SELECT 
-                dates.date,
-                strftime('%w', dates.date) as weekday,
-                strftime('%d/%m', dates.date) as formatted_date,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND date(problems.date, 'localtime') = date(dates.date, 'localtime')
-                    ${filter}
-                    THEN problems.id 
-                END), 0) as count
-            FROM dates
-            LEFT JOIN problems 
-                ON date(problems.date, 'localtime') = date(dates.date, 'localtime')
-            GROUP BY dates.date
-            HAVING CAST(weekday AS INTEGER) BETWEEN 1 AND 5
-            ORDER BY dates.date DESC
-            LIMIT 5`;
-
-        // Query para dados mensais do ano atual
-        const monthlyQuery = `
-            WITH RECURSIVE months(month_date) AS (
-                SELECT datetime('now', 'localtime', 'start of year')
-                UNION ALL
-                SELECT datetime(month_date, '+1 month')
-                FROM months
-                WHERE strftime('%Y', month_date) = strftime('%Y', 'now', 'localtime')
-            )
-            SELECT 
-                strftime('%m', month_date) as month,
-                COALESCE(COUNT(DISTINCT CASE 
-                    WHEN problems.description IS NOT NULL 
-                    AND strftime('%Y-%m', problems.date, 'localtime') = strftime('%Y-%m', month_date)
-                    ${filter}
-                    THEN problems.id 
-                END), 0) as count
-            FROM months
-            LEFT JOIN problems 
-                ON strftime('%Y-%m', problems.date, 'localtime') = strftime('%Y-%m', month_date)
-            GROUP BY strftime('%m', month_date)
-            ORDER BY month`;
-
-        const [weeklyData, monthlyData] = await Promise.all([
-            queryDatabase(weeklyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        const weekDays = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
-        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
-                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        // Processar dados semanais
-        const processedWeeklyData = weeklyData
-            .sort((a, b) => b.date.localeCompare(a.date)) // Ordenar por data decrescente
-            .map(row => ({
-                label: `${weekDays[parseInt(row.weekday)]} ${row.formatted_date}`,
-                count: parseInt(row.count)
-            }));
-
-        const response = {
-            weekly: {
-                labels: processedWeeklyData.map(d => d.label),
-                data: processedWeeklyData.map(d => d.count)
-            },
-            monthly: {
-                labels: monthNames,
-                data: Array(12).fill(0).map((_, i) => {
-                    const monthData = monthlyData.find(row => parseInt(row.month) === i + 1);
-                    return monthData ? parseInt(monthData.count) : 0;
-                })
-            }
-        };
-
-        res.json(response);
+        query += ` ORDER BY school`;
         
+        const schools = await queryDatabase(query, params);
+        res.json(schools.map(row => row.school));
     } catch (error) {
-        console.error('Erro ao buscar dados dos gráficos:', error);
-        res.status(500).json({ error: 'Erro ao buscar dados dos gráficos' });
+        console.error('Erro ao buscar escolas:', error);
+        res.status(500).json({ error: 'Erro ao buscar escolas' });
     }
 });
 
