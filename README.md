@@ -23,16 +23,14 @@ Sistema automatizado para suporte técnico escolar que integra WhatsApp com dash
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/chatbot-whatsapp
+git clone https://github.com/syze77/Chatbot.git
 
 # Entre no diretório
-cd chatbot-whatsapp
+cd chatbot
 
 # Instale as dependências
 npm install
 
-# Configure as variáveis de ambiente
-cp .env.example .env
 ```
 
 ## 💻 Uso
