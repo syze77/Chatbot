@@ -159,13 +159,16 @@
 
         async function fetchDataAndUpdateCharts(city = '', school = '') {
             try {
-                const params = new URLSearchParams({ city, school });
-                const response = await fetch(`http://localhost:3000/getChartData?${params}`);
-                const data = await response.json();
+                const params = new URLSearchParams();
+                if (city) params.append('city', city);
+                if (school) params.append('school', school);
                 
+                const response = await fetch(`http://localhost:3000/getChartData?${params}`);
+                if (!response.ok) throw new Error('Erro na resposta do servidor');
+                
+                const data = await response.json();
                 if (!data || !data.weekly || !data.monthly) {
-                    console.error('Dados inválidos recebidos:', data);
-                    return;
+                    throw new Error('Dados inválidos recebidos');
                 }
 
                 Charts.updateData(data.weekly, data.monthly);
@@ -384,44 +387,6 @@
             filterBtn.disabled = false;
         });
 
-        function applyFilters() {
-            const filterBtn = document.querySelector('.apply-filter-btn');
-            const cityFilter = document.getElementById('cityFilter');
-            const schoolFilter = document.getElementById('schoolFilter');
-            
-            // Disable button while processing
-            filterBtn.disabled = true;
-            
-            // Add loading state
-            const originalText = filterBtn.innerHTML;
-            filterBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Aplicando...';
-            
-            // Fetch new data with filter
-            fetchDataAndUpdateCharts(cityFilter.value)
-                .then(() => {
-                    // Show success feedback
-                    filterBtn.innerHTML = '<i class="fas fa-check"></i> Aplicado';
-                    setTimeout(() => {
-                        filterBtn.innerHTML = originalText;
-                        filterBtn.disabled = false;
-                    }, 1000);
-                })
-                .catch(error => {
-                    console.error('Erro ao aplicar filtros:', error);
-                    filterBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erro';
-                    setTimeout(() => {
-                        filterBtn.innerHTML = originalText;
-                        filterBtn.disabled = false;
-                    }, 1000);
-                });
-        }
-
-        // Add event listener for city filter changes
-        document.getElementById('cityFilter').addEventListener('change', () => {
-            const filterBtn = document.querySelector('.apply-filter-btn');
-            filterBtn.innerHTML = '<i class="fas fa-filter"></i> Aplicar Filtros';
-            filterBtn.disabled = false;
-        });
     </script>
 </body>
 </html>

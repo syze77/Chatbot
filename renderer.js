@@ -14,11 +14,28 @@ socket.on('statusUpdate', (data) => {
 
 socket.on('userProblem', (problemData) => {
     console.log('User problem received:', problemData);
-    displayProblem(problemData.description, problemData.chatId, problemData.name);
-    showNotification('Novo Problema Relatado', 
-        `${problemData.name} (${problemData.position}) - ${problemData.description}`);
-    playNotificationSound();
-    showBellIcon();
+    
+    // Se problemData for uma string, converta para objeto
+    const data = typeof problemData === 'string' ? 
+        { description: problemData } : problemData;
+    
+    // Exibir o problema na interface
+    displayProblem(data.description, data.chatId, data.name);
+    
+    // Estrutura correta dos dados para a notificação
+    const notificationData = {
+        chatId: data.chatId,
+        name: data.name,
+        position: data.position,
+        school: data.school,
+        description: data.description,
+        city: data.city
+    };
+
+    // Debug log para verificar os dados
+    console.log('Dados formatados para notificação:', notificationData);
+    
+    showNotification('Novo Problema Relatado', notificationData);
 });
 
 socket.on('new-data', (data) => {
@@ -29,9 +46,14 @@ socket.on('new-data', (data) => {
 socket.on('newProblemReported', (problemData) => {
     console.log('New problem reported:', problemData); // Log new problem
     displayProblem(problemData.description, problemData.chatId, problemData.name);
-    showNotification('Novo Problema Relatado', problemData.description);
-    playNotificationSound();
-    showBellIcon();
+    
+    // Criar objeto de dados estruturado para a notificação
+    const notificationData = {
+        description: problemData.description,
+    };
+    
+    // Usar o objeto estruturado em vez da string
+    showNotification('Novo Problema Relatado', notificationData);
 });
 
 const notificationSound = document.getElementById('notification-sound');
@@ -122,62 +144,169 @@ function displayProblem(description, chatId, userName) {
     problemListContainer.insertBefore(problemItem, problemListContainer.firstChild);
 }
 
-// Updated notification function
-function showNotification(title, message) {
-    // Verify notification permission
-    if (!('Notification' in window)) {
-        console.log('This browser does not support desktop notification');
-        return;
-    }
+// Updated notification functions
+async function showNotification(title, data) {
+    try {
+        // Verificar contexto seguro
+        if (!window.isSecureContext) {
+            console.error('Notificações requerem contexto seguro (HTTPS ou localhost)');
+            return;
+        }
 
-    if (Notification.permission === 'granted') {
-        createNotification(title, message);
-    } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then(permission => {
-            if (permission === 'granted') {
-                createNotification(title, message);
+        // Verificar suporte a notificações
+        if (!('Notification' in window)) {
+            console.error('Este navegador não suporta notificações');
+            return;
+        }
+
+        // Solicitar permissão se necessário
+        if (Notification.permission === 'default') {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                console.log('Permissão de notificação negada');
+                return;
             }
-        });
+        }
+
+        // Criar e mostrar notificação
+        if (Notification.permission === 'granted') {
+            createNotification(title, data);
+        }
+    } catch (error) {
+        console.error('Erro ao mostrar notificação:', error);
     }
 }
 
-// Create notification with better formatting
-function createNotification(title, message) {
-    const options = {
-        body: message,
-        icon: '/path/to/icon.png', // Add your notification icon
-        badge: '/path/to/badge.png', // Add your badge icon
-        tag: 'support-notification', // Tag for grouping similar notifications
-        renotify: true, // Allow renotification with same tag
-        requireInteraction: true, // Notification stays until user interacts
-        silent: false, // Play sound
-        vibrate: [200, 100, 200] // Vibration pattern
-    };
+// Atualizar a função createNotification
+function createNotification(title, data) {
+    try {
+        console.log('Dados recebidos na notificação:', data); // Debug log
 
-    const notification = new Notification(title, options);
-    
-    notification.onclick = function(event) {
-        event.preventDefault();
-        window.focus();
-        this.close();
-    };
+        // Verificar se data é uma string ou objeto
+        const isStringData = typeof data === 'string';
+        
+        // Formatar o corpo da notificação de forma mais legível
+        let notificationBody;
+        
+        if (isStringData) {
+            notificationBody = data;
+        } else {
+            // Criar array apenas com informações disponíveis
+            const lines = [];
+            if (data.name) lines.push(`Nome: ${data.name}`);
+            if (data.position) lines.push(`Cargo: ${data.position}`);
+            if (data.school) lines.push(`Escola: ${data.school}`);
+            if (data.city) lines.push(`Cidade: ${data.city}`);
+            if (data.description) lines.push(`Problema: ${data.description}`);
+            
+            notificationBody = lines.join('\n');
+        }
 
-    playNotificationSound();
-    showBellIcon();
+        console.log('Corpo da notificação:', notificationBody); // Debug log
+
+        const options = {
+            body: notificationBody,
+            icon: './assets/notification-icon.png',
+            badge: './assets/badge-icon.png',
+            tag: `problem-${isStringData ? Date.now() : data.chatId}`,
+            renotify: true,
+            requireInteraction: true,
+            silent: false,
+            data: data
+        };
+
+        const notification = new Notification(title, options);
+
+        notification.onclick = function(event) {
+            event.preventDefault();
+            window.focus();
+            
+            if (!isStringData && data.chatId) {
+                const problemElement = document.querySelector(`[data-chat-id="${data.chatId}"]`);
+                if (problemElement) {
+                    problemElement.scrollIntoView({ behavior: 'smooth' });
+                    problemElement.classList.add('highlight');
+                    
+                    setTimeout(() => {
+                        problemElement.classList.remove('highlight');
+                    }, 2000);
+                }
+            }
+            
+            this.close();
+        };
+
+        notification.onshow = function() {
+            playNotificationSound();
+            showBellIcon();
+        };
+
+        // Auto close after 30 seconds
+        setTimeout(() => {
+            notification.close();
+        }, 30000);
+
+        return notification;
+    } catch (error) {
+        console.error('Erro ao criar notificação:', error);
+        return null;
+    }
 }
 
-// Play the notification sound
 function playNotificationSound() {
-    notificationSound.play();
+    try {
+        const sound = document.getElementById('notification-sound');
+        if (sound) {
+            sound.currentTime = 0;
+            const playPromise = sound.play();
+            if (playPromise !== undefined) {
+                playPromise.catch((error) => {
+                    console.log('Error playing sound:', error);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error playing notification sound:', error);
+    }
 }
 
-// Show the bell icon
 function showBellIcon() {
     const problemHeader = document.querySelector('.status-header i.fa-exclamation-triangle');
     if (problemHeader) {
-        problemHeader.classList.add('fa-bell');
+        problemHeader.classList.add('fa-bell', 'notification-animation');
+        // Remove animation class after animation completes
+        setTimeout(() => {
+            problemHeader.classList.remove('notification-animation');
+        }, 1000);
     }
 }
+
+// Add this to your existing styles or create new style element
+const notificationStyles = document.createElement('style');
+notificationStyles.textContent = `
+    .notification-animation {
+        animation: bell-ring 1s ease;
+    }
+
+    @keyframes bell-ring {
+        0% { transform: rotate(0); }
+        20% { transform: rotate(15deg); }
+        40% { transform: rotate(-15deg); }
+        60% { transform: rotate(7deg); }
+        80% { transform: rotate(-7deg); }
+        100% { transform: rotate(0); }
+    }
+
+    .highlight {
+        animation: highlight-pulse 2s ease;
+    }
+
+    @keyframes highlight-pulse {
+        0% { background-color: rgba(255, 193, 7, 0.5); }
+        100% { background-color: transparent; }
+    }
+`;
+document.head.appendChild(notificationStyles);
 
 // Improved updateSection function with loading states
 function updateSection(items, container, type, includePosition = false) {

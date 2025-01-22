@@ -1130,17 +1130,20 @@ server.get('/getChartData', async (req, res) => {
         let conditions = ['description IS NOT NULL'];
         const params = [];
         
-        if (city) {
+        if (city && city !== 'undefined' && city !== '') {
             conditions.push('problems.city = ?');
             params.push(city);
         }
         
-        if (school) {
+        if (school && school !== 'undefined' && school !== '') {
             conditions.push('problems.school = ?');
             params.push(school);
         }
         
         const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+        
+        console.log('Query conditions:', conditions); // Debug log
+        console.log('Query parameters:', params); // Debug log
         
         // Query para dados mensais (modificada para garantir todos os meses)
         const monthlyQuery = `

@@ -119,7 +119,7 @@ function initMonthlyChart() {
     });
 }
 
-function updateChartData(weeklyData, monthlyData) {
+async function updateChartData(weeklyData, monthlyData) {
     if (weeklyData) {
         // Ensure we're only showing workdays (Monday to Friday)
         const filteredData = {
@@ -133,12 +133,9 @@ function updateChartData(weeklyData, monthlyData) {
             })
         };
 
-        // Update chart with filtered data
         dailyProblemsChart.data.labels = filteredData.labels;
         dailyProblemsChart.data.datasets[0].data = filteredData.data;
         dailyProblemsChart.update('none');
-
-        console.log('Filtered chart data:', filteredData);
     }
 
     if (monthlyData) {
