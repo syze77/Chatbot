@@ -27,16 +27,16 @@ Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor o
 
 ⚠️ Atenção: Certifique-se de preencher todas as informações corretamente para agilizar o atendimento.`;
 
-// Initialize Express
+// Inicializar Express
 const server = express();
 
-// Add JSON middleware
+// Adicionar middleware JSON
 server.use(express.json());
 
 let activeChatsList = [];
 let reportedProblems = [];
 
-// Initialize the bot
+// Inicializar o bot
 async function startHydraBot(io) {
   try {
     bot = await hydraBot.initServer({
@@ -80,7 +80,7 @@ async function startHydraBot(io) {
       try {
         const { chatId, attendantId } = data;
 
-        // Update problem status in database
+        // Atualizar status do problema no banco de dados
         await getDatabase().run(
           `UPDATE problems 
            SET status = 'active', 
@@ -89,10 +89,10 @@ async function startHydraBot(io) {
           [attendantId, chatId]
         );
 
-        // Send status update to all clients
+        // Enviar atualização de status para todos os clientes
         sendStatusUpdateToMainProcess(io);
 
-        // Send confirmation message to the user
+        // Enviar mensagem de confirmação para o usuário
         if (botConnection) {
           await sendMessage(
             botConnection,
@@ -109,7 +109,7 @@ async function startHydraBot(io) {
       try {
         const { chatId, id } = data;
 
-        // Update chat status to completed in database
+        // Atualizar status do chat para concluído no banco de dados
         await getDatabase().run(
           `UPDATE problems 
            SET status = 'completed', 
@@ -118,7 +118,7 @@ async function startHydraBot(io) {
           [chatId, id]
         );
 
-        // Send completion message to user
+        // Enviar mensagem de conclusão para o usuário
         if (botConnection) {
           await sendMessage(
             botConnection,
@@ -131,11 +131,11 @@ async function startHydraBot(io) {
             `Nome:\nCidade:\nCargo:\nEscola:`
           );
 
-          // Reset user topic to allow new service
+          // Resetar tópico do usuário para permitir novo atendimento
           delete userCurrentTopic[chatId];
         }
 
-        // Process next user in queue
+        // Processar próximo usuário na fila
         const nextInLine = await getNextInWaitingList();
         if (nextInLine) {
           await getDatabase().run(
@@ -151,7 +151,7 @@ async function startHydraBot(io) {
           await sendProblemOptions(botConnection, nextInLine.chatId);
         }
 
-        // Update waiting users and status
+        // Atualizar usuários em espera e status
         await updateWaitingUsers(io);
         await sendStatusUpdateToMainProcess(io);
 
@@ -162,7 +162,7 @@ async function startHydraBot(io) {
   });
 }
 
-// Listen for incoming messages
+// Ouvir mensagens recebidas
 function startListeningForMessages(conn, io) {
   conn.client.ev.on('newMessage', async (newMsg) => {
     const chatId = newMsg.result.chatId;
@@ -350,7 +350,7 @@ async function handleUserMessage(conn, chatId, messageText, io) {
             await sendMessage(conn, chatId, defaultMessage);
         }
     } catch (error) {
-        console.error('Error handling user message:', error);
+        console.error('Erro ao processar mensagem do usuário:', error);
         await sendMessage(conn, chatId, 'Desculpe, ocorreu um erro. Por favor, tente novamente.');
     }
 }
@@ -358,7 +358,7 @@ async function handleUserMessage(conn, chatId, messageText, io) {
 // Processa fechamento do chat
 async function handleChatClosed(chatId, io) {
     try {
-        // Mark chat as completed
+        // Marcar chat como concluído
         await updateDatabaseAndNotify(
             `UPDATE problems 
              SET status = 'completed', 
@@ -368,10 +368,10 @@ async function handleChatClosed(chatId, io) {
             io
         );
 
-        // Get next user in waiting list
+        // Obter próximo usuário na lista de espera
         const nextUser = await getNextInWaitingList();
         if (nextUser) {
-            // Update next user status
+            // Atualizar status do próximo usuário
             await updateDatabaseAndNotify(
                 `UPDATE problems 
                  SET status = 'active' 
@@ -380,7 +380,7 @@ async function handleChatClosed(chatId, io) {
                 io
             );
 
-            // Send message to next user
+            // Enviar mensagem para o próximo usuário
             await sendMessage(
                 botConnection,
                 nextUser.chatId,
@@ -389,10 +389,10 @@ async function handleChatClosed(chatId, io) {
             await sendProblemOptions(botConnection, nextUser.chatId);
         }
 
-        // Update all waiting users positions
+        // Atualizar posições de todos os usuários em espera
         await updateWaitingUsers(io);
         
-        // Fetch and broadcast updated status to all clients
+        // Buscar e transmitir status atualizado para todos os clientes
         await sendStatusUpdateToMainProcess(io);
 
     } catch (error) {
@@ -474,11 +474,11 @@ async function processMessageQueue() {
     message.resolve();
     messageQueue.shift();
     
-    // Add delay before next message
+    // Adicionar delay antes da próxima mensagem
     await new Promise(resolve => setTimeout(resolve, MESSAGE_DELAY));
     
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error('Erro ao enviar mensagem:', error);
     message.retries++;
     
     if (message.retries >= 3) {
@@ -487,7 +487,7 @@ async function processMessageQueue() {
     }
   }
 
-  // Process next message
+  // Processar próxima mensagem
   processMessageQueue();
 }
 
@@ -608,6 +608,7 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
                 `INSERT INTO problems 
                 (chatId, name, city, position, school, description, status, date) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+
                 [
                     chatId,
                     userInfo.name,
@@ -696,7 +697,7 @@ async function handleVideoFeedback(conn, chatId, messageText, io) {
             await sendMessage(conn, chatId, 'Resposta inválida. Por favor, responda com "sim" ou "não".');
         }
     } catch (error) {
-        console.error('Error in video feedback:', error);
+        console.error('Erro em handleVideoFeedback:', error);
     }
 }
 
@@ -750,6 +751,7 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
                     `INSERT INTO problems 
                     (chatId, name, city, position, school, description, status, date) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+
                     [
                         chatId,
                         userInfo.name,
@@ -778,7 +780,7 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
     }
 }
 
-// Save client information to the database
+// Salvar informações do cliente no banco de dados
 function saveClientInfoToDatabase(userInfo, chatId, status, io) {
   const date = new Date().toISOString();
   
@@ -797,7 +799,7 @@ function saveClientInfoToDatabase(userInfo, chatId, status, io) {
   );
 }
 
-// Save problem to the database
+// Salvar problema no banco de dados
 function saveProblemToDatabase(problemData, io) {
   getDatabase().run(`UPDATE problems SET description = ?, date = ? WHERE id = ?`, 
     [problemData.description, problemData.date, problemData.problemId], 
@@ -806,24 +808,24 @@ function saveProblemToDatabase(problemData, io) {
         console.error('Erro ao salvar problema:', err.message);
         return;
       }
-      console.log(`Problem description updated for id ${problemData.problemId}`);
+      console.log(`Descrição do problema atualizada para id ${problemData.problemId}`);
       io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
     });
 }
 
-// Mark problem as completed in the database
+// Marcar problema como concluído no banco de dados
 function markProblemAsCompleted(problemId, io) {
   getDatabase().run(`UPDATE problems SET status = 'completed' WHERE id = ?`, [problemId], function(err) {
     if (err) {
       console.error('Erro ao marcar problema como concluído:', err.message);
       return;
     }
-    console.log(`Problem with id ${problemId} marked as completed.`);
+    console.log(`Problema com id ${problemId} marcado como concluído.`);
     io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
   });
 }
 
-// Send status update to the main process
+// Enviar atualização de status para o processo principal
 async function sendStatusUpdateToMainProcess(io) {
     try {
         const queries = {
@@ -856,10 +858,10 @@ async function sendStatusUpdateToMainProcess(io) {
             completedChats: completed
         };
 
-        // Emit update to all clients
+        // Emitir atualização para todos os clientes
         io.emit('statusUpdate', statusData);
         
-        // Debug log
+        // Log de depuração
         console.log('Status atualizado:', {
             activeCount: active.length,
             waitingCount: waiting.length,
@@ -872,7 +874,7 @@ async function sendStatusUpdateToMainProcess(io) {
     }
 }
 
-// Send problem to the front-end
+// Enviar problema para o front-end
 function sendProblemToFrontEnd(problemData) {
   if (problemData.description.startsWith('Subtópico:')) {
     return;
@@ -880,10 +882,10 @@ function sendProblemToFrontEnd(problemData) {
   ipcMain.emit('userProblem', null, problemData.description, problemData.chatId, problemData.name);
 }
 
-// Close the chat
+// Fechar o chat
 async function closeChat(chatId, io) {
     try {
-        // Mark chat as completed
+        // Marcar chat como concluído
         await updateDatabaseAndNotify(
             `UPDATE problems 
              SET status = 'completed', 
@@ -893,10 +895,10 @@ async function closeChat(chatId, io) {
             io
         );
 
-        // Get next user in waiting list
+        // Obter próximo usuário na lista de espera
         const nextUser = await getNextInWaitingList();
         if (nextUser) {
-            // Update next user status
+            // Atualizar status do próximo usuário
             await updateDatabaseAndNotify(
                 `UPDATE problems 
                  SET status = 'active' 
@@ -905,7 +907,7 @@ async function closeChat(chatId, io) {
                 io
             );
 
-            // Send message to next user
+            // Enviar mensagem para o próximo usuário
             await sendMessage(
                 botConnection,
                 nextUser.chatId,
@@ -914,10 +916,10 @@ async function closeChat(chatId, io) {
             await sendProblemOptions(botConnection, nextUser.chatId);
         }
 
-        // Update all waiting users positions
+        // Atualizar posições de todos os usuários em espera
         await updateWaitingUsers(io);
         
-        // Fetch and broadcast final status update
+        // Buscar e transmitir atualização final de status
         await sendStatusUpdateToMainProcess(io);
 
     } catch (error) {
@@ -941,7 +943,7 @@ async function getNextInWaitingList() {
     });
 }
 
-// Attend the next user in the queue
+// Atender o próximo usuário na fila
 async function attendNextUserInQueue(conn, io) {
   const nextUser = activeChatsList.find(chat => chat.isWaiting);
   if (nextUser) {
@@ -953,7 +955,7 @@ async function attendNextUserInQueue(conn, io) {
   }
 }
 
-// Get the waiting list
+// Obter a lista de espera
 function getWaitingList() {
   return activeChatsList.filter(chat => chat.isWaiting);
 }
@@ -965,7 +967,7 @@ function redirectToWhatsAppChat(chatId) {
     require('electron').shell.openExternal(whatsappUrl);
 }
 
-// Add new function to update waiting users
+// Adicionar nova função para atualizar usuários em espera
 async function updateWaitingUsers(io) {
     try {
         const waitingUsers = await new Promise((resolve, reject) => {
@@ -975,7 +977,7 @@ async function updateWaitingUsers(io) {
             );
         });
 
-        // Update each waiting user with their new position
+        // Atualizar cada usuário em espera com sua nova posição
         for (let i = 0; i < waitingUsers.length; i++) {
             const position = i + 1;
             const user = waitingUsers[i];
@@ -1001,7 +1003,7 @@ function getStatusText(status) {
     return statusMap[status] || status;
 }
 
-// Add report generation endpoint
+// Adicionar endpoint de geração de relatório
 server.get('/generateReport', async (req, res) => {
     try {
         const { start, end, format, city, school } = req.query;
@@ -1034,13 +1036,13 @@ server.get('/generateReport', async (req, res) => {
 
         const problems = await queryDatabase(query, params);
 
-        // Handle Excel export format
+        // Manipular formato de exportação Excel
         if (format === 'xlsx') {
             const Excel = require('exceljs');
             const workbook = new Excel.Workbook();
             const worksheet = workbook.addWorksheet('Atendimentos');
 
-            // Configure columns
+            // Configurar colunas
             worksheet.columns = [
                 { header: 'Nome', key: 'name', width: 30 },
                 { header: 'Cidade', key: 'city', width: 20 },
@@ -1053,10 +1055,10 @@ server.get('/generateReport', async (req, res) => {
                 { header: 'Duração (min)', key: 'duration_minutes', width: 15 }
             ];
 
-            // Add rows
+            // Adicionar linhas
             worksheet.addRows(problems);
 
-            // Style header row
+            // Estilizar linha de cabeçalho
             worksheet.getRow(1).font = { bold: true };
             worksheet.getRow(1).fill = {
                 type: 'pattern',
@@ -1071,20 +1073,20 @@ server.get('/generateReport', async (req, res) => {
             return;
         }
 
-        // PDF Generation
+        // Geração de PDF
         const doc = new PDFDocument({ size: 'A4', margin: 50 });
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.pdf`);
         doc.pipe(res);
 
-        // Calculate statistics
+        // Calcular estatísticas
         const totalAtendimentos = problems.length;
         const concluidos = problems.filter(p => p.status === 'completed').length;
         const tempoMedioMinutos = concluidos ? Math.round(
             problems.reduce((acc, p) => acc + (p.duration_minutes || 0), 0) / concluidos
         ) : 0;
 
-        // Header and statistics
+        // Cabeçalho e estatísticas
         doc.fontSize(20).text('Relatório de Atendimentos', { align: 'center' }).moveDown(1);
         doc.fontSize(12).text(`Período: ${new Date(start).toLocaleDateString()} a ${new Date(end).toLocaleDateString()}`).moveDown(2);
         
@@ -1095,7 +1097,7 @@ server.get('/generateReport', async (req, res) => {
            .text(`Tempo Médio: ${Math.floor(tempoMedioMinutos/60)}h ${tempoMedioMinutos%60}min`)
            .moveDown(2);
 
-        // Problems listing
+        // Listagem de problemas
         doc.fontSize(14).text('Detalhamento', { underline: true }).moveDown(1);
 
         problems.forEach((problem) => {
@@ -1142,8 +1144,8 @@ server.get('/getChartData', async (req, res) => {
         
         const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
         
-        console.log('Query conditions:', conditions); // Debug log
-        console.log('Query parameters:', params); // Debug log
+        console.log('Query conditions:', conditions); // Log de depuração
+        console.log('Query parameters:', params); // Log de depuração
         
         // Query para dados mensais (modificada para garantir todos os meses)
         const monthlyQuery = `
@@ -1222,7 +1224,7 @@ server.get('/getChartData', async (req, res) => {
     }
 });
 
-// Update the getCompletedAttendances endpoint
+// Atualizar o endpoint getCompletedAttendances
 server.get('/getCompletedAttendances', async (req, res) => {
     try {
         const { date, position, city, school } = req.query;
@@ -1319,7 +1321,7 @@ server.get('/getSchools', async (req, res) => {
     }
 });
 
-// Adicionar ao módulo exports
+// Exportação das funcionalidades principais
 module.exports = {
     startHydraBot,
     redirectToWhatsAppChat,

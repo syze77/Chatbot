@@ -1,10 +1,14 @@
+// Importação dos módulos necessários
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
+// Variável para armazenar a conexão com o banco de dados
 let db;
 
+// Função de inicialização do banco de dados
 function initializeDatabase() {
     return new Promise((resolve, reject) => {
+        // Criar/conectar ao banco de dados SQLite
         db = new sqlite3.Database(path.join(__dirname, 'bot_data.db'), (err) => {
             if (err) {
                 console.error('Erro ao abrir o banco de dados:', err);
@@ -14,8 +18,9 @@ function initializeDatabase() {
             
             console.log('Conectado ao banco de dados SQLite.');
             
-            // Create tables if they don't exist
+            // Criar tabelas caso não existam
             db.serialize(() => {
+                // Definição da estrutura da tabela 'problems'
                 db.run(`CREATE TABLE IF NOT EXISTS problems (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     date TEXT,
@@ -30,11 +35,11 @@ function initializeDatabase() {
                     attendant_id TEXT
                 )`, (err) => {
                     if (err) {
-                        console.error('Error creating table:', err);
+                        console.error('Erro ao criar tabela:', err);
                         reject(err);
                         return;
                     }
-                    console.log('Database initialized successfully');
+                    console.log('Banco de dados inicializado com sucesso');
                     resolve(db);
                 });
             });
@@ -42,7 +47,8 @@ function initializeDatabase() {
     });
 }
 
+// Exportação das funções do módulo
 module.exports = {
-    initializeDatabase,
-    getDatabase: () => db
+    initializeDatabase,    // Função para inicializar o banco de dados
+    getDatabase: () => db  // Função para obter a instância do banco de dados
 };
