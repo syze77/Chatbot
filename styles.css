@@ -1,3 +1,4 @@
+/* Configurações Globais */
 body {
     display: flex;
     font-family: 'Inter', sans-serif;
@@ -6,6 +7,7 @@ body {
     padding: 0;
 }
 
+/* Estrutura da Sidebar */
 .sidebar {
     width: 260px;
     background: #17a2b8; /* Mesma cor dos atendimentos ativos */
@@ -22,6 +24,7 @@ body {
     overflow-x: hidden;
 }
 
+/* Cabeçalho da Sidebar */
 .sidebar-header {
     padding: 20px;
     display: flex;
@@ -31,6 +34,7 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* Ajustes do Logo */
 .logo-wrapper {
     display: flex;
     align-items: center;
@@ -63,7 +67,7 @@ body {
     opacity: 1;
 }
 
-/* Adjust collapsed state */
+/* Ajustes do Logo */
 .sidebar.collapsed .logo-container {
     justify-content: center;
 }
@@ -84,6 +88,7 @@ body {
     color: #e4e6ef;
 }
 
+/* Navegação */
 .nav-section {
     padding: 20px 0;
 }
@@ -191,7 +196,7 @@ body {
     color: rgba(255, 255, 255, 0.5);
 }
 
-/* Collapsed state styles */
+/* Estados da Sidebar Recolhida */
 .sidebar.collapsed {
     width: 70px;
 }
@@ -695,6 +700,7 @@ button {
     background-color: transparent;
 }
 
+/* Cartões de Atendimento */
 .completed-item {
     width: 100%;
     margin: 15px 0;
@@ -712,6 +718,7 @@ button {
 .completed-item:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+    background-color: #f8f9fa; /* Fundo claro ao passar o mouse no tema claro */
 }
 
 .dark-theme .completed-item {
@@ -721,24 +728,7 @@ button {
 }
 
 .dark-theme .completed-item:hover {
-    background: #363636;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-}
-
-/* Ajuste da cor dos cards de atendimentos concluídos */
-.completed-item {
-    background-color: #ffffff; /* Light theme: white background */
-    border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.dark-theme .completed-item {
-    background-color: #1a1f2c; /* Dark theme: dark blue background */
-    border-color: #2a2f3a;
-}
-
-.completed-item:hover {
-    background-color: #242938;
-    transform: translateY(-5px);
+    background: #242938;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }
 
@@ -762,10 +752,6 @@ button {
 body:not(.dark-theme) .completed-item {
     background-color: #ffffff;
     color: #495057;
-}
-
-body:not(.dark-theme) .completed-item:hover {
-    background-color: #242938;
 }
 
 body:not(.dark-theme) .completed-item .user-name,
@@ -1665,6 +1651,7 @@ body.dark-theme {
     box-shadow: 0 0 0 0.2rem rgba(54, 153, 255, 0.25);
 }
 
+/* Filtros e Controles */
 .filter-section {
     background-color: #ffffff;
     border-radius: 10px;
@@ -1730,6 +1717,7 @@ body.dark-theme {
     box-shadow: 0 0 0 0.2rem rgba(23, 162, 184, 0.25);
 }
 
+/* Botões e Interações */
 .apply-filter-btn {
     padding: 12px 24px;
     background-color: #17a2b8;  /* Azul no tema claro */
@@ -1819,6 +1807,36 @@ body.dark-theme {
     background-color: #1668cb;
 }
 
+/* Responsividade */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+    }
+
+    .sidebar.mobile-active {
+        transform: translateX(0);
+    }
+
+    .content {
+        margin-left: 0 !important;
+    }
+
+    .mobile-toggle {
+        display: block;
+        position: fixed;
+        top: 15px;
+        left: 15px;
+        z-index: 1001;
+        background: rgba(0, 0, 0, 0.5);
+        border: none;
+        color: white;
+        padding: 10px;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+}
+
+/* Animações */
 @keyframes highlight {
     0% { background-color: #fff; }
     50% { background-color: #e3f2fd; }
@@ -1827,4 +1845,17 @@ body.dark-theme {
 
 .updated {
     animation: highlight 1s ease-in-out;
+}
+
+/* Updated hover styles for completed items */
+.completed-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+    background-color: #f8f9fa; /* Fundo claro ao passar o mouse no tema claro */
+}
+
+.dark-theme .completed-item:hover {
+    background-color: #242938; /* Dark background only in dark theme */
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }

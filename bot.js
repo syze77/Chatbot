@@ -1195,7 +1195,7 @@ server.get('/getChartData', async (req, res) => {
         // Processar os dados
         const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'];
 
         const processed = {
             weekly: {
