@@ -1,19 +1,55 @@
-# Chatbot de Atendimento WhatsApp
+# Chatbot de Atendimento WhatsApp 🤖
 
-Sistema automatizado para suporte técnico escolar, integrando WhatsApp com dashboard em tempo real.
+Sistema automatizado para suporte técnico escolar que integra WhatsApp com dashboard em tempo real para monitoramento e gestão de atendimentos.
 
-## Recursos Principais
+## 📋 Recursos Principais
 
-- 🤖 Atendimento automatizado via WhatsApp
-- 📊 Dashboard em tempo real
-- 📋 Sistema de fila inteligente
-- 📈 Análise de dados e relatórios
-- 🔄 Sincronização automática
-- 🎨 Tema claro/escuro
+- 🤖**Atendimento Automatizado**: Respostas inteligentes via WhatsApp
+- 📊**Dashboard em Tempo Real**: Monitoramento de métricas e atendimentos
+- 📋**Sistema de Fila**: Gerenciamento inteligente de prioridades
+- 📈**Análise de Dados**: Relatórios detalhados e insights
+- 🔄**Sincronização**: Integração automática com sistemas escolares
+- 🎨**Design Responsivo**: Interface adaptável com tema claro/escuro
 
-## Pré-requisitos
+## 🚀 Começando
+
+### Pré-requisitos
+
+- Node.js (versão 14 ou superior)
+- SQLite3
+- Número de WhatsApp Business ativo
+
+### Instalação
 
 ```bash
-Node.js >= 14
-SQLite3
-Número de WhatsApp ativo
+# Clone o repositório
+git clone https://github.com/seu-usuario/chatbot-whatsapp
+
+# Entre no diretório
+cd chatbot-whatsapp
+
+# Instale as dependências
+npm install
+
+# Configure as variáveis de ambiente
+cp .env.example .env
+```
+
+## 💻 Uso
+
+```bash
+# Inicie o servidor de desenvolvimento
+npm run dev
+
+# Ou build para produção
+npm run build
+npm start
+```
+
+## 🤝 Contribuindo
+
+1. Faça um Fork do projeto
+2. Crie sua Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a Branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
