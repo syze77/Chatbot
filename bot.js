@@ -16,6 +16,7 @@ let botConnection = null;
 let messageQueue = [];
 let isProcessingQueue = false;
 let userCurrentTopic = {};
+let humanAttendedChats = new Set();
 
 // Mensagem padrão para novos usuários
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
@@ -80,6 +81,9 @@ async function startHydraBot(io) {
       try {
         const { chatId, attendantId } = data;
 
+        // Adicionar chat à lista de atendidos por humanos
+        humanAttendedChats.add(chatId);
+
         // Atualizar status do problema no banco de dados
         await getDatabase().run(
           `UPDATE problems 
@@ -108,6 +112,9 @@ async function startHydraBot(io) {
     socket.on('endChat', async (data) => {
       try {
         const { chatId, id } = data;
+
+        // Remover chat da lista de atendidos por humanos
+        humanAttendedChats.delete(chatId);
 
         // Atualizar status do chat para concluído no banco de dados
         await getDatabase().run(
@@ -315,6 +322,11 @@ async function getWaitingPosition(chatId) {
 
 // Processa mensagem do usuário
 async function handleUserMessage(conn, chatId, messageText, io) {
+    // Se o chat está sendo atendido por humano, ignorar
+    if (humanAttendedChats.has(chatId)) {
+        return;
+    }
+
     const currentTopic = userCurrentTopic[chatId];
     
     // Se não há tópico atual ou se uma nova mensagem começa com "nome:"
@@ -339,7 +351,8 @@ async function handleUserMessage(conn, chatId, messageText, io) {
     try {
         if (currentTopic.state === 'descricaoProblema') {
             await handleProblemDescription(conn, chatId, messageText, io);
-            userCurrentTopic[chatId] = 'problema';
+            // Após descrever o problema, limpar o tópico para evitar respostas automáticas
+            delete userCurrentTopic[chatId];
         } else if (currentTopic === 'problema') {
             await handleProblemSelection(conn, chatId, messageText, io);
         } else if (currentTopic.stage === 'subproblema') {
@@ -520,8 +533,11 @@ async function handleProblemSelection(conn, chatId, messageText, io) {
       await sendSubProblemOptions(conn, chatId, 'Falha no registro de notas');
       break;
     case '5':
-      await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
-      userCurrentTopic[chatId] = 'descricaoProblema';
+      await sendMessage(conn, chatId, 'Por favor, descreva detalhadamente o problema que você está enfrentando:');
+      userCurrentTopic[chatId] = { 
+        state: 'descricaoProblema',
+        type: 'custom'
+      };
       break;
     case 'voltar':
       await sendProblemOptions(conn, chatId);
@@ -704,17 +720,10 @@ async function handleVideoFeedback(conn, chatId, messageText, io) {
 // Processa descrição do problema
 async function handleProblemDescription(conn, chatId, messageText, io) {
     try {
-        const currentTopic = userCurrentTopic[chatId];
-        const isFromVideoFeedback = currentTopic && 
-                                   currentTopic.state === 'descricaoProblema' && 
-                                   currentTopic.previousState === 'videoFeedback';
-
-        // Buscar o problema mais recente do usuário
+        // Buscar informações do usuário
         const userInfo = await new Promise((resolve, reject) => {
             getDatabase().get(
-                `SELECT id, name, city, position, school FROM problems 
-                 WHERE chatId = ? AND status = 'pending' 
-                 ORDER BY date DESC LIMIT 1`,
+                'SELECT name, city, position, school FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
                 [chatId],
                 (err, row) => {
                     if (err) reject(err);
@@ -724,59 +733,60 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
             );
         });
 
-        if (isFromVideoFeedback && userInfo) {
-            // Atualizar o problema existente
-            await new Promise((resolve, reject) => {
-                getDatabase().run(
-                    `UPDATE problems 
-                     SET description = ?, 
-                         date = ? 
-                     WHERE id = ?`,
-                    [messageText, new Date().toISOString(), userInfo.id],
-                    function(err) {
-                        if (err) reject(err);
-                        else resolve();
-                    }
-                );
-            });
+        const date = new Date().toISOString();
+        const description = messageText;
 
-            io.emit('userProblem', messageText, chatId, userInfo.name);
-            await sendMessage(conn, chatId, 'Problema atualizado. Um atendente entrará em contato em breve.');
-            await sendStatusUpdateToMainProcess(io);
-        } else {
-            // Criar novo registro de problema
-            const date = new Date().toISOString();
-            await new Promise((resolve, reject) => {
-                getDatabase().run(
-                    `INSERT INTO problems 
-                    (chatId, name, city, position, school, description, status, date) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        // Criar novo registro de problema
+        await new Promise((resolve, reject) => {
+            getDatabase().run(
+                `INSERT INTO problems 
+                (chatId, name, city, position, school, description, status, date) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    chatId,
+                    userInfo.name,
+                    userInfo.city,
+                    userInfo.position,
+                    userInfo.school,
+                    description,
+                    'pending',
+                    date
+                ],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
 
-                    [
-                        chatId,
-                        userInfo.name,
-                        userInfo.city,
-                        userInfo.position,
-                        userInfo.school,
-                        messageText,
-                        'pending',
-                        date
-                    ],
-                    function(err) {
-                        if (err) reject(err);
-                        else resolve(this.lastID);
-                    }
-                );
-            });
+        // Notificar o front-end sobre o novo problema
+        io.emit('userProblem', description, chatId, userInfo.name);
 
-            io.emit('userProblem', messageText, chatId, userInfo.name);
-            await sendMessage(conn, chatId, 'Problema registrado. Um atendente entrará em contato em breve.');
-            await sendStatusUpdateToMainProcess(io);
-        }
+        // Enviar confirmação para o usuário
+        await sendMessage(
+            conn, 
+            chatId, 
+            'Problema registrado com sucesso. Um atendente analisará sua solicitação e entrará em contato em breve.'
+        );
+
+        // Atualizar status
+        await sendStatusUpdateToMainProcess(io);
+
+        // Adicionar à lista de chats atendidos para parar respostas automáticas
+        humanAttendedChats.add(chatId);
+        
+        // Limpar o tópico do usuário
+        delete userCurrentTopic[chatId];
+
     } catch (error) {
         console.error('Erro em handleProblemDescription:', error);
-        await sendMessage(conn, chatId, 'Ocorreu um erro ao processar sua solicitação. Por favor, tente novamente.');
+        await sendMessage(
+            conn, 
+            chatId, 
+            'Ocorreu um erro ao registrar seu problema. Por favor, tente novamente.'
+        );
         userCurrentTopic[chatId] = 'problema';
+        await sendProblemOptions(conn, chatId);
     }
 }
 
