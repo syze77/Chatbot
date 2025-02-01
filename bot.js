@@ -600,7 +600,7 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
 
         const mainProblem = userCurrentTopic[chatId].problem;
         const subProblemText = getSubProblemText(mainProblem, messageText);
-        const videoUrl = getVideoUrlForSubProblem(messageText);
+        const videoUrl = getVideoUrlForSubProblem(messageText, chatId); // Adicionar chatId aqui
 
         // Buscar informações do usuário
         const userInfo = await new Promise((resolve, reject) => {
@@ -685,13 +685,33 @@ function getSubProblemText(problem, subProblem) {
 }
 
 // Obtém URL do vídeo para subproblema
-function getVideoUrlForSubProblem(subProblem) {
+function getVideoUrlForSubProblem(subProblem, chatId) { // Adicionar parâmetro chatId
+  const mainProblem = userCurrentTopic[chatId].problem;
+  
   const videoUrls = {
-    '1': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    '2': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    '3': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    'Falha no acesso ao sistema': {
+      '1': 'https://www.youtube.com/watch?v=acesso-conta',
+      '2': 'https://www.youtube.com/watch?v=sistema-nao-carrega',
+      '3': 'https://www.youtube.com/watch?v=outros-problemas-acesso'
+    },
+    'Erro ao cadastrar aluno/funcionário': {
+      '1': 'https://www.youtube.com/watch?v=cadastro-aluno',
+      '2': 'https://www.youtube.com/watch?v=cadastro-funcionario',
+      '3': 'https://www.youtube.com/watch?v=outros-problemas-cadastro'
+    },
+    'Problemas com o diário de classe': {
+      '1': 'https://www.youtube.com/watch?v=insercao-notas-diario',
+      '2': 'https://www.youtube.com/watch?v=visualizacao-registros',
+      '3': 'https://www.youtube.com/watch?v=outros-problemas-diario'
+    },
+    'Falha no registro de notas': {
+      '1': 'https://www.youtube.com/watch?v=registro-notas',
+      '2': 'https://www.youtube.com/watch?v=salvar-notas',
+      '3': 'https://www.youtube.com/watch?v=outros-problemas-notas'
+    }
   };
-  return videoUrls[subProblem] || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+  return videoUrls[mainProblem]?.[subProblem] || 'https://www.youtube.com/watch?v=ajuda-geral';
 }
 
 // Processa feedback do vídeo
