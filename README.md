@@ -1,53 +1,122 @@
-# Chatbot de Atendimento WhatsApp 🤖
+# WhatsApp Support Chatbot 🤖
 
-Sistema automatizado para suporte técnico escolar que integra WhatsApp com dashboard em tempo real para monitoramento e gestão de atendimentos.
+A powerful and scalable WhatsApp chatbot solution designed specifically for educational institutions. This system provides automated technical support through WhatsApp while offering administrators a comprehensive real-time dashboard for monitoring and managing support tickets.
 
-## 📋 Recursos Principais
+## 📋 Key Features
 
-- 🤖**Atendimento Automatizado**: Respostas inteligentes via WhatsApp
-- 📊**Dashboard em Tempo Real**: Monitoramento de métricas e atendimentos
-- 📋**Sistema de Fila**: Gerenciamento inteligente de prioridades
-- 📈**Análise de Dados**: Relatórios detalhados e insights
-- 🔄**Sincronização**: Integração automática com sistemas escolares
-- 🎨**Design Responsivo**: Interface adaptável com tema claro/escuro
+- 🤖 **Smart Automated Support**
+  - Natural language processing for better understanding
+  - Customizable response templates
+  - Multi-language support
+  - Learning capability from interactions
 
-## 🚀 Começando
+- 📊 **Advanced Dashboard**
+  - Real-time monitoring of active conversations
+  - Performance metrics and KPIs
+  - User satisfaction tracking
+  - Support agent performance analytics
 
-### Pré-requisitos
+- 🛠 **Technical Capabilities**
+  - Load balancing for high availability
+  - Webhook integration support
+  - REST API for external integrations
+  - Encrypted message handling
 
-- Node.js (versão 14 ou superior)
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js (version 14 or higher)
 - SQLite3
-- Número de WhatsApp Business ativo
+- Active WhatsApp Business API account
+- SSL certificate for production deployment
 
-### Instalação
+### Installation
 
 ```bash
-# Clone o repositório
+# Clone the repository
 git clone https://github.com/syze77/Chatbot.git
 
-# Entre no diretório
+# Enter directory
 cd chatbot
 
-# Instale as dependências
+# Install dependencies
 npm install
 
+# Create environment file
+cp .env.example .env
 ```
 
-## 💻 Uso
+### Configuration
+
+Create a `.env` file with the following variables:
+
+```env
+WHATSAPP_API_KEY=your_api_key
+WHATSAPP_PHONE_NUMBER=your_phone_number
+DB_CONNECTION=sqlite
+JWT_SECRET=your_secret_key
+```
+
+## 💻 Usage
 
 ```bash
-# Inicie o servidor de desenvolvimento
+# Development
 npm run dev
 
-# Ou build para produção
+# Production
 npm run build
 npm start
+
+# Run tests
+npm test
 ```
 
-## 🤝 Contribuindo
+## 📚 API Documentation
 
-1. Faça um Fork do projeto
-2. Crie sua Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a Branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
+### Endpoints
+
+- `POST /api/message` - Send message
+- `GET /api/conversations` - List conversations
+- `PUT /api/settings` - Update settings
+
+Full API documentation available at `/docs` when running the server.
+
+## 🔧 Troubleshooting
+
+Common issues and solutions:
+
+1. **Connection Issues**
+   - Verify WhatsApp API credentials
+   - Check network connectivity
+   - Ensure proper SSL configuration
+
+2. **Database Errors**
+   - Verify database permissions
+   - Check connection string
+   - Ensure migrations are up to date
+
+## 🤝 Contributing
+
+We welcome contributions! Please follow these steps:
+
+1. Fork the project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+### Development Guidelines
+
+- Follow ESLint configuration
+- Write tests for new features
+- Update documentation as needed
+- Follow semantic versioning
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 📞 Support
+
+For support, email support@chatbot.com or join our Discord channel.
