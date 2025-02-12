@@ -1,26 +1,26 @@
 # WhatsApp Support Chatbot 🤖
 
-A powerful and scalable WhatsApp chatbot solution designed specifically for educational institutions. This system provides automated technical support through WhatsApp while offering administrators a comprehensive real-time dashboard for monitoring and managing support tickets.
+A specialized WhatsApp chatbot solution for educational institutions that provides automated technical support and features a comprehensive real-time dashboard for monitoring and managing support tickets.
 
 ## 📋 Key Features
 
-- 🤖 **Smart Automated Support**
-  - Natural language processing for better understanding
-  - Customizable response templates
-  - Multi-language support
-  - Learning capability from interactions
+- 🤖 **Automated Support System**
+  - Intelligent problem categorization
+  - Video tutorial suggestions
+  - Automated queue management
+  - Real-time status updates
 
-- 📊 **Advanced Dashboard**
-  - Real-time monitoring of active conversations
-  - Performance metrics and KPIs
-  - User satisfaction tracking
-  - Support agent performance analytics
+- 📊 **Administrative Dashboard**
+  - Real-time conversation monitoring
+  - Statistical analysis and reporting
+  - Queue management system
+  - User tracking and analytics
 
-- 🛠 **Technical Capabilities**
-  - Load balancing for high availability
-  - Webhook integration support
-  - REST API for external integrations
-  - Encrypted message handling
+- 🛠 **Technical Features**
+  - SQLite database integration
+  - Electron-based desktop application
+  - WebSocket real-time communications
+  - PDF and Excel report generation
 
 ## 🚀 Getting Started
 
@@ -28,8 +28,8 @@ A powerful and scalable WhatsApp chatbot solution designed specifically for educ
 
 - Node.js (version 14 or higher)
 - SQLite3
-- Active WhatsApp Business API account
-- SSL certificate for production deployment
+- WhatsApp Business API access
+- Windows/macOS/Linux operating system
 
 ### Installation
 
@@ -42,76 +42,79 @@ cd chatbot
 
 # Install dependencies
 npm install
-
-# Create environment file
-cp .env.example .env
 ```
 
 ### Configuration
 
-Create a `.env` file with the following variables:
+Set up your environment variables in a `.env` file:
 
 ```env
 WHATSAPP_API_KEY=your_api_key
 WHATSAPP_PHONE_NUMBER=your_phone_number
 DB_CONNECTION=sqlite
-JWT_SECRET=your_secret_key
 ```
 
 ## 💻 Usage
 
 ```bash
-# Development
-npm run dev
-
-# Production
-npm run build
+# Start the application
 npm start
 
-# Run tests
-npm test
+# Run in development mode
+npm run dev
 ```
 
-## 📚 API Documentation
+## 📚 Features Documentation
 
-### Endpoints
+### Chat Management
+- Automated user information collection
+- Problem categorization system
+- Video tutorial suggestions
+- Queue position updates
+- Human agent handoff capability
 
-- `POST /api/message` - Send message
-- `GET /api/conversations` - List conversations
-- `PUT /api/settings` - Update settings
+### Administrative Features
+- Real-time conversation monitoring
+- Statistical reports generation
+- Active chat management
+- Problem tracking system
 
-Full API documentation available at `/docs` when running the server.
+### Reporting
+- PDF report generation
+- Excel export functionality
+- Customizable date ranges
+- Filtered by city and school
 
 ## 🔧 Troubleshooting
 
 Common issues and solutions:
 
-1. **Connection Issues**
-   - Verify WhatsApp API credentials
-   - Check network connectivity
-   - Ensure proper SSL configuration
+1. **WhatsApp Connection Issues**
+   - Verify API credentials
+   - Check internet connection
+   - Ensure proper session management
 
-2. **Database Errors**
-   - Verify database permissions
-   - Check connection string
-   - Ensure migrations are up to date
+2. **Database Issues**
+   - Check SQLite file permissions
+   - Verify database path
+   - Ensure proper initialization
 
 ## 🤝 Contributing
 
 We welcome contributions! Please follow these steps:
 
 1. Fork the project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Create your feature branch (`git checkout -b feature/NewFeature`)
+3. Commit your changes (`git commit -m 'Add NewFeature'`)
+4. Push to the branch (`git push origin feature/NewFeature`)
+5. Open a pull request
 
 ### Development Guidelines
 
-- Follow ESLint configuration
-- Write tests for new features
-- Update documentation as needed
-- Follow semantic versioning
+- Follow existing code structure
+- Add appropriate error handling
+- Document new features
+- Test thoroughly before submitting
 
 ## 📝 License
 
@@ -119,4 +122,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-For support, email support@chatbot.com or join our Discord channel.
+For technical support and inquiries:
+- Email: gabrielthalles19@gmail.com
+- GitHub Issues: [Create an issue](https://github.com/syze77/Chatbot/issues)
