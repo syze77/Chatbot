@@ -44,16 +44,6 @@ cd chatbot
 npm install
 ```
 
-### Configuration
-
-Set up your environment variables in a `.env` file:
-
-```env
-WHATSAPP_API_KEY=your_api_key
-WHATSAPP_PHONE_NUMBER=your_phone_number
-DB_CONNECTION=sqlite
-```
-
 ## 💻 Usage
 
 ```bash
