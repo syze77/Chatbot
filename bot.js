@@ -174,6 +174,11 @@ function startListeningForMessages(conn, io) {
   conn.client.ev.on('newMessage', async (newMsg) => {
     const chatId = newMsg.result.chatId;
 
+    // Verifica se é uma mensagem de grupo (chatId geralmente termina com @g.us)
+    if (chatId.endsWith('@g.us')) {
+      return; // Ignora mensagens de grupos
+    }
+
     if (!newMsg.result.fromMe) {
       const messageText = newMsg.result.body.toLowerCase();
 
@@ -191,7 +196,10 @@ function startListeningForMessages(conn, io) {
   });
 
   conn.client.ev.on('chatClosed', async (chatId) => {
-    handleChatClosed(chatId, io);
+    // Ignora eventos de grupos
+    if (!chatId.endsWith('@g.us')) {
+      handleChatClosed(chatId, io);
+    }
   });
 }
 
