@@ -40,6 +40,20 @@ function initializeDatabase() {
                         return;
                     }
                     console.log('Banco de dados inicializado com sucesso');
+                });
+
+                // Adicionar nova tabela para contatos ignorados
+                db.run(`CREATE TABLE IF NOT EXISTS ignored_contacts (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    number TEXT,
+                    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )`, (err) => {
+                    if (err) {
+                        console.error('Erro ao criar tabela:', err);
+                        reject(err);
+                        return;
+                    }
                     resolve(db);
                 });
             });

@@ -38,7 +38,7 @@ class Sidebar {
                     <button class="sidebar-toggle" onclick="Sidebar.toggleSidebar()">
                         <i class="fas fa-bars"></i>
                     </button>
-                    <img src="./assets/logo.svg" alt="Logo" class="brand-logo">
+                    <img src="./assets/logo.svg" alt="Logo" class="brand-logo" />
                 </div>
 
                 <nav class="sidebar-nav">
@@ -65,6 +65,14 @@ class Sidebar {
                                     <i class="fas fa-check-circle"></i>
                                 </div>
                                 <span class="nav-text">Concluídos</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="ignored_contacts.html" id="ignored-contacts-link" class="nav-item">
+                                <div class="nav-icon">
+                                    <i class="fas fa-user-slash"></i>
+                                </div>
+                                <span class="nav-text">Contatos</span>
                             </a>
                         </li>
                     </ul>

@@ -17,6 +17,7 @@ let messageQueue = [];
 let isProcessingQueue = false;
 let userCurrentTopic = {};
 let humanAttendedChats = new Set();
+let lastProcessedMessageId = null; // Adicionar para controle de duplicatas
 
 // Mensagem padrão para novos usuários
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
@@ -60,147 +61,185 @@ async function startHydraBot(io) {
       }
     });
 
-    ipcMain.on('redirectToChat', async (event, chatId) => {
-      if (botConnection) {
-        await redirectToWhatsAppChat(botConnection, chatId);
-      }
-    });
+    io.on('connection', (socket) => {
+      socket.on('attendProblem', async (data) => {
+        try {
+          const { chatId, attendantId } = data;
 
-    ipcMain.on('markProblemCompleted', (event, chatId) => {
-      reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId);
-      markProblemAsCompleted(chatId, io);
-      sendStatusUpdateToMainProcess(io);
+          // Adicionar chat à lista de atendidos por humanos
+          humanAttendedChats.add(chatId);
+
+          // Atualizar status do problema no banco de dados
+          await getDatabase().run(
+            `UPDATE problems 
+             SET status = 'active', 
+                 attendant_id = ? 
+             WHERE chatId = ? AND status = 'pending'`,
+            [attendantId, chatId]
+          );
+
+          // Enviar atualização de status para todos os clientes
+          sendStatusUpdateToMainProcess(io);
+
+          // Enviar mensagem de confirmação para o usuário
+          if (botConnection) {
+            await sendMessage(
+              botConnection,
+              chatId,
+              'Um atendente está analisando seu problema e entrará em contato em breve.'
+            );
+          }
+        } catch (error) {
+          console.error('Erro ao atender problema:', error);
+        }
+      });
+
+      socket.on('endChat', async (data) => {
+        try {
+          const { chatId, id } = data;
+
+          // Remover chat da lista de atendidos por humanos
+          humanAttendedChats.delete(chatId);
+
+          // Atualizar status do chat para concluído no banco de dados
+          await getDatabase().run(
+            `UPDATE problems 
+             SET status = 'completed', 
+                 date_completed = DATETIME('now')
+             WHERE chatId = ? AND (id = ? OR status = 'active' OR status = 'pending')`,
+            [chatId, id]
+          );
+
+          // Enviar mensagem de conclusão para o usuário
+          if (botConnection) {
+            await sendMessage(
+              botConnection,
+              chatId,
+              'Atendimento finalizado. Se precisar de mais algum atendimento, envie suas informações novamente no formato:'
+            );
+            await sendMessage(
+              botConnection,
+              chatId,
+              `Nome:\nCidade:\nCargo:\nEscola:`
+            );
+
+            // Resetar tópico do usuário para permitir novo atendimento
+            delete userCurrentTopic[chatId];
+          }
+
+          // Processar próximo usuário na fila
+          const nextInLine = await getNextInWaitingList();
+          if (nextInLine) {
+            await getDatabase().run(
+              'UPDATE problems SET status = "active" WHERE chatId = ?',
+              [nextInLine.chatId]
+            );
+
+            await sendMessage(
+              botConnection,
+              nextInLine.chatId,
+              `Olá ${nextInLine.name}! Sua vez chegou. Estamos iniciando seu atendimento.`
+            );
+            await sendProblemOptions(botConnection, nextInLine.chatId);
+          }
+
+          // Atualizar usuários em espera e status
+          await updateWaitingUsers(io);
+          await sendStatusUpdateToMainProcess(io);
+
+        } catch (error) {
+          console.error('Erro ao finalizar atendimento:', error);
+        }
+      });
     });
 
   } catch (error) {
     console.error('Erro ao iniciar o Hydra:', error);
   }
-
-  io.on('connection', (socket) => {
-    socket.on('attendProblem', async (data) => {
-      try {
-        const { chatId, attendantId } = data;
-
-        // Adicionar chat à lista de atendidos por humanos
-        humanAttendedChats.add(chatId);
-
-        // Atualizar status do problema no banco de dados
-        await getDatabase().run(
-          `UPDATE problems 
-           SET status = 'active', 
-               attendant_id = ? 
-           WHERE chatId = ? AND status = 'pending'`,
-          [attendantId, chatId]
-        );
-
-        // Enviar atualização de status para todos os clientes
-        sendStatusUpdateToMainProcess(io);
-
-        // Enviar mensagem de confirmação para o usuário
-        if (botConnection) {
-          await sendMessage(
-            botConnection,
-            chatId,
-            'Um atendente está analisando seu problema e entrará em contato em breve.'
-          );
-        }
-      } catch (error) {
-        console.error('Erro ao atender problema:', error);
-      }
-    });
-
-    socket.on('endChat', async (data) => {
-      try {
-        const { chatId, id } = data;
-
-        // Remover chat da lista de atendidos por humanos
-        humanAttendedChats.delete(chatId);
-
-        // Atualizar status do chat para concluído no banco de dados
-        await getDatabase().run(
-          `UPDATE problems 
-           SET status = 'completed', 
-               date_completed = DATETIME('now')
-           WHERE chatId = ? AND (id = ? OR status = 'active' OR status = 'pending')`,
-          [chatId, id]
-        );
-
-        // Enviar mensagem de conclusão para o usuário
-        if (botConnection) {
-          await sendMessage(
-            botConnection,
-            chatId,
-            'Atendimento finalizado. Se precisar de mais algum atendimento, envie suas informações novamente no formato:'
-          );
-          await sendMessage(
-            botConnection,
-            chatId,
-            `Nome:\nCidade:\nCargo:\nEscola:`
-          );
-
-          // Resetar tópico do usuário para permitir novo atendimento
-          delete userCurrentTopic[chatId];
-        }
-
-        // Processar próximo usuário na fila
-        const nextInLine = await getNextInWaitingList();
-        if (nextInLine) {
-          await getDatabase().run(
-            'UPDATE problems SET status = "active" WHERE chatId = ?',
-            [nextInLine.chatId]
-          );
-
-          await sendMessage(
-            botConnection,
-            nextInLine.chatId,
-            `Olá ${nextInLine.name}! Sua vez chegou. Estamos iniciando seu atendimento.`
-          );
-          await sendProblemOptions(botConnection, nextInLine.chatId);
-        }
-
-        // Atualizar usuários em espera e status
-        await updateWaitingUsers(io);
-        await sendStatusUpdateToMainProcess(io);
-
-      } catch (error) {
-        console.error('Erro ao finalizar atendimento:', error);
-      }
-    });
-  });
 }
 
 // Ouvir mensagens recebidas
-function startListeningForMessages(conn, io) {
-  conn.client.ev.on('newMessage', async (newMsg) => {
-    const chatId = newMsg.result.chatId;
+async function startListeningForMessages(conn, io) {
+    const processedMessages = new Set(); // Controle de mensagens já processadas
 
-    // Verifica se é uma mensagem de grupo (chatId geralmente termina com @g.us)
-    if (chatId.endsWith('@g.us')) {
-      return; // Ignora mensagens de grupos
-    }
+    conn.client.ev.on('newMessage', async (newMsg) => {
+        const chatId = newMsg.result.chatId;
+        const messageId = `${chatId}-${newMsg.result.id}`; // ID único para cada mensagem
 
-    if (!newMsg.result.fromMe) {
-      const messageText = newMsg.result.body.toLowerCase();
-
-      if (messageText.startsWith("nome:")) {
-        const userInfo = parseUserInfo(messageText);
-        if (userInfo) {
-          handleNewUser(conn, chatId, userInfo, io);
-        } else {
-          await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
+        // Verificar se a mensagem já foi processada
+        if (processedMessages.has(messageId)) {
+            return;
         }
-      } else {
-        handleUserMessage(conn, chatId, messageText, io);
-      }
-    }
-  });
 
-  conn.client.ev.on('chatClosed', async (chatId) => {
-    // Ignora eventos de grupos
-    if (!chatId.endsWith('@g.us')) {
-      handleChatClosed(chatId, io);
-    }
-  });
+        try {
+            // Verificar se é mensagem de grupo primeiro
+            if (chatId.endsWith('@g.us')) {
+                return; // Ignora mensagens de grupos
+            }
+
+            // Verificar se é uma mensagem do próprio bot
+            if (newMsg.result.fromMe) {
+                return; // Ignora mensagens enviadas pelo bot
+            }
+
+            // Verificar se o contato está na lista de ignorados (usando Promise)
+            const isIgnored = await checkIfContactIsIgnored(chatId);
+            if (isIgnored) {
+                console.log(`Mensagem ignorada do contato ${chatId}`);
+                return;
+            }
+
+            // Processar a mensagem
+            const messageText = newMsg.result.body.toLowerCase();
+            if (messageText.startsWith("nome:")) {
+                const userInfo = parseUserInfo(messageText);
+                if (userInfo) {
+                    await handleNewUser(conn, chatId, userInfo, io);
+                } else {
+                    await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
+                }
+            } else {
+                await handleUserMessage(conn, chatId, messageText, io);
+            }
+
+            // Adicionar mensagem ao controle após processamento
+            processedMessages.add(messageId);
+
+            // Limitar tamanho do controle para evitar consumo de memória
+            if (processedMessages.size > 1000) {
+                const toRemove = Array.from(processedMessages).slice(0, 100);
+                toRemove.forEach(id => processedMessages.delete(id));
+            }
+
+        } catch (error) {
+            console.error('Erro ao processar mensagem:', error);
+        }
+    });
+
+    conn.client.ev.on('chatClosed', async (chatId) => {
+        // Ignora eventos de grupos
+        if (!chatId.endsWith('@g.us')) {
+            handleChatClosed(chatId, io);
+        }
+    });
+}
+
+// Função auxiliar para verificar contato ignorado
+function checkIfContactIsIgnored(chatId) {
+    return new Promise((resolve, reject) => {
+        getDatabase().get(
+            'SELECT COUNT(*) as count FROM ignored_contacts WHERE id = ?',
+            [chatId],
+            (err, row) => {
+                if (err) {
+                    console.error('Erro ao verificar contato ignorado:', err);
+                    resolve(false); // Em caso de erro, não ignorar o contato
+                } else {
+                    resolve(row.count > 0);
+                }
+            }
+        );
+    });
 }
 
 /**
@@ -330,49 +369,60 @@ async function getWaitingPosition(chatId) {
 
 // Processa mensagem do usuário
 async function handleUserMessage(conn, chatId, messageText, io) {
-    // Se o chat está sendo atendido por humano, ignorar
-    if (humanAttendedChats.has(chatId)) {
-        return;
-    }
-
-    const currentTopic = userCurrentTopic[chatId];
-    
-    // Se não há tópico atual ou se uma nova mensagem começa com "nome:"
-    if (!currentTopic || messageText.toLowerCase().startsWith('nome:')) {
-        if (messageText.toLowerCase().startsWith('nome:')) {
-            const userInfo = parseUserInfo(messageText);
-            if (userInfo) {
-                await handleNewUser(conn, chatId, userInfo, io);
-            } else {
-                await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
-            }
-        } else {
-            await sendMessage(conn, chatId, defaultMessage);
-            // Adicionar uma pequena pausa entre as mensagens
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            // Enviar o template de preenchimento
-            await sendMessage(conn, chatId, `Nome:\nCidade:\nCargo:\nEscola:`);
-        }
-        return;
-    }
-
     try {
-        if (currentTopic.state === 'descricaoProblema') {
-            await handleProblemDescription(conn, chatId, messageText, io);
-            // Após descrever o problema, limpar o tópico para evitar respostas automáticas
-            delete userCurrentTopic[chatId];
-        } else if (currentTopic === 'problema') {
-            await handleProblemSelection(conn, chatId, messageText, io);
-        } else if (currentTopic.stage === 'subproblema') {
-            await handleSubProblemSelection(conn, chatId, messageText, io);
-        } else if (currentTopic === 'videoFeedback') {
-            await handleVideoFeedback(conn, chatId, messageText, io);
-        } else {
-            await sendMessage(conn, chatId, defaultMessage);
+        // Verificar novamente se o contato está ignorado (para caso de mudanças durante a sessão)
+        const isIgnored = await checkIfContactIsIgnored(chatId);
+        if (isIgnored) {
+            console.log(`Mensagem ignorada do contato ${chatId}`);
+            return;
+        }
+
+        // Se o chat está sendo atendido por humano, ignorar
+        if (humanAttendedChats.has(chatId)) {
+            return;
+        }
+
+        const currentTopic = userCurrentTopic[chatId];
+        
+        // Se não há tópico atual ou se uma nova mensagem começa com "nome:"
+        if (!currentTopic || messageText.toLowerCase().startsWith('nome:')) {
+            if (messageText.toLowerCase().startsWith('nome:')) {
+                const userInfo = parseUserInfo(messageText);
+                if (userInfo) {
+                    await handleNewUser(conn, chatId, userInfo, io);
+                } else {
+                    await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
+                }
+            } else {
+                await sendMessage(conn, chatId, defaultMessage);
+                // Adicionar uma pequena pausa entre as mensagens
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Enviar o template de preenchimento
+                await sendMessage(conn, chatId, `Nome:\nCidade:\nCargo:\nEscola:`);
+            }
+            return;
+        }
+
+        try {
+            if (currentTopic.state === 'descricaoProblema') {
+                await handleProblemDescription(conn, chatId, messageText, io);
+                // Após descrever o problema, limpar o tópico para evitar respostas automáticas
+                delete userCurrentTopic[chatId];
+            } else if (currentTopic === 'problema') {
+                await handleProblemSelection(conn, chatId, messageText, io);
+            } else if (currentTopic.stage === 'subproblema') {
+                await handleSubProblemSelection(conn, chatId, messageText, io);
+            } else if (currentTopic === 'videoFeedback') {
+                await handleVideoFeedback(conn, chatId, messageText, io);
+            } else {
+                await sendMessage(conn, chatId, defaultMessage);
+            }
+        } catch (error) {
+            console.error('Erro ao processar mensagem do usuário:', error);
+            await sendMessage(conn, chatId, 'Desculpe, ocorreu um erro. Por favor, tente novamente.');
         }
     } catch (error) {
         console.error('Erro ao processar mensagem do usuário:', error);
-        await sendMessage(conn, chatId, 'Desculpe, ocorreu um erro. Por favor, tente novamente.');
     }
 }
 
@@ -485,6 +535,14 @@ async function processMessageQueue() {
   isProcessingQueue = true;
   const message = messageQueue[0];
 
+  // Verificar se é uma mensagem duplicada
+  const messageId = `${message.chatId}-${message.message}`;
+  if (messageId === lastProcessedMessageId) {
+    messageQueue.shift();
+    processMessageQueue();
+    return;
+  }
+
   try {
     await message.conn.client.sendMessage({ 
       to: message.chatId, 
@@ -492,6 +550,7 @@ async function processMessageQueue() {
       options: { type: 'sendText' } 
     });
 
+    lastProcessedMessageId = messageId;
     message.resolve();
     messageQueue.shift();
     
@@ -1359,9 +1418,104 @@ server.get('/getSchools', async (req, res) => {
     }
 });
 
+async function saveIgnoredContacts(contacts) {
+    try {
+        const db = getDatabase();
+        
+        // Primeiro, limpar todos os contatos ignorados existentes
+        await new Promise((resolve, reject) => {
+            db.run('DELETE FROM ignored_contacts', err => err ? reject(err) : resolve());
+        });
+
+        // Se houver novos contatos para ignorar, inserir todos
+        if (contacts.length > 0) {
+            // Criar placeholders para cada contato (3 campos por contato)
+            const placeholders = contacts.map(() => '(?, ?, ?)').join(', ');
+            
+            // Criar array plano com todos os valores
+            const values = contacts.reduce((acc, contact) => {
+                acc.push(
+                    contact.id,
+                    contact.name || 'Sem nome',
+                    contact.number || 'Sem número'
+                );
+                return acc;
+            }, []);
+
+            // Query única para inserir todos os contatos
+            const insertQuery = `
+                INSERT OR REPLACE INTO ignored_contacts 
+                (id, name, number) 
+                VALUES ${placeholders}
+            `;
+
+            console.log('Query:', insertQuery); // Debug
+            console.log('Values:', values); // Debug
+
+            // Executar a inserção em massa
+            await new Promise((resolve, reject) => {
+                db.run(insertQuery, values, function(err) {
+                    if (err) {
+                        console.error('Erro SQL:', err);
+                        reject(err);
+                    } else {
+                        console.log(`${this.changes} contatos ignorados salvos`);
+                        resolve(this.changes);
+                    }
+                });
+            });
+        }
+
+        return {
+            success: true,
+            added: contacts.length,
+            message: `${contacts.length} contatos foram atualizados com sucesso`
+        };
+
+    } catch (error) {
+        console.error('Erro ao salvar contatos ignorados:', error);
+        throw error;
+    }
+}
+
+// Add this function to get recent contacts
+async function getRecentContacts(conn) {
+    try {
+        if (!conn || !conn.client) {
+            throw new Error('Conexão não inicializada');
+        }
+
+        const contacts = await conn.client.getAllContacts();
+        
+        // Converter o objeto de contatos em array e filtrar
+        return Object.values(contacts)
+            .filter(contact => {
+                return contact && 
+                       contact.id && 
+                       !contact.isGroup && 
+                       contact.id.server !== 'g.us';
+            })
+            .map(contact => ({
+                id: contact.id._serialized || contact.id,
+                name: contact.name || contact.pushname || 'Sem nome',
+                number: contact.id.user || contact.id.split('@')[0],
+                lastMessageTime: contact.lastMessageTime || null,
+                imageUrl: contact.profilePicUrl || null,
+                description: contact.status || null
+            }));
+    } catch (error) {
+        console.error('Erro ao obter contatos:', error);
+        return [];
+    }
+}
+
 // Exportação das funcionalidades principais
 module.exports = {
     startHydraBot,
     redirectToWhatsAppChat,
-    server
+    server,
+    getRecentContacts,
+    getBotConnection: () => botConnection,
+    saveIgnoredContacts, // Add this export
+    checkIfContactIsIgnored // Add this export if needed
 };

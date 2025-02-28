@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
-const { startHydraBot, redirectToWhatsAppChat, server } = require('./bot');
+const { startHydraBot, redirectToWhatsAppChat, server, getRecentContacts, getBotConnection } = require('./bot');
 const { initializeDatabase, getDatabase } = require('./database');
 
 // Configuração do servidor HTTP e Socket.IO
@@ -54,8 +54,27 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            preload: path.join(__dirname, 'preload.js')
+            preload: path.join(__dirname, 'preload.js'),
+            // Adicionar configurações de segurança
+            webSecurity: true,
+            sandbox: true
         }
+    });
+
+    // Configurar regras de segurança de conteúdo
+    win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Content-Security-Policy': [
+                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:",
+                    "img-src 'self' data: https: blob:",
+                    "style-src 'self' 'unsafe-inline' https:",
+                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
+                    "connect-src 'self' http://localhost:3000 ws://localhost:3000"
+                ].join('; ')
+            }
+        });
     });
 
     win.loadFile('index.html');
@@ -98,18 +117,55 @@ server.delete('/deleteCompletedAttendance/:id', async (req, res) => {
 });
 
 // Configuração dos eventos IPC
-ipcMain.on('navigate', (event, path) => {
-    if (win) win.loadFile(path);
-});
+function setupIpcHandlers() {
+    ipcMain.on('navigate', (event, path) => {
+        if (win) win.loadFile(path);
+    });
 
-ipcMain.handle('openWhatsAppChat', async (event, chatId) => {
-    try {
-        await redirectToWhatsAppChat(chatId);
-    } catch (error) {
-        console.error('Erro ao abrir chat do WhatsApp:', error);
-        throw error;
-    }
-});
+    ipcMain.handle('openWhatsAppChat', async (event, chatId) => {
+        try {
+            await redirectToWhatsAppChat(chatId);
+        } catch (error) {
+            console.error('Erro ao abrir chat do WhatsApp:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle('save-ignored-contacts', async (event, contacts) => {
+        try {
+            // Importar a função diretamente do bot.js
+            const { saveIgnoredContacts } = require('./bot');
+            const result = await saveIgnoredContacts(contacts);
+            return { success: true, ...result };
+        } catch (error) {
+            console.error('Erro ao salvar contatos ignorados:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('get-contacts', async () => {
+        try {
+            const botConn = getBotConnection();
+            if (!botConn) {
+                throw new Error('Bot não está conectado');
+            }
+
+            const contacts = await getRecentContacts(botConn);
+            const ignoredContacts = await executeQuery(
+                'SELECT id FROM ignored_contacts',
+                []
+            );
+
+            return {
+                contacts,
+                ignoredContacts: ignoredContacts.map(row => row.id)
+            };
+        } catch (error) {
+            console.error('Erro ao obter contatos:', error);
+            return { contacts: [], ignoredContacts: [] };
+        }
+    });
+}
 
 // Inicialização do aplicativo
 app.whenReady().then(async () => {
@@ -117,6 +173,7 @@ app.whenReady().then(async () => {
         await initializeDatabase();
         createWindow();
         startHydraBot(io);
+        setupIpcHandlers();
 
         httpServer.listen(3000, () => {
             console.log('Servidor rodando na porta 3000');
