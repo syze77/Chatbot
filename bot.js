@@ -17,7 +17,6 @@ let messageQueue = [];
 let isProcessingQueue = false;
 let userCurrentTopic = {};
 let humanAttendedChats = new Set();
-let lastProcessedMessageId = null; // Adicionar para controle de duplicatas
 
 // Mensagem padrão para novos usuários
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
@@ -27,7 +26,7 @@ Cidade:
 Cargo: (Aluno, Supervisor, Secretário, Professor, Administrador, Responsável)
 Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor ou Supervisor)
 
-⚠️ Atenção: Certifique-se de preencher todas as informações corretamente para agilizar o atendimento.`;
+⚠️ Atenção: Copie o template abaixo e preencha todas as informações corretamente para agilizar o seu atendimento.`;
 
 // Inicializar Express
 const server = express();
@@ -61,156 +60,161 @@ async function startHydraBot(io) {
       }
     });
 
-    io.on('connection', (socket) => {
-      socket.on('attendProblem', async (data) => {
-        try {
-          const { chatId, attendantId } = data;
+    ipcMain.on('redirectToChat', async (event, chatId) => {
+      if (botConnection) {
+        await redirectToWhatsAppChat(botConnection, chatId);
+      }
+    });
 
-          // Adicionar chat à lista de atendidos por humanos
-          humanAttendedChats.add(chatId);
-
-          // Atualizar status do problema no banco de dados
-          await getDatabase().run(
-            `UPDATE problems 
-             SET status = 'active', 
-                 attendant_id = ? 
-             WHERE chatId = ? AND status = 'pending'`,
-            [attendantId, chatId]
-          );
-
-          // Enviar atualização de status para todos os clientes
-          sendStatusUpdateToMainProcess(io);
-
-          // Enviar mensagem de confirmação para o usuário
-          if (botConnection) {
-            await sendMessage(
-              botConnection,
-              chatId,
-              'Um atendente está analisando seu problema e entrará em contato em breve.'
-            );
-          }
-        } catch (error) {
-          console.error('Erro ao atender problema:', error);
-        }
-      });
-
-      socket.on('endChat', async (data) => {
-        try {
-          const { chatId, id } = data;
-
-          // Remover chat da lista de atendidos por humanos
-          humanAttendedChats.delete(chatId);
-
-          // Atualizar status do chat para concluído no banco de dados
-          await getDatabase().run(
-            `UPDATE problems 
-             SET status = 'completed', 
-                 date_completed = DATETIME('now')
-             WHERE chatId = ? AND (id = ? OR status = 'active' OR status = 'pending')`,
-            [chatId, id]
-          );
-
-          // Enviar mensagem de conclusão para o usuário
-          if (botConnection) {
-            await sendMessage(
-              botConnection,
-              chatId,
-              'Atendimento finalizado. Se precisar de mais algum atendimento, envie suas informações novamente no formato:'
-            );
-            await sendMessage(
-              botConnection,
-              chatId,
-              `Nome:\nCidade:\nCargo:\nEscola:`
-            );
-
-            // Resetar tópico do usuário para permitir novo atendimento
-            delete userCurrentTopic[chatId];
-          }
-
-          // Processar próximo usuário na fila
-          const nextInLine = await getNextInWaitingList();
-          if (nextInLine) {
-            await getDatabase().run(
-              'UPDATE problems SET status = "active" WHERE chatId = ?',
-              [nextInLine.chatId]
-            );
-
-            await sendMessage(
-              botConnection,
-              nextInLine.chatId,
-              `Olá ${nextInLine.name}! Sua vez chegou. Estamos iniciando seu atendimento.`
-            );
-            await sendProblemOptions(botConnection, nextInLine.chatId);
-          }
-
-          // Atualizar usuários em espera e status
-          await updateWaitingUsers(io);
-          await sendStatusUpdateToMainProcess(io);
-
-        } catch (error) {
-          console.error('Erro ao finalizar atendimento:', error);
-        }
-      });
+    ipcMain.on('markProblemCompleted', (event, chatId) => {
+      reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId);
+      markProblemAsCompleted(chatId, io);
+      sendStatusUpdateToMainProcess(io);
     });
 
   } catch (error) {
     console.error('Erro ao iniciar o Hydra:', error);
   }
+
+  io.on('connection', (socket) => {
+    socket.on('attendProblem', async (data) => {
+      try {
+        const { chatId, attendantId } = data;
+
+        // Adicionar chat à lista de atendidos por humanos
+        humanAttendedChats.add(chatId);
+
+        // Atualizar status do problema no banco de dados
+        await getDatabase().run(
+          `UPDATE problems 
+           SET status = 'active', 
+               attendant_id = ? 
+           WHERE chatId = ? AND status = 'pending'`,
+          [attendantId, chatId]
+        );
+
+        // Enviar atualização de status para todos os clientes
+        sendStatusUpdateToMainProcess(io);
+
+        // Enviar mensagem de confirmação para o usuário
+        if (botConnection) {
+          await sendMessage(
+            botConnection,
+            chatId,
+            'Um atendente está analisando seu problema e entrará em contato em breve.'
+          );
+        }
+      } catch (error) {
+        console.error('Erro ao atender problema:', error);
+      }
+    });
+
+    socket.on('endChat', async (data) => {
+      try {
+        const { chatId, id } = data;
+
+        // Remover chat da lista de atendidos por humanos
+        humanAttendedChats.delete(chatId);
+
+        // Atualizar status do chat para concluído no banco de dados
+        await getDatabase().run(
+          `UPDATE problems 
+           SET status = 'completed', 
+               date_completed = DATETIME('now')
+           WHERE chatId = ? AND (id = ? OR status = 'active' OR status = 'pending')`,
+          [chatId, id]
+        );
+
+        // Enviar mensagem de conclusão para o usuário
+        if (botConnection) {
+          await sendMessage(
+            botConnection,
+            chatId,
+            'Atendimento finalizado. Se precisar de mais algum atendimento, envie suas informações novamente no formato:'
+          );
+          await sendMessage(
+            botConnection,
+            chatId,
+            `Nome:\nCidade:\nCargo:\nEscola:`
+          );
+
+          // Resetar tópico do usuário para permitir novo atendimento
+          delete userCurrentTopic[chatId];
+        }
+
+        // Processar próximo usuário na fila
+        const nextInLine = await getNextInWaitingList();
+        if (nextInLine) {
+          await getDatabase().run(
+            'UPDATE problems SET status = "active" WHERE chatId = ?',
+            [nextInLine.chatId]
+          );
+
+          await sendMessage(
+            botConnection,
+            nextInLine.chatId,
+            `Olá ${nextInLine.name}! Sua vez chegou. Estamos iniciando seu atendimento.`
+          );
+          await sendProblemOptions(botConnection, nextInLine.chatId);
+        }
+
+        // Atualizar usuários em espera e status
+        await updateWaitingUsers(io);
+        await sendStatusUpdateToMainProcess(io);
+
+      } catch (error) {
+        console.error('Erro ao finalizar atendimento:', error);
+      }
+    });
+  });
 }
 
 // Ouvir mensagens recebidas
 async function startListeningForMessages(conn, io) {
-    const processedMessages = new Set(); // Controle de mensagens já processadas
-
     conn.client.ev.on('newMessage', async (newMsg) => {
         const chatId = newMsg.result.chatId;
-        const messageId = `${chatId}-${newMsg.result.id}`; // ID único para cada mensagem
-
-        // Verificar se a mensagem já foi processada
-        if (processedMessages.has(messageId)) {
-            return;
-        }
 
         try {
-            // Verificar se é mensagem de grupo primeiro
-            if (chatId.endsWith('@g.us')) {
-                return; // Ignora mensagens de grupos
-            }
+            // Verificar se o contato está na lista de ignorados
+            const isIgnored = await new Promise((resolve, reject) => {
+                getDatabase().get(
+                    'SELECT id FROM ignored_contacts WHERE id = ?',
+                    [chatId],
+                    (err, row) => {
+                        if (err) {
+                            console.error('Erro ao verificar contato ignorado:', err);
+                            resolve(false); // Em caso de erro, não ignorar o contato
+                        } else {
+                            resolve(!!row);
+                        }
+                    }
+                );
+            });
 
-            // Verificar se é uma mensagem do próprio bot
-            if (newMsg.result.fromMe) {
-                return; // Ignora mensagens enviadas pelo bot
-            }
-
-            // Verificar se o contato está na lista de ignorados (usando Promise)
-            const isIgnored = await checkIfContactIsIgnored(chatId);
             if (isIgnored) {
                 console.log(`Mensagem ignorada do contato ${chatId}`);
                 return;
             }
 
-            // Processar a mensagem
-            const messageText = newMsg.result.body.toLowerCase();
-            if (messageText.startsWith("nome:")) {
-                const userInfo = parseUserInfo(messageText);
-                if (userInfo) {
-                    await handleNewUser(conn, chatId, userInfo, io);
+            // Verifica se é uma mensagem de grupo (chatId geralmente termina com @g.us)
+            if (chatId.endsWith('@g.us')) {
+                return; // Ignora mensagens de grupos
+            }
+
+            if (!newMsg.result.fromMe) {
+                const messageText = newMsg.result.body.toLowerCase();
+
+                if (messageText.startsWith("nome:")) {
+                    const userInfo = parseUserInfo(messageText);
+                    if (userInfo) {
+                        handleNewUser(conn, chatId, userInfo, io);
+                    } else {
+                        await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
+                    }
                 } else {
-                    await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
+                    handleUserMessage(conn, chatId, messageText, io);
                 }
-            } else {
-                await handleUserMessage(conn, chatId, messageText, io);
             }
-
-            // Adicionar mensagem ao controle após processamento
-            processedMessages.add(messageId);
-
-            // Limitar tamanho do controle para evitar consumo de memória
-            if (processedMessages.size > 1000) {
-                const toRemove = Array.from(processedMessages).slice(0, 100);
-                toRemove.forEach(id => processedMessages.delete(id));
-            }
-
         } catch (error) {
             console.error('Erro ao processar mensagem:', error);
         }
@@ -221,24 +225,6 @@ async function startListeningForMessages(conn, io) {
         if (!chatId.endsWith('@g.us')) {
             handleChatClosed(chatId, io);
         }
-    });
-}
-
-// Função auxiliar para verificar contato ignorado
-function checkIfContactIsIgnored(chatId) {
-    return new Promise((resolve, reject) => {
-        getDatabase().get(
-            'SELECT COUNT(*) as count FROM ignored_contacts WHERE id = ?',
-            [chatId],
-            (err, row) => {
-                if (err) {
-                    console.error('Erro ao verificar contato ignorado:', err);
-                    resolve(false); // Em caso de erro, não ignorar o contato
-                } else {
-                    resolve(row.count > 0);
-                }
-            }
-        );
     });
 }
 
@@ -369,60 +355,49 @@ async function getWaitingPosition(chatId) {
 
 // Processa mensagem do usuário
 async function handleUserMessage(conn, chatId, messageText, io) {
+    // Se o chat está sendo atendido por humano, ignorar
+    if (humanAttendedChats.has(chatId)) {
+        return;
+    }
+
+    const currentTopic = userCurrentTopic[chatId];
+    
+    // Se não há tópico atual ou se uma nova mensagem começa com "nome:"
+    if (!currentTopic || messageText.toLowerCase().startsWith('nome:')) {
+        if (messageText.toLowerCase().startsWith('nome:')) {
+            const userInfo = parseUserInfo(messageText);
+            if (userInfo) {
+                await handleNewUser(conn, chatId, userInfo, io);
+            } else {
+                await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
+            }
+        } else {
+            await sendMessage(conn, chatId, defaultMessage);
+            // Adicionar uma pequena pausa entre as mensagens
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Enviar o template de preenchimento
+            await sendMessage(conn, chatId, `Nome:\nCidade:\nCargo:\nEscola:`);
+        }
+        return;
+    }
+
     try {
-        // Verificar novamente se o contato está ignorado (para caso de mudanças durante a sessão)
-        const isIgnored = await checkIfContactIsIgnored(chatId);
-        if (isIgnored) {
-            console.log(`Mensagem ignorada do contato ${chatId}`);
-            return;
-        }
-
-        // Se o chat está sendo atendido por humano, ignorar
-        if (humanAttendedChats.has(chatId)) {
-            return;
-        }
-
-        const currentTopic = userCurrentTopic[chatId];
-        
-        // Se não há tópico atual ou se uma nova mensagem começa com "nome:"
-        if (!currentTopic || messageText.toLowerCase().startsWith('nome:')) {
-            if (messageText.toLowerCase().startsWith('nome:')) {
-                const userInfo = parseUserInfo(messageText);
-                if (userInfo) {
-                    await handleNewUser(conn, chatId, userInfo, io);
-                } else {
-                    await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
-                }
-            } else {
-                await sendMessage(conn, chatId, defaultMessage);
-                // Adicionar uma pequena pausa entre as mensagens
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                // Enviar o template de preenchimento
-                await sendMessage(conn, chatId, `Nome:\nCidade:\nCargo:\nEscola:`);
-            }
-            return;
-        }
-
-        try {
-            if (currentTopic.state === 'descricaoProblema') {
-                await handleProblemDescription(conn, chatId, messageText, io);
-                // Após descrever o problema, limpar o tópico para evitar respostas automáticas
-                delete userCurrentTopic[chatId];
-            } else if (currentTopic === 'problema') {
-                await handleProblemSelection(conn, chatId, messageText, io);
-            } else if (currentTopic.stage === 'subproblema') {
-                await handleSubProblemSelection(conn, chatId, messageText, io);
-            } else if (currentTopic === 'videoFeedback') {
-                await handleVideoFeedback(conn, chatId, messageText, io);
-            } else {
-                await sendMessage(conn, chatId, defaultMessage);
-            }
-        } catch (error) {
-            console.error('Erro ao processar mensagem do usuário:', error);
-            await sendMessage(conn, chatId, 'Desculpe, ocorreu um erro. Por favor, tente novamente.');
+        if (currentTopic.state === 'descricaoProblema') {
+            await handleProblemDescription(conn, chatId, messageText, io);
+            // Após descrever o problema, limpar o tópico para evitar respostas automáticas
+            delete userCurrentTopic[chatId];
+        } else if (currentTopic === 'problema') {
+            await handleProblemSelection(conn, chatId, messageText, io);
+        } else if (currentTopic.stage === 'subproblema') {
+            await handleSubProblemSelection(conn, chatId, messageText, io);
+        } else if (currentTopic === 'videoFeedback') {
+            await handleVideoFeedback(conn, chatId, messageText, io);
+        } else {
+            await sendMessage(conn, chatId, defaultMessage);
         }
     } catch (error) {
         console.error('Erro ao processar mensagem do usuário:', error);
+        await sendMessage(conn, chatId, 'Desculpe, ocorreu um erro. Por favor, tente novamente.');
     }
 }
 
@@ -535,14 +510,6 @@ async function processMessageQueue() {
   isProcessingQueue = true;
   const message = messageQueue[0];
 
-  // Verificar se é uma mensagem duplicada
-  const messageId = `${message.chatId}-${message.message}`;
-  if (messageId === lastProcessedMessageId) {
-    messageQueue.shift();
-    processMessageQueue();
-    return;
-  }
-
   try {
     await message.conn.client.sendMessage({ 
       to: message.chatId, 
@@ -550,7 +517,6 @@ async function processMessageQueue() {
       options: { type: 'sendText' } 
     });
 
-    lastProcessedMessageId = messageId;
     message.resolve();
     messageQueue.shift();
     
@@ -573,13 +539,14 @@ async function processMessageQueue() {
 
 // Envia opções de problema para o usuário
 async function sendProblemOptions(conn, chatId) {
-  const problemOptions = `Por favor, selecione o tipo de problema que você está enfrentando:
+  const problemOptions = `Por favor, selecione o tipo de dificuldade que você está enfrentando:
 
-1️⃣ Falha no acesso ao sistema
-2️⃣ Erro ao cadastrar aluno/funcionário
-3️⃣ Problemas com o diário de classe
-4️⃣ Falha no registro de notas
-5️⃣ Outro problema`;
+1️⃣ Acesso ao sistema
+2️⃣ Cadastro de aluno/outros
+3️⃣ Dificuldade com o diário de classe
+4️⃣ Dificuldade no registro de notas
+5️⃣ Dificuldades com RFACE
+6️⃣ Outro problema`;
 
   await sendMessage(conn, chatId, problemOptions);
 }
@@ -588,19 +555,19 @@ async function sendProblemOptions(conn, chatId) {
 async function handleProblemSelection(conn, chatId, messageText, io) {
   switch (messageText) {
     case '1':
-      await sendSubProblemOptions(conn, chatId, 'Falha no acesso ao sistema');
+      await sendSubProblemOptions(conn, chatId, 'Acesso ao sistema');
       break;
     case '2':
-      await sendSubProblemOptions(conn, chatId, 'Erro ao cadastrar aluno/funcionário');
+      await sendSubProblemOptions(conn, chatId, 'Cadastro de aluno/outros');
       break;
     case '3':
-      await sendSubProblemOptions(conn, chatId, 'Problemas com o diário de classe');
+      await sendSubProblemOptions(conn, chatId, 'Dificuldade com o diário de classe');
       break;
     case '4':
-      await sendSubProblemOptions(conn, chatId, 'Falha no registro de notas');
+      await sendSubProblemOptions(conn, chatId, 'Dificuldade no registro de notas');
       break;
     case '5':
-      await sendMessage(conn, chatId, 'Por favor, descreva detalhadamente o problema que você está enfrentando:');
+      await sendMessage(conn, chatId, 'Por favor, descreva detalhadamente a dificuldade que você está enfrentando:');
       userCurrentTopic[chatId] = { 
         state: 'descricaoProblema',
         type: 'custom'
@@ -624,31 +591,31 @@ async function sendSubProblemOptions(conn, chatId, problem) {
 // Obtém opções de subproblema
 function getSubProblemOptions(problem) {
   const options = {
-    'Falha no acesso ao sistema': `Selecione o subtópico:
+    'Acesso ao sistema': `Selecione o subtópico:
 
-1️⃣ Não consigo acessar minha conta
-2️⃣ Sistema não carrega
+1️⃣ Não consigo acessar o sistema
+2️⃣ Sistema não está abrindo
 3️⃣ Outro problema relacionado ao acesso
 
 Digite 'voltar' para retornar ao menu anterior.`,
-    'Erro ao cadastrar aluno/funcionário': `Selecione o subtópico:
+    'Cadastro de aluno/outros': `Selecione o subtópico:
 
-1️⃣ Erro ao inserir dados do aluno
-2️⃣ Erro ao inserir dados do funcionário
+1️⃣ Dificuldade ao inserir informações do estudante
+2️⃣ Dificuldade ao inserir informações do funcionário
 3️⃣ Outro problema relacionado ao cadastro
 
 Digite 'voltar' para retornar ao menu anterior.`,
-    'Problemas com o diário de classe': `Selecione o subtópico:
+    'Dificuldade com o diário de classe': `Selecione o subtópico:
 
-1️⃣ Falha na inserção de notas
-2️⃣ Falha na visualização de registros
+1️⃣ Dificuldade ao inserir notas
+2️⃣ Dificuldade ao realizar um registro
 3️⃣ Outro problema com o diário de classe
 
 Digite 'voltar' para retornar ao menu anterior.`,
-    'Falha no registro de notas': `Selecione o subtópico:
+    'Dificuldade no registro de notas': `Selecione o subtópico:
 
-1️⃣ Não consigo registrar as notas
-2️⃣ Notas não estão sendo salvas
+1️⃣ Não consigo inserir as notas
+2️⃣ As notas não estão sendo salvas corretamente
 3️⃣ Outro problema com o registro de notas
 
 Digite 'voltar' para retornar ao menu anterior.`
@@ -727,24 +694,24 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
 // Obtém texto do subproblema
 function getSubProblemText(problem, subProblem) {
   const subProblemTexts = {
-    'Falha no acesso ao sistema': {
-      '1': 'Não consigo acessar minha conta',
-      '2': 'Sistema não carrega',
+    'Acesso ao sistema': {
+      '1': 'Não consigo acessar o sistema',
+      '2': 'Sistema não está abrindo',
       '3': 'Outro problema relacionado ao acesso'
     },
-    'Erro ao cadastrar aluno/funcionário': {
-      '1': 'Erro ao inserir dados do aluno',
-      '2': 'Erro ao inserir dados do funcionário',
+    'Cadastro de aluno/outros': {
+      '1': 'Dificuldade ao inserir informações do estudante',
+      '2': 'Dificuldade ao inserir informações do funcionário',
       '3': 'Outro problema relacionado ao cadastro'
     },
-    'Problemas com o diário de classe': {
-      '1': 'Falha na inserção de notas',
-      '2': 'Falha na visualização de registros',
+    'Dificuldade com o diário de classe': {
+      '1': 'Dificuldade ao inserir notas',
+      '2': 'Dificuldade ao realizar um registro',
       '3': 'Outro problema com o diário de classe'
     },
-    'Falha no registro de notas': {
-      '1': 'Não consigo registrar as notas',
-      '2': 'Notas não estão sendo salvas',
+    'Dificuldade no registro de notas': {
+      '1': 'Não consigo inserir as notas',
+      '2': 'As notas não estão sendo salvas corretamente',
       '3': 'Outro problema com o registro de notas'
     }
   };
@@ -1418,93 +1385,68 @@ server.get('/getSchools', async (req, res) => {
     }
 });
 
-async function saveIgnoredContacts(contacts) {
-    try {
-        const db = getDatabase();
-        
-        // Primeiro, limpar todos os contatos ignorados existentes
-        await new Promise((resolve, reject) => {
-            db.run('DELETE FROM ignored_contacts', err => err ? reject(err) : resolve());
-        });
-
-        // Se houver novos contatos para ignorar, inserir todos
-        if (contacts.length > 0) {
-            // Criar placeholders para cada contato (3 campos por contato)
-            const placeholders = contacts.map(() => '(?, ?, ?)').join(', ');
-            
-            // Criar array plano com todos os valores
-            const values = contacts.reduce((acc, contact) => {
-                acc.push(
-                    contact.id,
-                    contact.name || 'Sem nome',
-                    contact.number || 'Sem número'
-                );
-                return acc;
-            }, []);
-
-            // Query única para inserir todos os contatos
-            const insertQuery = `
-                INSERT OR REPLACE INTO ignored_contacts 
-                (id, name, number) 
-                VALUES ${placeholders}
-            `;
-
-            console.log('Query:', insertQuery); // Debug
-            console.log('Values:', values); // Debug
-
-            // Executar a inserção em massa
-            await new Promise((resolve, reject) => {
-                db.run(insertQuery, values, function(err) {
-                    if (err) {
-                        console.error('Erro SQL:', err);
-                        reject(err);
-                    } else {
-                        console.log(`${this.changes} contatos ignorados salvos`);
-                        resolve(this.changes);
-                    }
-                });
-            });
-        }
-
-        return {
-            success: true,
-            added: contacts.length,
-            message: `${contacts.length} contatos foram atualizados com sucesso`
-        };
-
-    } catch (error) {
-        console.error('Erro ao salvar contatos ignorados:', error);
-        throw error;
-    }
-}
-
-// Add this function to get recent contacts
+// Atualizar a função getRecentContacts
 async function getRecentContacts(conn) {
     try {
         if (!conn || !conn.client) {
             throw new Error('Conexão não inicializada');
         }
 
-        const contacts = await conn.client.getAllContacts();
-        
-        // Converter o objeto de contatos em array e filtrar
-        return Object.values(contacts)
-            .filter(contact => {
-                return contact && 
-                       contact.id && 
-                       !contact.isGroup && 
-                       contact.id.server !== 'g.us';
-            })
-            .map(contact => ({
-                id: contact.id._serialized || contact.id,
-                name: contact.name || contact.pushname || 'Sem nome',
-                number: contact.id.user || contact.id.split('@')[0],
-                lastMessageTime: contact.lastMessageTime || null,
-                imageUrl: contact.profilePicUrl || null,
-                description: contact.status || null
-            }));
+        console.log('Iniciando busca de contatos...');
+
+        try {
+            // Tentar diferentes métodos para obter contatos
+            let allContacts;
+            
+            // Método 1: Tentar getContacts direto
+            try {
+                allContacts = await conn.client.getAllContacts();
+            } catch (err) {
+                console.log('Método 1 falhou, tentando método 2...');
+                // Método 2: Tentar via store
+                allContacts = conn.client.store?.contacts;
+            }
+
+            if (!allContacts) {
+                console.log('Método 2 falhou, tentando método 3...');
+                // Método 3: Tentar via chats
+                const chats = await conn.client.getChats();
+                allContacts = chats.filter(chat => !chat.isGroup);
+            }
+
+            if (!allContacts || Object.keys(allContacts).length === 0) {
+                console.warn('Nenhum contato encontrado após tentar todos os métodos');
+                return [];
+            }
+
+            console.log('Contatos encontrados:', Object.keys(allContacts).length);
+
+            // Processar contatos
+            const contacts = Array.isArray(allContacts) ? allContacts : Object.values(allContacts);
+            
+            return contacts
+                .filter(contact => {
+                    return contact && 
+                           contact.id && 
+                           !contact.isGroup && 
+                           contact.id.server !== 'g.us';
+                })
+                .map(contact => ({
+                    id: contact.id._serialized || contact.id,
+                    name: contact.name || contact.pushname || 'Sem nome',
+                    number: contact.id.user || contact.id.split('@')[0],
+                    lastMessageTime: contact.lastMessageTime || null,
+                    imageUrl: contact.profilePicUrl || null,
+                    description: contact.status || null
+                }));
+
+        } catch (error) {
+            console.error('Erro ao processar contatos:', error);
+            return [];
+        }
     } catch (error) {
-        console.error('Erro ao obter contatos:', error);
+        console.error('Erro detalhado ao obter contatos:', error);
+        console.error('Stack trace:', error.stack);
         return [];
     }
 }
@@ -1515,7 +1457,5 @@ module.exports = {
     redirectToWhatsAppChat,
     server,
     getRecentContacts,
-    getBotConnection: () => botConnection,
-    saveIgnoredContacts, // Add this export
-    checkIfContactIsIgnored // Add this export if needed
+    getBotConnection: () => botConnection
 };

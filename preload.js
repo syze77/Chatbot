@@ -12,15 +12,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getTheme: () => localStorage.getItem('theme'),
     setTheme: (theme) => localStorage.setItem('theme', theme),
 
-    invoke: (channel, ...args) => {
+    invoke: async (channel, data) => {
+        // Adicionar log para debug
+        console.log('Enviando para canal:', channel, 'dados:', data);
+        
         const validChannels = [
             'get-contacts',
             'save-ignored-contacts',
-            // ...outros canais existentes...
+            // ...outros canais válidos...
         ];
+
         if (validChannels.includes(channel)) {
-            return ipcRenderer.invoke(channel, ...args);
+            try {
+                const result = await ipcRenderer.invoke(channel, data);
+                console.log('Resultado recebido:', result); // Log do resultado
+                return result;
+            } catch (error) {
+                console.error('Erro na invocação:', error);
+                throw error;
+            }
         }
-        return Promise.reject(new Error(`Canal IPC não permitido: ${channel}`));
-    },
+    }
 });

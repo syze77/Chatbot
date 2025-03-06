@@ -131,15 +131,98 @@ function setupIpcHandlers() {
         }
     });
 
-    ipcMain.handle('save-ignored-contacts', async (event, contacts) => {
+    ipcMain.handle('save-ignored-contacts', async (event, newContacts) => {
         try {
-            // Importar a função diretamente do bot.js
-            const { saveIgnoredContacts } = require('./bot');
-            const result = await saveIgnoredContacts(contacts);
-            return { success: true, ...result };
+            console.log('Contatos recebidos para atualização:', newContacts);
+            
+            if (!Array.isArray(newContacts)) {
+                throw new Error('Contatos devem ser um array');
+            }
+
+            const db = getDatabase();
+            
+            // Iniciar transação
+            await new Promise((resolve, reject) => {
+                db.run('BEGIN TRANSACTION', err => err ? reject(err) : resolve());
+            });
+
+            try {
+                // Primeiro, obter todos os contatos atualmente ignorados
+                const existingContacts = await new Promise((resolve, reject) => {
+                    db.all('SELECT id FROM ignored_contacts', [], (err, rows) => {
+                        if (err) reject(err);
+                        else resolve(rows.map(row => row.id));
+                    });
+                });
+
+                // Identificar contatos que foram desmarcados
+                const newContactIds = new Set(newContacts.map(c => c.id));
+                const contactsToRemove = existingContacts.filter(id => !newContactIds.has(id));
+
+                // Remover contatos desmarcados
+                if (contactsToRemove.length > 0) {
+                    const placeholders = contactsToRemove.map(() => '?').join(',');
+                    await new Promise((resolve, reject) => {
+                        db.run(
+                            `DELETE FROM ignored_contacts WHERE id IN (${placeholders})`,
+                            contactsToRemove,
+                            err => err ? reject(err) : resolve()
+                        );
+                    });
+                }
+
+                // Adicionar ou atualizar novos contatos selecionados
+                const stmt = db.prepare('INSERT OR REPLACE INTO ignored_contacts (id, name, number) VALUES (?, ?, ?)');
+
+                for (const contact of newContacts) {
+                    await new Promise((resolve, reject) => {
+                        stmt.run([contact.id, contact.name, contact.number], err => {
+                            if (err) {
+                                console.error('Erro ao inserir contato:', err);
+                                reject(err);
+                            } else {
+                                resolve();
+                            }
+                        });
+                    });
+                }
+
+                await new Promise((resolve, reject) => {
+                    stmt.finalize(err => err ? reject(err) : resolve());
+                });
+
+                await new Promise((resolve, reject) => {
+                    db.run('COMMIT', err => err ? reject(err) : resolve());
+                });
+
+                const totalIgnored = await new Promise((resolve, reject) => {
+                    db.get('SELECT COUNT(*) as count FROM ignored_contacts', [], (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row.count);
+                    });
+                });
+
+                console.log(`Total de contatos ignorados após atualização: ${totalIgnored}`);
+                
+                return {
+                    success: true,
+                    added: newContacts.length,
+                    removed: contactsToRemove.length,
+                    total: totalIgnored,
+                    message: `Lista de contatos ignorados atualizada com sucesso`
+                };
+
+            } catch (error) {
+                await new Promise(resolve => db.run('ROLLBACK', resolve));
+                throw error;
+            }
+
         } catch (error) {
-            console.error('Erro ao salvar contatos ignorados:', error);
-            return { success: false, error: error.message };
+            console.error('Erro ao atualizar contatos ignorados:', error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
     });
 

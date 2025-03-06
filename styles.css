@@ -240,9 +240,9 @@ body {
     margin: 0;
 }
 
-/* Dark theme modifications */
+
 .dark-theme .sidebar {
-    background: #2D2D2D; /* Cinza escuro para o tema escuro */
+    background: #2D2D2D;
 }
 
 .nav-links {
@@ -404,10 +404,10 @@ body {
     width: calc(100% - 70px);
 }
 
-/* Quando a sidebar está expandida */
+
 .content:not(.collapsed) {
-    margin-left: 290px; /* Ajustado para corresponder à nova largura */
-    width: calc(100% - 290px); /* Ajustado para corresponder à nova largura */
+    margin-left: 250px; 
+    width: calc(100% - 250px); 
 }
 
 @media (max-width: 768px) {
@@ -472,7 +472,7 @@ body {
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 }
 
-/* Ajustes para Dark Theme */
+
 .dark-theme .card {
     background: #2D2D2D;
     border-color: #3a3b3c;

@@ -84,7 +84,7 @@
     <script src="renderer.js"></script>
     <script>
         let contacts = [];
-        let ignoredContacts = new Set();
+        let ignoredContacts = new Set();  // Usando Set para armazenar múltiplos IDs
         
         document.addEventListener('DOMContentLoaded', () => {
             Sidebar.init();
@@ -232,17 +232,16 @@
                 }
 
                 checkbox.addEventListener('change', (e) => {
-                    const isChecked = e.target.checked;
+                    const contactDiv = e.target.closest('.contact-item');
                     contactDiv.classList.toggle('changed');
                     
-                    // Adicionar ou remover do Set sem substituir
-                    if (isChecked) {
+                    if (e.target.checked) {
                         ignoredContacts.add(contact.id);
                     } else {
                         ignoredContacts.delete(contact.id);
                     }
                     
-                    updateCounter();
+                    updateContactsCounter();
                 });
             });
 
@@ -275,34 +274,42 @@
             saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
 
             try {
-                // Coletar TODOS os contatos marcados usando o Set ignoredContacts
-                const checkedContacts = Array.from(document.querySelectorAll('.contact-item'))
-                    .filter(contactEl => ignoredContacts.has(contactEl.querySelector('input[type="checkbox"]').id))
-                    .map(contactEl => ({
-                        id: contactEl.querySelector('input[type="checkbox"]').id,
+                // Coletar todos os checkboxes marcados
+                const selectedCheckboxes = document.querySelectorAll('.contact-item input[type="checkbox"]:checked');
+                
+                // Mapear os contatos selecionados
+                const selectedContacts = Array.from(selectedCheckboxes).map(checkbox => {
+                    const contactEl = checkbox.closest('.contact-item');
+                    return {
+                        id: checkbox.id,
                         name: contactEl.querySelector('.contact-name').textContent,
                         number: contactEl.querySelector('.contact-number').textContent
-                    }));
+                    };
+                });
 
-                // Salvar no backend
-                const result = await window.electronAPI.invoke('save-ignored-contacts', checkedContacts);
+                console.log('Contatos selecionados:', selectedContacts); // Debug
+
+                // Enviar todos os contatos selecionados para o backend
+                const result = await window.electronAPI.invoke('save-ignored-contacts', selectedContacts);
 
                 if (result.success) {
-                    // Atualizar a exibição
-                    document.querySelectorAll('.contact-item').forEach(contact => {
-                        const checkbox = contact.querySelector('input[type="checkbox"]');
-                        const isIgnored = ignoredContacts.has(checkbox.id);
+                    // Atualizar o Set com os IDs dos contatos ignorados
+                    ignoredContacts = new Set(selectedContacts.map(c => c.id));
+
+                    // Mover os contatos para as listas corretas
+                    document.querySelectorAll('.contact-item').forEach(contactEl => {
+                        const checkbox = contactEl.querySelector('input[type="checkbox"]');
+                        const isIgnored = checkbox.checked;
                         const targetContainer = isIgnored ? 
                             document.querySelector('.ignored-contacts') : 
                             document.querySelector('.active-contacts');
-                        
-                        contact.classList.toggle('ignored', isIgnored);
-                        targetContainer.appendChild(contact);
+
+                        contactEl.classList.toggle('ignored', isIgnored);
+                        targetContainer.appendChild(contactEl);
                     });
 
-                    // Atualizar contador
-                    updateContactsCounter();
                     showToast(`${result.added} contatos atualizados com sucesso`, 'success');
+                    updateContactsCounter();
                 }
             } catch (error) {
                 console.error('Erro ao salvar:', error);

@@ -26,10 +26,10 @@ A specialized WhatsApp chatbot solution for educational institutions that provid
 
 ### Prerequisites
 
-- Node.js (version 14 or higher)
+- Node.js (version 22.11)
 - SQLite3
 - WhatsApp Business API access
-- Windows/macOS/Linux operating system
+- Windows
 
 ### Installation
 
