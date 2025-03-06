@@ -26,7 +26,7 @@ A specialized WhatsApp chatbot solution for educational institutions that provid
 
 ### Prerequisites
 
-- Node.js (version 22.11)
+- Node.js (v22.11.0)
 - SQLite3
 - WhatsApp Business API access
 - Windows
