@@ -1416,7 +1416,6 @@ body.dark-theme {
 /* Remover o efeito de escala no ícone */
 .nav-item:hover .nav-icon,
 .nav-item.active .nav-icon {
-    transform: none;
     background: transparent;
 }
 
