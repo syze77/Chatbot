@@ -8,7 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Adicione métodos de navegação
     navigate: (path) => ipcRenderer.send('navigate', path),
     
-    // Adicione métodos de tema
     getTheme: () => localStorage.getItem('theme'),
     setTheme: (theme) => localStorage.setItem('theme', theme),
 
@@ -19,7 +18,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const validChannels = [
             'get-contacts',
             'save-ignored-contacts',
-            // ...outros canais válidos...
         ];
 
         if (validChannels.includes(channel)) {

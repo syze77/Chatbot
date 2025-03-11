@@ -42,7 +42,7 @@ function initializeDatabase() {
                     console.log('Banco de dados inicializado com sucesso');
                 });
 
-                // Adicionar nova tabela para contatos ignorados
+                
                 db.run(`CREATE TABLE IF NOT EXISTS ignored_contacts (
                     id TEXT PRIMARY KEY,
                     name TEXT,
@@ -63,6 +63,6 @@ function initializeDatabase() {
 
 // Exportação das funções do módulo
 module.exports = {
-    initializeDatabase,    // Função para inicializar o banco de dados
-    getDatabase: () => db  // Função para obter a instância do banco de dados
+    initializeDatabase,    
+    getDatabase: () => db  
 };

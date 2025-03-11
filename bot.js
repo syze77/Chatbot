@@ -1,3 +1,8 @@
+/**
+ * Bot de atendimento automatizado com integração WhatsApp
+ * Responsável por gerenciar filas, mensagens e interações com usuários
+ */
+
 const hydraBot = require('hydra-bot');
 const path = require('path');
 const { ipcMain } = require('electron');
@@ -6,19 +11,34 @@ const { getDatabase } = require('./database');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 
-// Constantes globais
+/**
+ * Configurações globais do sistema
+ * MESSAGE_DELAY: Intervalo entre mensagens para evitar bloqueio do WhatsApp
+ * MAX_ACTIVE_CHATS: Limite máximo de atendimentos simultâneos
+ */
 const MESSAGE_DELAY = 1000; // 1 segundo entre mensagens
 const MAX_ACTIVE_CHATS = 3;
 
-// Estado global da aplicação
+/**
+ * Estado global da aplicação
+ * bot: Instância principal do bot
+ * botConnection: Conexão atual com o WhatsApp
+ * messageQueue: Fila de mensagens para garantir ordem de envio
+ * isProcessingQueue: Flag de controle do processamento da fila
+ * userCurrentTopic: Registro dos tópicos atuais de cada usuário
+ * humanAttendedChats: Conjunto de chats em atendimento humano
+ */
 let bot;
 let botConnection = null;
-let messageQueue = [];
+const messageQueue = new Map();
 let isProcessingQueue = false;
 let userCurrentTopic = {};
 let humanAttendedChats = new Set();
 
-// Mensagem padrão para novos usuários
+/**
+ * Template de boas-vindas e coleta de informações
+ * Solicita dados básicos do usuário para início do atendimento
+ */
 const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
 
 Nome:
@@ -37,7 +57,15 @@ server.use(express.json());
 let activeChatsList = [];
 let reportedProblems = [];
 
-// Inicializar o bot
+// Adicionar no início do arquivo, junto com outras variáveis globais
+const messageHistory = new Map(); // Armazena histórico de mensagens por chat
+const MESSAGE_HISTORY_LIMIT = 50; // Limite de mensagens para armazenar por chat
+const DUPLICATE_MESSAGE_WINDOW = 60000; // Janela de 1 minuto para verificar duplicatas
+
+/**
+ * Inicializa o servidor do bot e configura eventos principais
+ * @param {Object} io - Instância do Socket.IO para comunicação em tempo real
+ */
 async function startHydraBot(io) {
   try {
     bot = await hydraBot.initServer({
@@ -355,33 +383,66 @@ async function getWaitingPosition(chatId) {
 
 // Processa mensagem do usuário
 async function handleUserMessage(conn, chatId, messageText, io) {
-    // Se o chat está sendo atendido por humano, ignorar
-    if (humanAttendedChats.has(chatId)) {
-        return;
-    }
-
-    const currentTopic = userCurrentTopic[chatId];
-    
-    // Se não há tópico atual ou se uma nova mensagem começa com "nome:"
-    if (!currentTopic || messageText.toLowerCase().startsWith('nome:')) {
-        if (messageText.toLowerCase().startsWith('nome:')) {
-            const userInfo = parseUserInfo(messageText);
-            if (userInfo) {
-                await handleNewUser(conn, chatId, userInfo, io);
-            } else {
-                await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
-            }
-        } else {
-            await sendMessage(conn, chatId, defaultMessage);
-            // Adicionar uma pequena pausa entre as mensagens
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            // Enviar o template de preenchimento
-            await sendMessage(conn, chatId, `Nome:\nCidade:\nCargo:\nEscola:`);
-        }
-        return;
-    }
-
     try {
+        // Verificar se é uma mensagem duplicada recente
+        const chatHistory = messageHistory.get(chatId) || [];
+        const now = Date.now();
+        
+        // Limpar mensagens antigas do histórico (mais de 1 minuto)
+        while (chatHistory.length > 0 && now - chatHistory[0].timestamp > DUPLICATE_MESSAGE_WINDOW) {
+            chatHistory.shift();
+        }
+        
+        // Verificar se é uma mensagem duplicada
+        const isDuplicate = chatHistory.some(msg => 
+            msg.text === messageText && 
+            (now - msg.timestamp) < DUPLICATE_MESSAGE_WINDOW
+        );
+        
+        if (isDuplicate) {
+            console.log(`Mensagem duplicada ignorada para ${chatId}: ${messageText}`);
+            return;
+        }
+        
+        // Adicionar mensagem ao histórico
+        chatHistory.push({ text: messageText, timestamp: now });
+        if (chatHistory.length > MESSAGE_HISTORY_LIMIT) {
+            chatHistory.shift();
+        }
+        messageHistory.set(chatId, chatHistory);
+
+        // Se o chat está sendo atendido por humano, ignorar
+        if (humanAttendedChats.has(chatId)) {
+            return;
+        }
+
+        const currentTopic = userCurrentTopic[chatId];
+        
+        // Verificar estado do chat no banco de dados
+        const chatState = await getChatState(chatId);
+        if (chatState && chatState.status === 'active') {
+            // Se já existe um atendimento ativo, não iniciar novo
+            if (!currentTopic && !messageText.toLowerCase().startsWith('nome:')) {
+                console.log(`Chat ${chatId} já possui atendimento ativo`);
+                return;
+            }
+        }
+        
+        // Resto do processamento de mensagem
+        if (!currentTopic || messageText.toLowerCase().startsWith('nome:')) {
+            if (messageText.toLowerCase().startsWith('nome:')) {
+                const userInfo = parseUserInfo(messageText);
+                if (userInfo) {
+                    await handleNewUser(conn, chatId, userInfo, io);
+                } else {
+                    await sendFormattedMessage(conn, chatId, 'template');
+                }
+            } else {
+                await sendFormattedMessage(conn, chatId, 'template');
+            }
+            return;
+        }
+
         if (currentTopic.state === 'descricaoProblema') {
             await handleProblemDescription(conn, chatId, messageText, io);
             // Após descrever o problema, limpar o tópico para evitar respostas automáticas
@@ -396,8 +457,32 @@ async function handleUserMessage(conn, chatId, messageText, io) {
             await sendMessage(conn, chatId, defaultMessage);
         }
     } catch (error) {
-        console.error('Erro ao processar mensagem do usuário:', error);
-        await sendMessage(conn, chatId, 'Desculpe, ocorreu um erro. Por favor, tente novamente.');
+        console.error('Erro no processamento de mensagem:', error);
+    }
+}
+
+// Nova função para obter estado do chat
+async function getChatState(chatId) {
+    return new Promise((resolve, reject) => {
+        getDatabase().get(
+            'SELECT status FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
+            [chatId],
+            (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            }
+        );
+    });
+}
+
+// Nova função para envio formatado de mensagens
+async function sendFormattedMessage(conn, chatId, type) {
+    switch (type) {
+        case 'template':
+            await sendMessage(conn, chatId, defaultMessage);
+            await sendMessage(conn, chatId, 'Nome:\nCidade:\nCargo:\nEscola:');
+            break;
+        // Adicionar outros tipos conforme necessário
     }
 }
 
@@ -479,62 +564,63 @@ function capitalize(str) {
  * @param {string} message - Mensagem a ser enviada
  * @returns {Promise<void>}
  */
+// Controle de mensagens recentes
+const recentMessages = new Map();
+const MESSAGE_TIMEOUT = 2000; // 2 segundos de intervalo mínimo entre mensagens idênticas
+
+const sentMessages = new Map();
+const DEBOUNCE_TIME = 2000; // 2 segundos
+
+// Substituir a função sendMessage existente
 async function sendMessage(conn, chatId, message) {
-  return new Promise((resolve, reject) => {
-    messageQueue.push({
-      conn,
-      chatId,
-      message,
-      resolve,
-      reject,
-      retries: 0
-    });
-
-    if (!isProcessingQueue) {
-      processMessageQueue();
+    // Criar fila para este chat se não existir
+    if (!messageQueue.has(chatId)) {
+        messageQueue.set(chatId, Promise.resolve());
     }
-  });
-}
 
-/**
- * Processa a fila de mensagens com delay entre elas
- * @param {void}
- * @returns {Promise<void>}
- */
-async function processMessageQueue() {
-  if (messageQueue.length === 0) {
-    isProcessingQueue = false;
-    return;
-  }
+    // Adicionar mensagem à fila deste chat
+    messageQueue.set(chatId, messageQueue.get(chatId).then(async () => {
+        const messageKey = `${chatId}:${message}`;
+        const now = Date.now();
 
-  isProcessingQueue = true;
-  const message = messageQueue[0];
+        try {
+            // Verificar se a mensagem foi enviada recentemente
+            const chatHistory = messageHistory.get(chatId) || [];
+            const isDuplicate = chatHistory.some(msg => 
+                msg.text === message && 
+                (now - msg.timestamp) < DUPLICATE_MESSAGE_WINDOW
+            );
 
-  try {
-    await message.conn.client.sendMessage({ 
-      to: message.chatId, 
-      body: message.message, 
-      options: { type: 'sendText' } 
-    });
+            if (isDuplicate) {
+                console.log(`Evitando envio de mensagem duplicada para ${chatId}`);
+                return;
+            }
 
-    message.resolve();
-    messageQueue.shift();
-    
-    // Adicionar delay antes da próxima mensagem
-    await new Promise(resolve => setTimeout(resolve, MESSAGE_DELAY));
-    
-  } catch (error) {
-    console.error('Erro ao enviar mensagem:', error);
-    message.retries++;
-    
-    if (message.retries >= 3) {
-      message.reject(error);
-      messageQueue.shift();
-    }
-  }
+            // Adicionar ao histórico antes de enviar
+            chatHistory.push({ text: message, timestamp: now });
+            if (chatHistory.length > MESSAGE_HISTORY_LIMIT) {
+                chatHistory.shift();
+            }
+            messageHistory.set(chatId, chatHistory);
 
-  // Processar próxima mensagem
-  processMessageQueue();
+            // Enviar a mensagem
+            await conn.client.sendMessage({
+                to: chatId,
+                body: message,
+                options: { type: 'sendText' }
+            });
+
+            // Aguardar delay fixo entre mensagens
+            await new Promise(resolve => setTimeout(resolve, MESSAGE_DELAY));
+
+        } catch (error) {
+            console.error('Erro ao enviar mensagem:', error);
+            throw error;
+        }
+    }));
+
+    // Retornar a promessa da fila
+    return messageQueue.get(chatId);
 }
 
 // Envia opções de problema para o usuário
@@ -551,7 +637,14 @@ async function sendProblemOptions(conn, chatId) {
   await sendMessage(conn, chatId, problemOptions);
 }
 
-// Processa seleção de problema
+/**
+ * Manipula a seleção de problemas pelo usuário
+ * Direciona para fluxos específicos baseado na escolha
+ * @param {Object} conn - Conexão com WhatsApp
+ * @param {string} chatId - ID do chat
+ * @param {string} messageText - Texto da mensagem recebida
+ * @param {Object} io - Instância do Socket.IO
+ */
 async function handleProblemSelection(conn, chatId, messageText, io) {
   switch (messageText) {
     case '1':
@@ -796,6 +889,7 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
                 `INSERT INTO problems 
                 (chatId, name, city, position, school, description, status, date) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+
                 [
                     chatId,
                     userInfo.name,
@@ -1024,14 +1118,12 @@ function getWaitingList() {
   return activeChatsList.filter(chat => chat.isWaiting);
 }
 
-// Adicionar função para redirecionar para WhatsApp
 function redirectToWhatsAppChat(chatId) {
     const sanitizedChatId = chatId.replace('@c.us', '');
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${sanitizedChatId}`;
     require('electron').shell.openExternal(whatsappUrl);
 }
 
-// Adicionar nova função para atualizar usuários em espera
 async function updateWaitingUsers(io) {
     try {
         const waitingUsers = await new Promise((resolve, reject) => {
@@ -1067,7 +1159,11 @@ function getStatusText(status) {
     return statusMap[status] || status;
 }
 
-// Adicionar endpoint de geração de relatório
+/**
+ * Gera relatórios de atendimento em PDF ou Excel
+ * Endpoint: /generateReport
+ * Suporta filtros por período, cidade e escola
+ */
 server.get('/generateReport', async (req, res) => {
     try {
         const { start, end, format, city, school } = req.query;
@@ -1189,7 +1285,11 @@ server.get('/generateReport', async (req, res) => {
     }
 });
 
-// Atualizar o endpoint getChartData com query corrigida
+/**
+ * API para obtenção de dados estatísticos
+ * Fornece dados para gráficos de atendimento
+ * Suporta filtros por cidade e escola
+ */
 server.get('/getChartData', async (req, res) => {
     try {
         const { city, school } = req.query;
@@ -1211,7 +1311,7 @@ server.get('/getChartData', async (req, res) => {
         console.log('Query conditions:', conditions); // Log de depuração
         console.log('Query parameters:', params); // Log de depuração
         
-        // Query para dados mensais (modificada para garantir todos os meses)
+        // Query para dados mensais 
         const monthlyQuery = `
             WITH RECURSIVE 
             months(month_num) AS (
@@ -1237,7 +1337,7 @@ server.get('/getChartData', async (req, res) => {
             LEFT JOIN month_data ON printf('%02d', months.month_num) = month_data.month
             ORDER BY months.month_num`;
 
-        // Query para dados semanais (mantida como está)
+        // Query para dados semanais 
         const weeklyQuery = `
             WITH RECURSIVE dates(date) AS (
                 SELECT date('now', 'weekday 1', '-7 days')
@@ -1288,7 +1388,6 @@ server.get('/getChartData', async (req, res) => {
     }
 });
 
-// Atualizar o endpoint getCompletedAttendances
 server.get('/getCompletedAttendances', async (req, res) => {
     try {
         const { date, position, city, school } = req.query;
@@ -1343,7 +1442,6 @@ server.get('/getCompletedAttendances', async (req, res) => {
     }
 });
 
-// Adicionar novo endpoint para obter cidades
 server.get('/getCities', async (req, res) => {
     try {
         const query = `
@@ -1360,7 +1458,6 @@ server.get('/getCities', async (req, res) => {
     }
 });
 
-// Adicionar novo endpoint para obter escolas por cidade
 server.get('/getSchools', async (req, res) => {
     try {
         const { city } = req.query;
@@ -1385,7 +1482,7 @@ server.get('/getSchools', async (req, res) => {
     }
 });
 
-// Atualizar a função getRecentContacts
+
 async function getRecentContacts(conn) {
     try {
         if (!conn || !conn.client) {
