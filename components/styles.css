@@ -1,4 +1,3 @@
-/* Configurações Globais */
 body {
     display: flex;
     font-family: 'Inter', sans-serif;
@@ -7,10 +6,9 @@ body {
     padding: 0;
 }
 
-/* Estrutura da Sidebar */
 .sidebar {
-    width: 290px; /* Aumentado de 280px para 290px para evitar sobreposição */
-    background: #17a2b8; /* Mesma cor dos atendimentos ativos */
+    width: 290px;
+    background: #17a2b8;
     color: #ffffff;
     min-height: 100vh;
     position: fixed;
@@ -19,12 +17,11 @@ body {
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 4px 0 8px rgba(0, 0, 0, 0.2);
     z-index: 1000;
-    overflow: hidden; /* Add this to prevent content overflow */
+    overflow: hidden;
     padding: 0;
     overflow-x: hidden;
 }
 
-/* Cabeçalho da Sidebar */
 .sidebar-header {
     padding: 1rem;
     display: flex;
@@ -36,12 +33,11 @@ body {
     height: 70px;
 }
 
-/* Ajustes do Logo */
 .logo-wrapper {
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 1; /* Faz o wrapper ocupar todo espaço disponível */
+    flex: 1;
 }
 
 .brand-logo {
@@ -50,8 +46,8 @@ body {
     max-width: 160px;
     object-fit: contain;
     transition: all 0.3s ease;
-    margin: 0 auto; /* Centraliza a logo */
-    display: block; /* Garante que as margens funcionem */
+    margin: 0 auto;
+    display: block;
 }
 
 .logo-container {
@@ -70,7 +66,6 @@ body {
     opacity: 1;
 }
 
-/* Ajustes do Logo */
 .sidebar.collapsed .logo-container {
     justify-content: center;
 }
@@ -94,12 +89,10 @@ body {
     justify-content: center;
 }
 
-/* Dark theme adjustments */
 .dark-theme .logo-text {
     color: #e4e6ef;
 }
 
-/* Navegação */
 .nav-section {
     padding: 20px 0;
 }
@@ -122,7 +115,7 @@ body {
 
 .nav-links li a {
     padding: 0.75rem 1.5rem;
-    margin-left: 0; /* Removido margin-left */
+    margin-left: 0;
     color: #ffffff;
     display: flex;
     align-items: center;
@@ -208,7 +201,6 @@ body {
     color: rgba(255, 255, 255, 0.5);
 }
 
-/* Estados da Sidebar Recolhida */
 .sidebar.collapsed {
     width: 70px;
 }
@@ -239,7 +231,6 @@ body {
 .sidebar.collapsed .theme-toggle i {
     margin: 0;
 }
-
 
 .dark-theme .sidebar {
     background: #2D2D2D;
@@ -404,10 +395,9 @@ body {
     width: calc(100% - 70px);
 }
 
-
 .content:not(.collapsed) {
-    margin-left: 250px; 
-    width: calc(100% - 250px); 
+    margin-left: 250px;
+    width: calc(100% - 250px);
 }
 
 @media (max-width: 768px) {
@@ -472,7 +462,6 @@ body {
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 }
 
-
 .dark-theme .card {
     background: #2D2D2D;
     border-color: #3a3b3c;
@@ -525,7 +514,6 @@ body {
     background-color: #1E1E1E;
 }
 
-/* Melhorias nas transições gerais */
 .sidebar,
 .content,
 .nav-links a,
@@ -536,7 +524,6 @@ button {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Ajuste nas cores de texto para melhor visibilidade */
 .dark-theme {
     color-scheme: dark;
 }
@@ -568,7 +555,7 @@ button {
     padding: 15px;
     margin: 10px 0;
     border-radius: 10px;
-    background-color: #ffffff; /* Default white background for light theme */
+    background-color: #ffffff;
     border: 1px solid rgba(0, 0, 0, 0.1);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -580,16 +567,15 @@ button {
 }
 
 .dark-theme .chat-item {
-    background-color: #1a1f2c; /* Dark blue background only in dark theme */
+    background-color: #1a1f2c;
     border: 1px solid #2a2f3a;
     color: #E4E6EF;
 }
 
 .dark-theme .chat-item:hover {
-    background-color: #242938; /* Slightly lighter blue on hover in dark theme */
+    background-color: #242938;
 }
 
-/* Problem description styles */
 .problem-description-container {
     padding: 12px;
     border-radius: 8px;
@@ -605,7 +591,7 @@ button {
 }
 
 .problem-description {
-    color: #333333; /* Darker text in light theme */
+    color: #333333;
     font-size: 0.95em;
     line-height: 1.4;
     flex: 1;
@@ -613,10 +599,9 @@ button {
 }
 
 .dark-theme .problem-description {
-    color: #E4E6EF; /* Lighter text in dark theme */
+    color: #E4E6EF;
 }
 
-/* Status badge styles */
 .status-badge {
     padding: 4px 12px;
     border-radius: 15px;
@@ -643,24 +628,22 @@ button {
     font-weight: 600;
 }
 
-/* List container background */
 .list-container {
-    background-color: transparent; /* Remove background color */
+    background-color: transparent;
     padding: 15px;
     border-radius: 10px;
 }
 
 .dark-theme .list-container {
-    background-color: transparent; /* Remove background color in dark theme as well */
+    background-color: transparent;
 }
 
-/* Remove specific background colors from problem items */
 .problem-item {
-    background-color: inherit; /* Inherit from parent */
+    background-color: inherit;
 }
 
 .dark-theme .problem-item {
-    background-color: inherit; /* Inherit from parent in dark theme */
+    background-color: inherit;
 }
 
 .status-header {
@@ -697,10 +680,10 @@ button {
 }
 
 .completed-list {
-    max-height: none; /* Remove a altura máxima fixa */
+    max-height: none;
     padding: 20px;
     border-radius: 10px;
-    background-color: transparent; /* Remove o background do container */
+    background-color: transparent;
     margin: 0 auto;
     max-width: 1200px;
 }
@@ -712,7 +695,6 @@ button {
     background-color: transparent;
 }
 
-/* Cartões de Atendimento */
 .completed-item {
     width: 100%;
     margin: 15px 0;
@@ -724,13 +706,13 @@ button {
     border-radius: 10px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     transition: all 0.3s ease;
-    color: #333333; /* Darker base text color */
+    color: #333333;
 }
 
 .completed-item:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
-    background-color: #f8f9fa; /* Fundo claro ao passar o mouse no tema claro */
+    background-color: #f8f9fa;
 }
 
 .dark-theme .completed-item {
@@ -746,21 +728,20 @@ button {
 
 .completed-item .user-name,
 .completed-item .problem-title {
-    color: #212529; /* Very dark gray, almost black */
+    color: #212529;
     font-weight: 600;
 }
 
 .completed-item .user-details,
 .completed-item .time-info {
-    color: #495057; /* Darker gray for details */
+    color: #495057;
 }
 
 .completed-item .problem-description {
-    color: #333333; /* Darker text color */
+    color: #333333;
     background: none;
 }
 
-/* Adjustar as cores no tema claro também */
 body:not(.dark-theme) .completed-item {
     background-color: #ffffff;
     color: #495057;
@@ -768,12 +749,12 @@ body:not(.dark-theme) .completed-item {
 
 body:not(.dark-theme) .completed-item .user-name,
 body:not(.dark-theme) .completed-item .problem-title {
-    color: #212529; /* Very dark gray in light theme */
+    color: #212529;
 }
 
 body:not(.dark-theme) .completed-item .user-details,
 body:not(.dark-theme) .completed-item .time-info {
-    color: #495057; /* Darker gray in light theme */
+    color: #495057;
 }
 
 body:not(.dark-theme) .completed-item .problem-description {
@@ -786,7 +767,7 @@ body:not(.dark-theme) .completed-item .problem-description {
     height: 400px;
     padding: 20px;
     position: relative;
-    background-color: transparent !important; /* Força background transparente */
+    background-color: transparent !important;
 }
 
 .report-container {
@@ -823,14 +804,13 @@ body:not(.dark-theme) .completed-item .problem-description {
     background-color: #138496;
 }
 
-/* Dark Theme Styles */
 body.dark-theme {
     background: #1E1E1E;
     color: #E4E6EF;
 }
 
 .dark-theme .sidebar {
-    background: #2D2D2D; /* Cinza escuro para o tema escuro */
+    background: #2D2D2D;
 }
 
 .dark-theme .content {
@@ -838,7 +818,7 @@ body.dark-theme {
 }
 
 .dark-theme .card {
-    background: #3a3b3c; /* Cinza claro para o tema escuro */
+    background: #3a3b3c;
     border: 1px solid #4a4b4c;
 }
 
@@ -890,7 +870,6 @@ body.dark-theme {
     color: #a2a3b7;
 }
 
-/* Responsive Styles */
 @media (max-width: 768px) {
     .sidebar {
         transform: translateX(-100%);
@@ -932,7 +911,7 @@ body.dark-theme {
     cursor: pointer;
     transition: all 0.3s ease;
     flex-shrink: 0;
-    margin-left: 1rem; /* Ajustado para alinhar com os itens de navegação */
+    margin-left: 1rem;
 }
 
 .sidebar-toggle:hover {
@@ -999,7 +978,6 @@ body.dark-theme {
     font-size: 0.7rem;
 }
 
-/* Collapsed state adjustments */
 .sidebar.collapsed .logo-wrapper {
     justify-content: center;
     margin-left: 0;
@@ -1038,14 +1016,14 @@ body.dark-theme {
 }
 
 .nav-item::before {
-    display: none; /* Remove a barra lateral */
+    display: none;
 }
 
 .nav-item:hover,
 .nav-item.active {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
-    transform: none; /* Remove a transformação */
+    transform: none;
 }
 
 .nav-icon {
@@ -1054,14 +1032,14 @@ body.dark-theme {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: transparent !important; /* Remove o background dos ícones */
+    background: transparent !important;
     border-radius: 8px;
     margin-right: 12px;
     flex-shrink: 0;
 }
 
 .nav-icon i {
-    position: static; /* Ajusta o posicionamento do ícone */
+    position: static;
     transform: none;
     font-size: 18px;
     color: inherit;
@@ -1085,7 +1063,7 @@ body.dark-theme {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.1) !important; /* Fazer os ícones mais sutis */
+    background: rgba(255, 255, 255, 0.1) !important;
     border-radius: 10px;
     margin-right: 12px;
     flex-shrink: 0;
@@ -1118,7 +1096,6 @@ body.dark-theme {
     letter-spacing: 0.3px;
 }
 
-/* Dark theme adjustments */
 .dark-theme .admin-profile {
     background: rgba(0, 0, 0, 0.2);
 }
@@ -1143,10 +1120,9 @@ body.dark-theme {
 }
 
 .content.collapsed {
-    margin-left: 70px; /* Match sidebar collapsed width */
+    margin-left: 70px;
 }
 
-/* Fix icon container in theme toggle */
 .theme-toggle .nav-icon {
     min-width: 40px;
     height: 40px;
@@ -1190,7 +1166,6 @@ body.dark-theme {
     font-size: 0.7rem;
 }
 
-/* Dark theme adjustments */
 .dark-theme .admin-profile {
     background: rgba(0, 0, 0, 0.2);
 }
@@ -1255,7 +1230,6 @@ body.dark-theme {
     color: #a2a3b7;
 }
 
-/* Icon colors and completed items */
 .status-header i,  
 .time-info i,
 .user-details i {
@@ -1330,7 +1304,6 @@ body.dark-theme {
     color: #a2a3b7;
 }
 
-/* Icon colors - make all icons white by default */
 .nav-icon i,
 .status-header i,
 .time-info i,
@@ -1340,7 +1313,6 @@ body.dark-theme {
     color: #fff !important;
 }
 
-/* Adjust collapsed state for theme toggle and admin profile */
 .sidebar.collapsed .theme-toggle {
     display: flex;
     justify-content: center;
@@ -1372,20 +1344,17 @@ body.dark-theme {
     padding: 0;
 }
 
-/* Ensure proper spacing in collapsed state */
 .sidebar.collapsed .sidebar-footer {
     padding: 10px 5px;
 }
 
-/* Adjust theme toggle icon positioning */
 .theme-toggle .nav-icon i {
     position: static;
     transform: none;
 }
 
-/* Modificar o comportamento dos links quando a sidebar está recolhida */
 .sidebar.collapsed .nav-links a {
-    pointer-events: none; /* Desativa interações quando recolhido */
+    pointer-events: none;
     cursor: default;
 }
 
@@ -1399,27 +1368,23 @@ body.dark-theme {
     cursor: default;
 }
 
-/* Manter apenas o botão de toggle clicável */
 .sidebar.collapsed .sidebar-toggle {
     pointer-events: auto;
     cursor: pointer;
 }
 
-/* Remover efeitos de hover persistentes */
 .nav-item:hover,
 .nav-item.active {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
-    transform: none; /* Remove a transformação */
+    transform: none;
 }
 
-/* Remover o efeito de escala no ícone */
 .nav-item:hover .nav-icon,
 .nav-item.active .nav-icon {
     background: transparent;
 }
 
-/* Remover estilos duplicados e conflitantes */
 .nav-links a:hover {
     background: rgba(255, 255, 255, 0.08);
     transform: none;
@@ -1431,18 +1396,16 @@ body.dark-theme {
     margin-bottom: 20px;
 }
 
-/* Ajuste dos ícones em atendimentos concluídos */
 .completed-item .user-details i,
 .completed-item .time-info i {
-    color: #6c757d !important; /* Cinza em ambos os temas */
+    color: #6c757d !important;
 }
 
 .dark-theme .completed-item .user-details i,
 .dark-theme .completed-item .time-info i {
-    color: #a2a3b7 !important; /* Cinza mais claro no tema escuro */
+    color: #a2a3b7 !important;
 }
 
-/* Estilização do botão e modal de relatório */
 .generate-report-btn {
     padding: 12px 24px;
     background-color: #17a2b8;
@@ -1473,7 +1436,6 @@ body.dark-theme {
     background-color: #363636;
 }
 
-/* Estilização do modal de relatório */
 .report-modal {
     background-color: #ffffff;
     border-radius: 12px;
@@ -1570,7 +1532,6 @@ body.dark-theme {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* Updated completed items styles */
 .completed-item {
     background-color: #ffffff;
     border: 1px solid rgba(0, 0, 0, 0.1);
@@ -1595,7 +1556,6 @@ body.dark-theme {
     border-radius: 8px;
 }
 
-/* Dark theme adjustments */
 .dark-theme .completed-item {
     background-color: #1a1f2c;
     border-color: #2a2f3a;
@@ -1617,7 +1577,6 @@ body.dark-theme {
     color: #E4E6EF;
 }
 
-/* Problem description container for all items */
 .problem-description-container {
     background-color: #f8f9fa;
     border: none;
@@ -1664,7 +1623,6 @@ body.dark-theme {
     box-shadow: 0 0 0 0.2rem rgba(54, 153, 255, 0.25);
 }
 
-/* Filtros e Controles */
 .filter-section {
     background-color: #ffffff;
     border-radius: 10px;
@@ -1730,10 +1688,9 @@ body.dark-theme {
     box-shadow: 0 0 0 0.2rem rgba(23, 162, 184, 0.25);
 }
 
-/* Botões e Interações */
 .apply-filter-btn {
     padding: 12px 24px;
-    background-color: #17a2b8;  /* Azul no tema claro */
+    background-color: #17a2b8;
     color: #ffffff;
     border: none;
     border-radius: 8px;
@@ -1747,12 +1704,11 @@ body.dark-theme {
 }
 
 .apply-filter-btn:hover:not(:disabled) {
-    background-color: #138496;  /* Azul mais escuro no hover do tema claro */
+    background-color: #138496;
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
-/* Dark theme adjustments */
 .dark-theme .apply-filter-btn {
     background-color: #2D2D2D !important;
     color: #E4E6EF;
@@ -1769,7 +1725,6 @@ body.dark-theme {
     color: #6c757d;
 }
 
-/* Removendo estilos conflitantes */
 .dark-theme .apply-filter-btn {
     background-color: #2D2D2D !important;
 }
@@ -1791,7 +1746,6 @@ body.dark-theme {
     box-shadow: none !important;
 }
 
-/* Dark theme adjustments */
 .dark-theme .apply-filter-btn {
     background-color: #2D2D2D;
     color: #E4E6EF;
@@ -1820,7 +1774,6 @@ body.dark-theme {
     background-color: #1668cb;
 }
 
-/* Responsividade */
 @media (max-width: 768px) {
     .sidebar {
         transform: translateX(-100%);
@@ -1863,7 +1816,6 @@ body.dark-theme {
     }
 }
 
-/* Animações */
 @keyframes highlight {
     0% { background-color: #fff; }
     50% { background-color: #e3f2fd; }
@@ -1874,20 +1826,18 @@ body.dark-theme {
     animation: highlight 1s ease-in-out;
 }
 
-/* Updated hover styles for completed items */
 .completed-item:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
-    background-color: #f8f9fa; /* Fundo claro ao passar o mouse no tema claro */
+    background-color: #f8f9fa;
 }
 
 .dark-theme .completed-item:hover {
-    background-color: #242938; /* Dark background only in dark theme */
+    background-color: #242938;
     transform: translateY(-5px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }
 
-/* Dark theme adjustments */
 .dark-theme .sidebar-toggle {
     background: rgba(0, 0, 0, 0.2);
 }
