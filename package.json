@@ -2,10 +2,10 @@
     "name": "whatsapp-electron-bot",
     "version": "1.0.0",
     "description": "",
-    "main": "main.js",
+    "main": "js/main.js",
     "scripts": {
         "start": "concurrently \"npm run start-bot\" \"npm run start-electron\"",
-        "start-bot": "node bot.js",
+        "start-bot": "node js/bot.js",
         "start-electron": "electron ."
     },
     "devDependencies": {

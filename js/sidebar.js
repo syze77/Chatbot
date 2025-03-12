@@ -38,13 +38,13 @@ class Sidebar {
                     <button class="sidebar-toggle" onclick="Sidebar.toggleSidebar()">
                         <i class="fas fa-bars"></i>
                     </button>
-                    <img src="./assets/logo.svg" alt="Logo" class="brand-logo" />
+                    <img src="../../assets/logo.svg" alt="Logo" class="brand-logo" />
                 </div>
 
                 <nav class="sidebar-nav">
                     <ul class="nav-links">
                         <li>
-                            <a href="index.html" id="home-link" class="nav-item">
+                            <a href="../initial/index.html" id="home-link" class="nav-item">
                                 <div class="nav-icon">
                                     <i class="fas fa-home"></i>
                                 </div>
@@ -52,7 +52,7 @@ class Sidebar {
                             </a>
                         </li>
                         <li>
-                            <a href="dashboard.html" id="dashboard-link" class="nav-item">
+                            <a href="../dashboard/index.html" id="dashboard-link" class="nav-item">
                                 <div class="nav-icon">
                                     <i class="fas fa-chart-line"></i>
                                 </div>
@@ -60,7 +60,7 @@ class Sidebar {
                             </a>
                         </li>
                         <li>
-                            <a href="completed.html" id="completed-link" class="nav-item">
+                            <a href="../completed/index.html" id="completed-link" class="nav-item">
                                 <div class="nav-icon">
                                     <i class="fas fa-check-circle"></i>
                                 </div>
@@ -68,7 +68,7 @@ class Sidebar {
                             </a>
                         </li>
                         <li>
-                            <a href="ignored_contacts.html" id="ignored-contacts-link" class="nav-item">
+                            <a href="../ignore/index.html" id="ignored-contacts-link" class="nav-item">
                                 <div class="nav-icon">
                                     <i class="fas fa-user-slash"></i>
                                 </div>
@@ -88,7 +88,7 @@ class Sidebar {
                     
                     <div class="admin-profile">
                         <div class="admin-avatar">
-                            <img src="./assets/avatar.jpg" alt="Admin" class="admin-img">
+                            <img src="../../assets/avatar.jpg" alt="Admin" class="admin-img">
                         </div>
                         <div class="admin-info">
                             <span class="admin-name">Suporte</span>
