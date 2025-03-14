@@ -1,32 +1,29 @@
-// Atualizar para usar paths relativos para módulos
+// Estabelece conexão WebSocket com o servidor local
 const socket = io('http://localhost:3000');
 
-// Evento de conexão com o servidor WebSocket
+// Registra evento de conexão bem-sucedida
 socket.on('connect', () => {
     console.log('Conectado ao servidor de WebSocket');
 });
 
-// Evento de atualização de status
+// Manipula atualizações de status recebidas do servidor
 socket.on('statusUpdate', (data) => {
-    console.log('Atualização de status recebida:', data);
+    // Verifica se os dados são válidos antes de atualizar a UI
     if (data && typeof data === 'object') {
         updateUI(data);
-        // Não atualizar cores dos gráficos aqui
     }
 });
 
-// Evento de problema do usuário
-socket.on('userProblem', (problemData) => {
-    console.log('Problema do usuário recebido:', problemData);
-    
-    // Se problemData for uma string, converta para objeto
+// Manipula novos problemas reportados pelos usuários
+socket.on('userProblem', (problemData) => {    
+    // Normaliza os dados do problema
     const data = typeof problemData === 'string' ? 
         { description: problemData } : problemData;
     
-    // Exibir o problema na interface
+    // Exibe o problema na interface
     displayProblem(data.description, data.chatId, data.name);
     
-    // Estrutura correta dos dados para a notificação
+    // Prepara dados para notificação
     const notificationData = {
         chatId: data.chatId,
         name: data.name,
@@ -35,30 +32,26 @@ socket.on('userProblem', (problemData) => {
         description: data.description,
         city: data.city
     };
-
-    // Log de depuração para verificar os dados
-    console.log('Dados formatados para notificação:', notificationData);
     
+    // Mostra notificação do novo problema
     showNotification('Novo Problema Relatado', notificationData);
 });
 
-// Evento de novos dados
+// Handler do evento new-data
 socket.on('new-data', (data) => {
     console.log('Novos dados recebidos:', data); // Log de novos dados
     updateUI(data);
 });
 
-// Evento de novo problema relatado
+// Handler do evento newProblemReported
 socket.on('newProblemReported', (problemData) => {
     console.log('Novo problema relatado:', problemData); // Log de novo problema
     displayProblem(problemData.description, problemData.chatId, problemData.name);
     
-    // Criar objeto de dados estruturado para a notificação
     const notificationData = {
         description: problemData.description,
     };
     
-    // Usar o objeto estruturado em vez da string
     showNotification('Novo Problema Relatado', notificationData);
 });
 
@@ -68,26 +61,20 @@ const activeChatList = document.getElementById('active-chat-list');
 const waitingListContainer = document.getElementById('waiting-list-container');
 const problemListContainer = document.getElementById('problem-list-container');
 
-// Atualizar a UI com os dados mais recentes
+// Funções de manipulação da interface
+// Função principal para atualizar a interface do usuário
 function updateUI(data) {
-    console.log('Atualizando UI com dados:', data);
-
-    // Garantir que temos um objeto de dados válido
+    // Processa e valida os dados recebidos
     const processedData = {
         activeChats: Array.isArray(data.activeChats) ? data.activeChats : [],
         waitingList: Array.isArray(data.waitingList) ? data.waitingList : [],
         problems: Array.isArray(data.problems) ? data.problems : []
     };
 
-    // Atualizar cada seção
+    // Atualiza cada seção da interface
     updateSection(processedData.activeChats, activeChatList, 'active');
     updateSection(processedData.waitingList, waitingListContainer, 'waiting', true);
     updateSection(processedData.problems, problemListContainer, 'problem');
-
-    // Logs de depuração
-    console.log('Atendimentos ativos:', processedData.activeChats);
-    console.log('Lista de espera:', processedData.waitingList);
-    console.log('Problemas:', processedData.problems);
 }
 
 // Exibir um problema relatado
@@ -151,31 +138,24 @@ function displayProblem(description, chatId, userName) {
     problemListContainer.insertBefore(problemItem, problemListContainer.firstChild);
 }
 
-// Funções de notificação atualizadas
+// Sistema de notificações
 async function showNotification(title, data) {
     try {
-        // Verificar contexto seguro
         if (!window.isSecureContext) {
             console.error('Notificações requerem contexto seguro (HTTPS ou localhost)');
             return;
         }
 
-        // Verificar suporte a notificações
         if (!('Notification' in window)) {
             console.error('Este navegador não suporta notificações');
             return;
         }
 
-        // Solicitar permissão se necessário
         if (Notification.permission === 'default') {
             const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                console.log('Permissão de notificação negada');
-                return;
-            }
+            if (permission !== 'granted') return;
         }
 
-        // Criar e mostrar notificação
         if (Notification.permission === 'granted') {
             createNotification(title, data);
         }
@@ -184,21 +164,17 @@ async function showNotification(title, data) {
     }
 }
 
-// Atualizar a função createNotification
 function createNotification(title, data) {
     try {
-        console.log('Dados recebidos na notificação:', data); // Log de depuração
+        console.log('Dados recebidos na notificação:', data); 
 
-        // Verificar se data é uma string ou objeto
         const isStringData = typeof data === 'string';
         
-        // Formatar o corpo da notificação de forma mais legível
         let notificationBody;
         
         if (isStringData) {
             notificationBody = data;
         } else {
-            // Criar array apenas com informações disponíveis
             const lines = [];
             if (data.name) lines.push(`Nome: ${data.name}`);
             if (data.position) lines.push(`Cargo: ${data.position}`);
@@ -209,7 +185,7 @@ function createNotification(title, data) {
             notificationBody = lines.join('\n');
         }
 
-        console.log('Corpo da notificação:', notificationBody); // Log de depuração
+        console.log('Corpo da notificação:', notificationBody);
 
         const options = {
             body: notificationBody,
@@ -248,7 +224,6 @@ function createNotification(title, data) {
             showBellIcon();
         };
 
-        // Fechar automaticamente após 30 segundos
         setTimeout(() => {
             notification.close();
         }, 30000);
@@ -281,7 +256,6 @@ function showBellIcon() {
     const problemHeader = document.querySelector('.status-header i.fa-exclamation-triangle');
     if (problemHeader) {
         problemHeader.classList.add('fa-bell', 'notification-animation');
-        // Remover classe de animação após a animação completar
         setTimeout(() => {
             problemHeader.classList.remove('notification-animation');
         }, 1000);
@@ -315,11 +289,9 @@ notificationStyles.textContent = `
 `;
 document.head.appendChild(notificationStyles);
 
-// Função melhorada de atualização de seção com estados de carregamento
 function updateSection(items, container, type, includePosition = false) {
     if (!container) return;
     
-    // Mostrar estado de carregamento
     container.innerHTML = '<div class="loading">Carregando...</div>';
 
     setTimeout(() => {
@@ -332,22 +304,20 @@ function updateSection(items, container, type, includePosition = false) {
             return;
         }
 
-        // Adicionar posições na fila para lista de espera
+        // Garantir que os itens na fila de espera tenham posição correta
         if (type === 'waiting') {
-            items = items.map((item, index) => ({
-                ...item,
-                queuePosition: index + 1
-            }));
+            items.forEach((item, index) => {
+                item.queuePosition = index + 1;
+            });
         }
 
         items.forEach(item => {
             const element = createItemElement(item, type, includePosition);
             container.appendChild(element);
         });
-    }, 300); // Curto atraso para estado de carregamento
+    }, 300);
 }
 
-// Adicionar função auxiliar de capitalização
 function capitalize(str) {
     if (!str) return '';
     return str.split(' ')
@@ -355,178 +325,16 @@ function capitalize(str) {
         .join(' ');
 }
 
-// Atualizar função createItemElement
-function createItemElement(item, type, includePosition) {
-    if (!item) return null;
-
-    const element = document.createElement('div');
-    element.classList.add('chat-item', `${type}-item`);
-    
-    const formattedInfo = {
-        name: capitalize(item.name || item.nome || ''),
-        city: capitalize(item.city || item.cidade || ''),
-        position: capitalize(item.position || item.cargo || ''),
-        school: capitalize(item.school || item.escola || '')
-    };
-
-    let content = '';
-    switch(type) {
-        case 'active':
-        case 'waiting':
-            const badge = type === 'active' 
-                ? '<span class="status-badge active">Em Atendimento</span>'
-                : `<span class="queue-position">Posição ${item.queuePosition || ''}º</span>`;
-
-            content = `
-                <div class="item-content ${type}-chat">
-                    <div class="user-info">
-                        <strong>${formattedInfo.name}</strong>
-                        ${badge}
-                    </div>
-                    <div class="details">
-                        <span class="location">${formattedInfo.city}</span> • 
-                        <span class="position">${formattedInfo.position}</span>
-                    </div>
-                    <div class="school-info">
-                        <i class="fas fa-school"></i> ${formattedInfo.school}
-                    </div>
-                    <div class="action-buttons">
-                        <button class="btn btn-danger btn-sm end-chat-btn">
-                            <i class="fas fa-times-circle"></i> Finalizar Atendimento
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            // Adicionar event listener para o botão de finalizar
-            setTimeout(() => {
-                const endChatBtn = element.querySelector('.end-chat-btn');
-                if (endChatBtn) {
-                    endChatBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        handleEndChat(item);
-                    });
-                }
-            }, 0);
-            break;
-            
-        case 'problem':
-            content = `
-                <div class="item-content problem-chat">
-                    <div class="problem-header">
-                        <strong class="user-name">${capitalize(safeItem.name)}</strong>
-                        <span class="status-badge problem">Problema</span>
-                    </div>
-                    <div class="problem-description-container">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <span class="problem-description">${safeItem.description}</span>
-                    </div>
-                    <div class="action-buttons">
-                        <button class="btn btn-primary btn-sm attend-btn">
-                            <i class="fas fa-headset"></i> Atender
-                        </button>
-                    </div>
-                </div>
-            `;
-            if (safeItem.chatId) {
-                element.addEventListener('click', () => {
-                    window.electron.openWhatsAppChat(safeItem.chatId);
-                });
-                element.style.cursor = 'pointer';
-            }
-            break;
-    }
-    
-    element.innerHTML = content;
-    
-    // Adicionar manipulador de clique para botão de atendimento
-    if (type === 'problem') {
-        const attendBtn = element.querySelector('.attend-btn');
-        if (attendBtn) {
-            attendBtn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevenir abertura do chat
-                handleAttendProblem(item);
-            });
-        }
-    }
-    
-    return element;
-}
-
-// Adicionar nova função para lidar com atendimento de problema
-function handleAttendProblem(problem) {
-    const confirmAttend = confirm(`Deseja atender o problema relatado por ${problem.name}?`);
-    if (confirmAttend) {
-        socket.emit('attendProblem', {
-            chatId: problem.chatId,
-            attendantId: 'CURRENT_USER_ID' // Pode ser necessário adicionar autenticação de usuário adequada
-        });
-        
-        window.electron.openWhatsAppChat(problem.chatId);
-    }
-}
-
-// Adicionar nova função para lidar com finalização de atendimento
-function handleEndChat(chat) {
-    const confirmEnd = confirm(`Deseja finalizar o atendimento de ${chat.name}?`);
-    if (confirmEnd) {
-        // Encontrar e remover o elemento do problema da UI
-        const problemItem = Array.from(problemListContainer.children)
-            .find(item => item.dataset.chatId === chat.chatId);
-        if (problemItem) {
-            problemItem.remove();
-        }
-
-        socket.emit('endChat', {
-            chatId: chat.chatId,
-            id: chat.id
-        });
-
-        // Se a lista de problemas estiver vazia, mostrar mensagem vazia
-        if (problemListContainer.children.length === 0) {
-            problemListContainer.innerHTML = '<div class="empty-message">Nenhum problema relatado.</div>';
-        }
-    }
-}
-
-// Buscar dados do banco de dados SQLite e atualizar a UI
-async function fetchDataAndUpdateUI() {
-    try {
-        const response = await fetch('http://localhost:3000/getProblemsData');
-        if (!response.ok) {
-            throw new Error(`Erro HTTP! status: ${response.status}`);
-        }
-        const data = await response.json();
-        console.log('Dados recebidos do servidor:', data);
-        updateUI(data);
-    } catch (error) {
-        console.error('Erro ao buscar dados:', error);
-        // Mostrar mensagem de erro na UI se necessário
-    }
-}
-
-// Garantir que o script do renderer seja carregado e executado
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM totalmente carregado e analisado');
-    fetchDataAndUpdateUI();
-});
-
-// Chamar a função para buscar dados e atualizar a UI quando o conteúdo da página for carregado
-document.addEventListener('DOMContentLoaded', fetchDataAndUpdateUI);
-
-// Atualizar a função createItemElement
 function createItemElement(item, type, includePosition) {
     if (!item) {
         console.log('Item inválido:', item);
         return null;
     }
 
-    console.log(`Criando elemento do tipo ${type}:`, item); // Log de depuração
-
+    console.log(`Criando elemento do tipo ${type}:`, item);
     const element = document.createElement('div');
     element.classList.add('chat-item', `${type}-item`);
     
-    // Garantir que todos os campos existam
     const safeItem = {
         name: item.name || '',
         city: item.city || '',
@@ -566,7 +374,6 @@ function createItemElement(item, type, includePosition) {
                 </div>
             `;
 
-            // Adicionar event listener para o botão de finalizar
             setTimeout(() => {
                 const endChatBtn = element.querySelector('.end-chat-btn');
                 if (endChatBtn) {
@@ -607,12 +414,11 @@ function createItemElement(item, type, includePosition) {
     
     element.innerHTML = content;
     
-    // Adicionar manipulador de clique para botão de atendimento
     if (type === 'problem') {
         const attendBtn = element.querySelector('.attend-btn');
         if (attendBtn) {
             attendBtn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevenir abertura do chat
+                e.stopPropagation(); 
                 handleAttendProblem(item);
             });
         }
@@ -621,36 +427,39 @@ function createItemElement(item, type, includePosition) {
     return element;
 }
 
-// Adicionar nova função para lidar com atendimento de problema
+// Função para manipular o atendimento de um problema
 function handleAttendProblem(problem) {
     const confirmAttend = confirm(`Deseja atender o problema relatado por ${problem.name}?`);
     if (confirmAttend) {
+        // Emite evento para o servidor indicando início do atendimento
         socket.emit('attendProblem', {
             chatId: problem.chatId,
-            attendantId: 'CURRENT_USER_ID' // Pode ser necessário adicionar autenticação de usuário adequada
+            attendantId: 'CURRENT_USER_ID' 
         });
         
+        // Abre o chat do WhatsApp correspondente
         window.electron.openWhatsAppChat(problem.chatId);
     }
 }
 
-// Adicionar nova função para lidar com finalização de atendimento
+// Função para finalizar um atendimento
 function handleEndChat(chat) {
     const confirmEnd = confirm(`Deseja finalizar o atendimento de ${chat.name}?`);
     if (confirmEnd) {
-        // Encontrar e remover o elemento do problema da UI
+        // Remove o item da lista de problemas
         const problemItem = Array.from(problemListContainer.children)
             .find(item => item.dataset.chatId === chat.chatId);
         if (problemItem) {
             problemItem.remove();
         }
 
+        // Notifica o servidor sobre o fim do atendimento
         socket.emit('endChat', {
             chatId: chat.chatId,
             id: chat.id
         });
 
-        // Se a lista de problemas estiver vazia, mostrar mensagem vazia
+        // Atualiza mensagem quando não há mais problemas
         if (problemListContainer.children.length === 0) {
             problemListContainer.innerHTML = '<div class="empty-message">Nenhum problema relatado.</div>';
         }
@@ -669,20 +478,15 @@ async function fetchDataAndUpdateUI() {
         updateUI(data);
     } catch (error) {
         console.error('Erro ao buscar dados:', error);
-        // Mostrar mensagem de erro na UI se necessário
     }
 }
 
-// Garantir que o script do renderer seja carregado e executado
+// Inicialização e carregamento
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM totalmente carregado e analisado');
     fetchDataAndUpdateUI();
 });
 
-// Chamar a função para buscar dados e atualizar a UI quando o conteúdo da página for carregado
-document.addEventListener('DOMContentLoaded', fetchDataAndUpdateUI);
-
-// Adicionar estilos CSS dinâmicos
+// Estilos dinâmicos
 const style = document.createElement('style');
 style.textContent = `
     .chat-item {
@@ -808,3 +612,29 @@ const additionalStyles = `
 `;
 
 style.textContent += additionalStyles;
+
+// Adicionar novos estilos para a badge de posição na fila
+const queueStyles = document.createElement('style');
+queueStyles.textContent = `
+    .queue-badge {
+        background-color: #ffc107;
+        color: #000;
+        padding: 4px 12px;
+        border-radius: 15px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-left: 10px;
+    }
+
+    .waiting-chat {
+        border-left: 4px solid #ffc107;
+    }
+
+    .waiting-chat .user-info {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+`;
+document.head.appendChild(queueStyles);

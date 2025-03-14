@@ -16,11 +16,14 @@ const assetsPath = path.join(__dirname, '../assets');
 
 /**
  * Configurações globais do sistema
- * MESSAGE_DELAY: Intervalo entre mensagens para evitar bloqueio do WhatsApp
- * MAX_ACTIVE_CHATS: Limite máximo de atendimentos simultâneos
  */
-const MESSAGE_DELAY = 1000; // 1 segundo entre mensagens
-const MAX_ACTIVE_CHATS = 3;
+const CONFIG = {
+    MESSAGE_DELAY: 1000,
+    MAX_ACTIVE_CHATS: 3,
+    MESSAGE_HISTORY_LIMIT: 50,
+    DUPLICATE_MESSAGE_WINDOW: 60000,
+    DEFAULT_HEADLESS: false
+};
 
 /**
  * Estado global da aplicação
@@ -37,6 +40,11 @@ const messageQueue = new Map();
 let isProcessingQueue = false;
 let userCurrentTopic = {};
 let humanAttendedChats = new Set();
+const messageHistory = new Map();
+
+// Add these two new declarations
+const processedEvents = new Set();
+const EVENT_TIMEOUT = 2000; // 2 seconds timeout for duplicate events
 
 /**
  * Template de boas-vindas e coleta de informações
@@ -57,14 +65,6 @@ const server = express();
 // Adicionar middleware JSON
 server.use(express.json());
 
-let activeChatsList = [];
-let reportedProblems = [];
-
-// Adicionar no início do arquivo, junto com outras variáveis globais
-const messageHistory = new Map(); // Armazena histórico de mensagens por chat
-const MESSAGE_HISTORY_LIMIT = 50; // Limite de mensagens para armazenar por chat
-const DUPLICATE_MESSAGE_WINDOW = 60000; // Janela de 1 minuto para verificar duplicatas
-
 /**
  * Inicializa o servidor do bot e configura eventos principais
  * @param {Object} io - Instância do Socket.IO para comunicação em tempo real
@@ -73,36 +73,13 @@ async function startHydraBot(io) {
   try {
     bot = await hydraBot.initServer({
       puppeteerOptions: {
-        headless: false,
-        devtools: false,
+        headless: CONFIG.DEFAULT_HEADLESS,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       }
     });
 
     console.log('Servidor Hydra iniciado!');
-
-    bot.on('connection', async (conn) => {
-      if (conn.connect) {
-        console.log('Conexão Hydra estabelecida.');
-        botConnection = conn;
-        startListeningForMessages(conn, io);
-      } else {
-        console.error('Erro na conexão Hydra.');
-      }
-    });
-
-    ipcMain.on('redirectToChat', async (event, chatId) => {
-      if (botConnection) {
-        await redirectToWhatsAppChat(botConnection, chatId);
-      }
-    });
-
-    ipcMain.on('markProblemCompleted', (event, chatId) => {
-      reportedProblems = reportedProblems.filter(problem => problem.chatId !== chatId);
-      markProblemAsCompleted(chatId, io);
-      sendStatusUpdateToMainProcess(io);
-    });
-
+    setupEventListeners(io);
   } catch (error) {
     console.error('Erro ao iniciar o Hydra:', error);
   }
@@ -111,6 +88,18 @@ async function startHydraBot(io) {
     socket.on('attendProblem', async (data) => {
       try {
         const { chatId, attendantId } = data;
+        
+        // Criar um ID único para o evento
+        const eventId = `attend_${chatId}_${Date.now()}`;
+        
+        // Verificar se este evento já foi processado recentemente
+        if (processedEvents.has(eventId)) {
+          return;
+        }
+        
+        // Marcar evento como processado
+        processedEvents.add(eventId);
+        setTimeout(() => processedEvents.delete(eventId), EVENT_TIMEOUT);
 
         // Adicionar chat à lista de atendidos por humanos
         humanAttendedChats.add(chatId);
@@ -143,6 +132,18 @@ async function startHydraBot(io) {
     socket.on('endChat', async (data) => {
       try {
         const { chatId, id } = data;
+        
+        // Criar um ID único para o evento
+        const eventId = `end_${chatId}_${Date.now()}`;
+        
+        // Verificar se este evento já foi processado recentemente
+        if (processedEvents.has(eventId)) {
+          return;
+        }
+        
+        // Marcar evento como processado
+        processedEvents.add(eventId);
+        setTimeout(() => processedEvents.delete(eventId), EVENT_TIMEOUT);
 
         // Remover chat da lista de atendidos por humanos
         humanAttendedChats.delete(chatId);
@@ -200,10 +201,67 @@ async function startHydraBot(io) {
   });
 }
 
+/**
+ * Configura os event listeners principais
+ * @param {Object} io - Instância do Socket.IO para comunicação em tempo real
+ */
+function setupEventListeners(io) {
+  bot.on('connection', async (conn) => {
+    if (conn.connect) {
+      console.log('Conexão Hydra estabelecida.');
+      botConnection = conn;
+      startListeningForMessages(conn, io);
+    } else {
+      console.error('Erro na conexão Hydra.');
+    }
+  });
+
+  setupIpcListeners(io);
+  setupSocketListeners(io);
+}
+
+function setupIpcListeners(io) {
+  // Listener para redirecionamento de chat
+  ipcMain.on('redirectToChat', (event, chatId) => {
+    redirectToWhatsAppChat(chatId);
+  });
+
+  // Listener para envio de mensagem
+  ipcMain.on('sendMessage', async (event, { chatId, message }) => {
+    if (botConnection) {
+      try {
+        await sendMessage(botConnection, chatId, message);
+      } catch (error) {
+        console.error('Erro ao enviar mensagem:', error);
+      }
+    }
+  });
+}
+
+function setupSocketListeners(io) {
+  // Socket listeners são configurados na função startHydraBot
+  console.log('Socket listeners configurados');
+}
+
 // Ouvir mensagens recebidas
 async function startListeningForMessages(conn, io) {
+    // Criar um Set para controlar mensagens já processadas
+    const processedMessageIds = new Set();
+    const MESSAGE_EXPIRY = 60000; // 60 segundos
+
     conn.client.ev.on('newMessage', async (newMsg) => {
         const chatId = newMsg.result.chatId;
+        const messageId = newMsg.result.id || `${chatId}_${Date.now()}`;
+
+        // Verificar se a mensagem já foi processada
+        if (processedMessageIds.has(messageId)) {
+            console.log('Mensagem já processada:', messageId);
+            return;
+        }
+
+        // Adicionar mensagem ao controle e configurar remoção após expirar
+        processedMessageIds.add(messageId);
+        setTimeout(() => processedMessageIds.delete(messageId), MESSAGE_EXPIRY);
 
         try {
             // Verificar se o contato está na lista de ignorados
@@ -235,21 +293,44 @@ async function startListeningForMessages(conn, io) {
             if (!newMsg.result.fromMe) {
                 const messageText = newMsg.result.body.toLowerCase();
 
+                // Registrar mensagem recebida para debug
+                console.log('Mensagem recebida:', {
+                    id: messageId,
+                    chatId: chatId,
+                    text: messageText
+                });
+
                 if (messageText.startsWith("nome:")) {
                     const userInfo = parseUserInfo(messageText);
                     if (userInfo) {
-                        handleNewUser(conn, chatId, userInfo, io);
+                        await handleNewUser(conn, chatId, userInfo, io);
                     } else {
                         await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
                     }
                 } else {
-                    handleUserMessage(conn, chatId, messageText, io);
+                    await handleUserMessage(conn, chatId, messageText, io);
                 }
             }
         } catch (error) {
             console.error('Erro ao processar mensagem:', error);
         }
     });
+
+    // Modificar a função sendMessage para incluir verificação de duplicação
+    const originalSendMessage = sendMessage;
+    global.sendMessage = async (conn, chatId, message) => {
+        const messageId = `send_${chatId}_${Date.now()}`;
+        
+        if (processedMessageIds.has(messageId)) {
+            console.log('Tentativa de envio duplicado evitada:', messageId);
+            return;
+        }
+
+        processedMessageIds.add(messageId);
+        setTimeout(() => processedMessageIds.delete(messageId), MESSAGE_EXPIRY);
+
+        return await originalSendMessage(conn, chatId, message);
+    };
 
     conn.client.ev.on('chatClosed', async (chatId) => {
         // Ignora eventos de grupos
@@ -327,7 +408,7 @@ function queryDatabase(query, params = []) {
 // Processa novo usuário
 async function handleNewUser(conn, chatId, userInfo, io) {
     const activeCount = await getActiveChatsCount();
-    const status = activeCount < MAX_ACTIVE_CHATS ? 'active' : 'waiting';
+    const status = activeCount < CONFIG.MAX_ACTIVE_CHATS ? 'active' : 'waiting';
     
     try {
         await updateDatabaseAndNotify(
@@ -392,14 +473,14 @@ async function handleUserMessage(conn, chatId, messageText, io) {
         const now = Date.now();
         
         // Limpar mensagens antigas do histórico (mais de 1 minuto)
-        while (chatHistory.length > 0 && now - chatHistory[0].timestamp > DUPLICATE_MESSAGE_WINDOW) {
+        while (chatHistory.length > 0 && now - chatHistory[0].timestamp > CONFIG.DUPLICATE_MESSAGE_WINDOW) {
             chatHistory.shift();
         }
         
         // Verificar se é uma mensagem duplicada
         const isDuplicate = chatHistory.some(msg => 
             msg.text === messageText && 
-            (now - msg.timestamp) < DUPLICATE_MESSAGE_WINDOW
+            (now - msg.timestamp) < CONFIG.DUPLICATE_MESSAGE_WINDOW
         );
         
         if (isDuplicate) {
@@ -409,7 +490,7 @@ async function handleUserMessage(conn, chatId, messageText, io) {
         
         // Adicionar mensagem ao histórico
         chatHistory.push({ text: messageText, timestamp: now });
-        if (chatHistory.length > MESSAGE_HISTORY_LIMIT) {
+        if (chatHistory.length > CONFIG.MESSAGE_HISTORY_LIMIT) {
             chatHistory.shift();
         }
         messageHistory.set(chatId, chatHistory);
@@ -478,7 +559,7 @@ async function getChatState(chatId) {
     });
 }
 
-// Nova função para envio formatado de mensagens
+//Função para envio formatado de mensagens
 async function sendFormattedMessage(conn, chatId, type) {
     switch (type) {
         case 'template':
@@ -574,56 +655,43 @@ const MESSAGE_TIMEOUT = 2000; // 2 segundos de intervalo mínimo entre mensagens
 const sentMessages = new Map();
 const DEBOUNCE_TIME = 2000; // 2 segundos
 
-// Substituir a função sendMessage existente
+
 async function sendMessage(conn, chatId, message) {
-    // Criar fila para este chat se não existir
     if (!messageQueue.has(chatId)) {
         messageQueue.set(chatId, Promise.resolve());
     }
 
-    // Adicionar mensagem à fila deste chat
-    messageQueue.set(chatId, messageQueue.get(chatId).then(async () => {
-        const messageKey = `${chatId}:${message}`;
+    return messageQueue.get(chatId).then(async () => {
         const now = Date.now();
+        const lastMessage = sentMessages.get(chatId);
+
+        // Verificar se a mesma mensagem foi enviada recentemente
+        if (lastMessage && 
+            lastMessage.text === message && 
+            (now - lastMessage.timestamp) < DEBOUNCE_TIME) {
+            console.log('Mensagem muito similar ignorada:', message);
+            return;
+        }
 
         try {
-            // Verificar se a mensagem foi enviada recentemente
-            const chatHistory = messageHistory.get(chatId) || [];
-            const isDuplicate = chatHistory.some(msg => 
-                msg.text === message && 
-                (now - msg.timestamp) < DUPLICATE_MESSAGE_WINDOW
-            );
-
-            if (isDuplicate) {
-                console.log(`Evitando envio de mensagem duplicada para ${chatId}`);
-                return;
-            }
-
-            // Adicionar ao histórico antes de enviar
-            chatHistory.push({ text: message, timestamp: now });
-            if (chatHistory.length > MESSAGE_HISTORY_LIMIT) {
-                chatHistory.shift();
-            }
-            messageHistory.set(chatId, chatHistory);
-
-            // Enviar a mensagem
             await conn.client.sendMessage({
                 to: chatId,
                 body: message,
                 options: { type: 'sendText' }
             });
 
-            // Aguardar delay fixo entre mensagens
-            await new Promise(resolve => setTimeout(resolve, MESSAGE_DELAY));
+            // Registrar mensagem enviada
+            sentMessages.set(chatId, {
+                text: message,
+                timestamp: now
+            });
 
+            await new Promise(resolve => setTimeout(resolve, CONFIG.MESSAGE_DELAY));
         } catch (error) {
             console.error('Erro ao enviar mensagem:', error);
             throw error;
         }
-    }));
-
-    // Retornar a promessa da fila
-    return messageQueue.get(chatId);
+    });
 }
 
 // Envia opções de problema para o usuário
@@ -663,6 +731,7 @@ async function handleProblemSelection(conn, chatId, messageText, io) {
       await sendSubProblemOptions(conn, chatId, 'Dificuldade no registro de notas');
       break;
     case '5':
+    case '6':
       await sendMessage(conn, chatId, 'Por favor, descreva detalhadamente a dificuldade que você está enfrentando:');
       userCurrentTopic[chatId] = { 
         state: 'descricaoProblema',
