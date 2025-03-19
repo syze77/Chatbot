@@ -10,6 +10,7 @@ const express = require('express');
 const { getDatabase } = require('./database.js');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
+const { handleRecovery } = require('./recovery'); // Add this line
 
 // Atualizar caminhos de recursos
 const assetsPath = path.join(__dirname, '../assets');
@@ -245,9 +246,8 @@ function setupSocketListeners(io) {
 
 // Ouvir mensagens recebidas
 async function startListeningForMessages(conn, io) {
-    // Criar um Set para controlar mensagens já processadas
     const processedMessageIds = new Set();
-    const MESSAGE_EXPIRY = 60000; // 60 segundos
+    const MESSAGE_EXPIRY = 60000;
 
     conn.client.ev.on('newMessage', async (newMsg) => {
         const chatId = newMsg.result.chatId;
@@ -259,58 +259,48 @@ async function startListeningForMessages(conn, io) {
             return;
         }
 
-        // Adicionar mensagem ao controle e configurar remoção após expirar
+        // Adicionar mensagem ao controle
         processedMessageIds.add(messageId);
         setTimeout(() => processedMessageIds.delete(messageId), MESSAGE_EXPIRY);
 
         try {
-            // Verificar se o contato está na lista de ignorados
-            const isIgnored = await new Promise((resolve, reject) => {
-                getDatabase().get(
-                    'SELECT id FROM ignored_contacts WHERE id = ?',
-                    [chatId],
-                    (err, row) => {
-                        if (err) {
-                            console.error('Erro ao verificar contato ignorado:', err);
-                            resolve(false); // Em caso de erro, não ignorar o contato
-                        } else {
-                            resolve(!!row);
-                        }
-                    }
-                );
-            });
-
-            if (isIgnored) {
-                console.log(`Mensagem ignorada do contato ${chatId}`);
+            // Ignorar mensagens enviadas pelo bot
+            if (newMsg.result.fromMe) {
                 return;
             }
 
-            // Verifica se é uma mensagem de grupo (chatId geralmente termina com @g.us)
+            // Ignorar mensagens de grupos
             if (chatId.endsWith('@g.us')) {
-                return; // Ignora mensagens de grupos
+                return;
             }
 
-            if (!newMsg.result.fromMe) {
-                const messageText = newMsg.result.body.toLowerCase();
+            const messageText = newMsg.result.body.toLowerCase();
 
-                // Registrar mensagem recebida para debug
-                console.log('Mensagem recebida:', {
-                    id: messageId,
-                    chatId: chatId,
-                    text: messageText
-                });
+            // Verificar se é recuperação de senha
+            const recoveryResponse = await handleRecovery(newMsg.result);
+            if (recoveryResponse) {
+                await sendMessage(conn, chatId, recoveryResponse);
+                return;
+            }
 
-                if (messageText.startsWith("nome:")) {
-                    const userInfo = parseUserInfo(messageText);
-                    if (userInfo) {
-                        await handleNewUser(conn, chatId, userInfo, io);
-                    } else {
-                        await sendMessage(conn, chatId, 'Por favor, insira suas informações no formato correto.');
-                    }
+            // Continuar com o fluxo normal para outras mensagens
+            const isIgnored = await checkIgnoredContact(chatId);
+            if (isIgnored) {
+                return;
+            }
+
+            // Processar mensagem normal
+            if (messageText.startsWith("nome:")) {
+                const userInfo = parseUserInfo(messageText);
+                if (userInfo) {
+                    await handleNewUser(conn, chatId, userInfo, io);
                 } else {
-                    await handleUserMessage(conn, chatId, messageText, io);
+                    await sendFormattedMessage(conn, chatId, 'template');
                 }
+            } else {
+                await handleUserMessage(conn, chatId, messageText, io);
             }
+            
         } catch (error) {
             console.error('Erro ao processar mensagem:', error);
         }
@@ -337,6 +327,24 @@ async function startListeningForMessages(conn, io) {
         if (!chatId.endsWith('@g.us')) {
             handleChatClosed(chatId, io);
         }
+    });
+}
+
+// Adicionar nova função auxiliar
+async function checkIgnoredContact(chatId) {
+    return new Promise((resolve) => {
+        getDatabase().get(
+            'SELECT id FROM ignored_contacts WHERE id = ?',
+            [chatId],
+            (err, row) => {
+                if (err) {
+                    console.error('Erro ao verificar contato ignorado:', err);
+                    resolve(false);
+                } else {
+                    resolve(!!row);
+                }
+            }
+        );
     });
 }
 
@@ -1200,20 +1208,24 @@ async function updateWaitingUsers(io) {
     try {
         const waitingUsers = await new Promise((resolve, reject) => {
             getDatabase().all(
-                'SELECT chatId, name FROM problems WHERE status = "waiting" ORDER BY date ASC',
+                `SELECT chatId, name, date 
+                 FROM problems 
+                 WHERE status = "waiting" 
+                 ORDER BY date ASC`,
                 (err, rows) => err ? reject(err) : resolve(rows)
             );
         });
 
-        // Atualizar cada usuário em espera com sua nova posição
+        // Para cada usuário em espera, calcular e enviar sua posição atual
         for (let i = 0; i < waitingUsers.length; i++) {
-            const position = i + 1;
             const user = waitingUsers[i];
-            await sendMessage(
-                botConnection,
-                user.chatId,
-                `Atualização: ${user.name}, sua posição atual na fila é ${position}º lugar.`
-            );
+            const currentPosition = i + 1; // Posição baseada no índice + 1
+            
+            const message = `Atualização: ${user.name}, sua posição atual na fila é ${currentPosition}º lugar.`;
+            
+            if (botConnection) {
+                await sendMessage(botConnection, user.chatId, message);
+            }
         }
     } catch (error) {
         console.error('Erro ao atualizar usuários em espera:', error);

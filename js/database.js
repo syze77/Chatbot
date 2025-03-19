@@ -8,7 +8,7 @@ let db;
 // Função de inicialização do banco de dados
 function initializeDatabase() {
     return new Promise((resolve, reject) => {
-        // Ajuste para usar path.join com __dirname
+        // Conectar ao banco de dados   
         db = new sqlite3.Database(path.join(__dirname, './bot_data.db'), (err) => {
             if (err) {
                 console.error('Erro ao abrir o banco de dados:', err);

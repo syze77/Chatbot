@@ -18,7 +18,6 @@
             <h2>Gerenciar Contatos</h2>
         </div>
 
-        <!-- Novo header de ações -->
         <div class="actions-header">
             <div class="search-box">
                 <i class="fas fa-search"></i>
@@ -35,7 +34,6 @@
         </div>
 
         <div class="row g-4">
-            <!-- Lista de Contatos Ativos -->
             <div class="col-lg-6">
                 <div class="card">
                     <div class="status-header">
@@ -43,13 +41,11 @@
                     </div>
                     <div class="card-body">
                         <div class="contacts-list active-contacts">
-                            <!-- Contatos ativos serão inseridos aqui -->
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Lista de Contatos Ignorados -->
             <div class="col-lg-6">
                 <div class="card">
                     <div class="status-header">
@@ -57,7 +53,6 @@
                     </div>
                     <div class="card-body">
                         <div class="contacts-list ignored-contacts">
-                            <!-- Contatos ignorados serão inseridos aqui -->
                         </div>
                     </div>
                 </div>
@@ -74,7 +69,6 @@
                 <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
             <div class="toast-body">
-                <!-- Mensagem será inserida aqui -->
             </div>
         </div>
     </div>
@@ -84,7 +78,7 @@
     <script src="../../js/renderer.js"></script>
     <script>
         let contacts = [];
-        let ignoredContacts = new Set();  // Usando Set para armazenar múltiplos IDs
+        let ignoredContacts = new Set();
         
         document.addEventListener('DOMContentLoaded', () => {
             Sidebar.init();
@@ -102,13 +96,13 @@
                 ignoredContainer.innerHTML = '<div class="loading">Carregando contatos...</div>';
 
                 const response = await window.electronAPI.invoke('get-contacts');
-                console.log('Resposta recebida:', response); // Debug
+                console.log('Resposta recebida:', response);
 
                 contacts = response.contacts || [];
                 ignoredContacts = new Set(response.ignoredContacts || []);
 
-                console.log('Contatos carregados:', contacts); // Debug
-                console.log('Contatos ignorados:', Array.from(ignoredContacts)); // Debug
+                console.log('Contatos carregados:', contacts);
+                console.log('Contatos ignorados:', Array.from(ignoredContacts));
 
                 renderContacts();
                 
@@ -117,7 +111,6 @@
                 console.error('Erro ao carregar contatos:', error);
                 showToast('Erro ao carregar contatos. Tente novamente.', 'error');
                 
-                // Mostrar erro na interface
                 const activeContainer = document.querySelector('.active-contacts');
                 const ignoredContainer = document.querySelector('.ignored-contacts');
                 activeContainer.innerHTML = `
@@ -160,14 +153,11 @@
                 return;
             }
 
-            // Ordenar e filtrar contatos
             const sortedContacts = [...contacts]
                 .sort((a, b) => {
-                    // Primeiro por última mensagem
                     if (a.lastMessageTime && b.lastMessageTime) {
                         return b.lastMessageTime - a.lastMessageTime;
                     }
-                    // Depois por nome
                     return (a.name || '').localeCompare(b.name || '');
                 })
                 .filter(contact => {
@@ -248,7 +238,6 @@
             updateCounter();
         }
 
-        // Adicionar função para atualizar contador
         function updateCounter() {
             const total = contacts.length;
             const ignored = Array.from(document.querySelectorAll('.contact-item input:checked')).length;
@@ -274,10 +263,8 @@
             saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
 
             try {
-                // Coletar todos os checkboxes marcados
                 const selectedCheckboxes = document.querySelectorAll('.contact-item input[type="checkbox"]:checked');
                 
-                // Mapear os contatos selecionados
                 const selectedContacts = Array.from(selectedCheckboxes).map(checkbox => {
                     const contactEl = checkbox.closest('.contact-item');
                     return {
@@ -287,16 +274,13 @@
                     };
                 });
 
-                console.log('Contatos selecionados:', selectedContacts); // Debug
+                console.log('Contatos selecionados:', selectedContacts);
 
-                // Enviar todos os contatos selecionados para o backend
                 const result = await window.electronAPI.invoke('save-ignored-contacts', selectedContacts);
 
                 if (result.success) {
-                    // Atualizar o Set com os IDs dos contatos ignorados
                     ignoredContacts = new Set(selectedContacts.map(c => c.id));
 
-                    // Mover os contatos para as listas corretas
                     document.querySelectorAll('.contact-item').forEach(contactEl => {
                         const checkbox = contactEl.querySelector('input[type="checkbox"]');
                         const isIgnored = checkbox.checked;
@@ -320,7 +304,6 @@
             }
         }
 
-        // Adicionar função para atualizar contador
         function updateContactsCounter() {
             const totalContacts = document.querySelectorAll('.contact-item').length;
             const ignoredCount = document.querySelectorAll('.contact-item input:checked').length;
@@ -356,7 +339,6 @@
             document.querySelector('.content').classList.toggle('collapsed');
         }
 
-        // Adicionar listener para busca
         document.addEventListener('DOMContentLoaded', () => {
             const searchInput = document.getElementById('searchContact');
             let debounceTimeout;
@@ -372,7 +354,6 @@
     </script>
 
     <style>
-        /* Adicionar estilos para melhorar a visualização */
         .loading {
             text-align: center;
             padding: 20px;
