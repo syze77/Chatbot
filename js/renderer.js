@@ -428,17 +428,29 @@ function createItemElement(item, type, includePosition) {
 }
 
 // Função para manipular o atendimento de um problema
-function handleAttendProblem(problem) {
-    const confirmAttend = confirm(`Deseja atender o problema relatado por ${problem.name}?`);
-    if (confirmAttend) {
-        // Emite evento para o servidor indicando início do atendimento
-        socket.emit('attendProblem', {
-            chatId: problem.chatId,
-            attendantId: 'CURRENT_USER_ID' 
-        });
-        
-        // Abre o chat do WhatsApp correspondente
-        window.electron.openWhatsAppChat(problem.chatId);
+async function handleAttendProblem(problem) {
+    try {
+        const confirmAttend = confirm(`Deseja atender o problema relatado por ${problem.name}?`);
+        if (confirmAttend) {
+            console.log('Iniciando atendimento para:', problem);
+
+            // Emite evento para o servidor
+            socket.emit('attendProblem', {
+                chatId: problem.chatId,
+                attendantId: 'CURRENT_USER_ID'
+            });
+
+            // Aguarda um pequeno delay para garantir que o servidor processou
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Redireciona para o WhatsApp
+            console.log('Redirecionando para WhatsApp:', problem.chatId);
+            const formattedChatId = problem.chatId.replace('@c.us', '');
+            window.electron.openWhatsAppChat(formattedChatId);
+        }
+    } catch (error) {
+        console.error('Erro ao atender problema:', error);
+        alert('Erro ao iniciar atendimento. Por favor, tente novamente.');
     }
 }
 

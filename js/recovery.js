@@ -5,6 +5,7 @@ let userState = {};
 function handleRecovery(message) {
     const userId = message.from;
     const messageText = message.body.toLowerCase().trim();
+    const userPhoneNumber = userId.split('@')[0]; // Extrai o número do ID do WhatsApp
 
     // Se for o comando de recuperação
     if (messageText === '/recuperar') {
@@ -34,7 +35,7 @@ function handleRecovery(message) {
 
             return new Promise((resolve, reject) => {
                 getDatabase().get(
-                    'SELECT senhas FROM confidencial WHERE cpf = ? AND email = ?',
+                    'SELECT senha, number FROM confidencial WHERE cpf = ? AND email = ?',
                     [cpf, email],
                     (err, row) => {
                         if (err) {
@@ -43,10 +44,20 @@ function handleRecovery(message) {
                             return;
                         }
 
-                        if (row && row.senhas) {
-                            const senha = row.senhas;
-                            delete userState[userId];
-                            resolve(`Sua senha é: ${senha}`);
+                        if (row) {
+                            // Extrai apenas o DDD e número do banco de dados
+                            const storedNumber = row.number.replace(/[\s\D]/g, '').slice(-10);
+                            // Extrai apenas o DDD e número do usuário
+                            const cleanUserNumber = userPhoneNumber.replace(/\D/g, '').slice(-10);
+
+                            // Compara apenas DDD + número
+                            if (storedNumber === cleanUserNumber) {
+                                delete userState[userId];
+                                resolve(`Sua senha é: ${row.senha}`);
+                            } else {
+                                delete userState[userId];
+                                resolve(`Por favor, entre em contato usando o número de telefone cadastrado`);
+                            }
                         } else {
                             delete userState[userId];
                             resolve('CPF e/ou email não encontrados. Por favor, tente novamente com /recuperar');
