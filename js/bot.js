@@ -476,39 +476,49 @@ async function getWaitingPosition(chatId) {
 // Processa mensagem do usuário
 async function handleUserMessage(conn, chatId, messageText, io) {
     try {
-        // Verificar se é uma mensagem duplicada recente
-        const chatHistory = messageHistory.get(chatId) || [];
-        const now = Date.now();
+        const currentTopic = userCurrentTopic[chatId];
         
-        // Limpar mensagens antigas do histórico (mais de 1 minuto)
-        while (chatHistory.length > 0 && now - chatHistory[0].timestamp > CONFIG.DUPLICATE_MESSAGE_WINDOW) {
-            chatHistory.shift();
+        // Lista de comandos que devem ignorar verificação de duplicidade
+        const allowedDuplicates = [
+            '1', '2', '3', '4', '5', '6',
+            'voltar',
+            'sim', 'não',
+            'menu'
+        ];
+        
+        // Verificar duplicação apenas se não for um comando permitido
+        if (!allowedDuplicates.includes(messageText.toLowerCase())) {
+            const chatHistory = messageHistory.get(chatId) || [];
+            const now = Date.now();
+            
+            // Limpar mensagens antigas do histórico
+            while (chatHistory.length > 0 && now - chatHistory[0].timestamp > CONFIG.DUPLICATE_MESSAGE_WINDOW) {
+                chatHistory.shift();
+            }
+            
+            // Verificar se é uma mensagem duplicada
+            const isDuplicate = chatHistory.some(msg => 
+                msg.text === messageText && 
+                (now - msg.timestamp) < CONFIG.DUPLICATE_MESSAGE_WINDOW
+            );
+            
+            if (isDuplicate) {
+                console.log(`Mensagem duplicada ignorada para ${chatId}: ${messageText}`);
+                return;
+            }
+            
+            // Adicionar mensagem ao histórico
+            chatHistory.push({ text: messageText, timestamp: now });
+            if (chatHistory.length > CONFIG.MESSAGE_HISTORY_LIMIT) {
+                chatHistory.shift();
+            }
+            messageHistory.set(chatId, chatHistory);
         }
-        
-        // Verificar se é uma mensagem duplicada
-        const isDuplicate = chatHistory.some(msg => 
-            msg.text === messageText && 
-            (now - msg.timestamp) < CONFIG.DUPLICATE_MESSAGE_WINDOW
-        );
-        
-        if (isDuplicate) {
-            console.log(`Mensagem duplicada ignorada para ${chatId}: ${messageText}`);
-            return;
-        }
-        
-        // Adicionar mensagem ao histórico
-        chatHistory.push({ text: messageText, timestamp: now });
-        if (chatHistory.length > CONFIG.MESSAGE_HISTORY_LIMIT) {
-            chatHistory.shift();
-        }
-        messageHistory.set(chatId, chatHistory);
 
         // Se o chat está sendo atendido por humano, ignorar
         if (humanAttendedChats.has(chatId)) {
             return;
         }
-
-        const currentTopic = userCurrentTopic[chatId];
         
         // Verificar estado do chat no banco de dados
         const chatState = await getChatState(chatId);
@@ -1199,9 +1209,22 @@ function getWaitingList() {
 }
 
 function redirectToWhatsAppChat(chatId) {
-    const sanitizedChatId = chatId.replace('@c.us', '');
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${sanitizedChatId}`;
-    require('electron').shell.openExternal(whatsappUrl);
+    try {
+        // Remove '@c.us' se presente e remove quaisquer caracteres não numéricos
+        const cleanNumber = chatId.replace('@c.us', '').replace(/\D/g, '');
+        
+        // Verifica se o número está vazio após a limpeza
+        if (!cleanNumber) {
+            console.error('ID de chat inválido:', chatId);
+            return;
+        }
+
+        const whatsappUrl = `https://wa.me/${cleanNumber}`;
+        console.log('Redirecionando para:', whatsappUrl);
+        require('electron').shell.openExternal(whatsappUrl);
+    } catch (error) {
+        console.error('Erro ao redirecionar para WhatsApp:', error);
+    }
 }
 
 async function updateWaitingUsers(io) {
