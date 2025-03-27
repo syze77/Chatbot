@@ -44,7 +44,7 @@ class Sidebar {
                 <nav class="sidebar-nav">
                     <ul class="nav-links">
                         <li>
-                            <a href="../initial/index.html" id="home-link" class="nav-item">
+                            <a href="../../components/initial/index.html" id="home-link" class="nav-item">
                                 <div class="nav-icon">
                                     <i class="fas fa-home"></i>
                                 </div>
@@ -52,7 +52,7 @@ class Sidebar {
                             </a>
                         </li>
                         <li>
-                            <a href="../dashboard/index.html" id="dashboard-link" class="nav-item">
+                            <a href="../../components/dashboard/index.html" id="dashboard-link" class="nav-item">
                                 <div class="nav-icon">
                                     <i class="fas fa-chart-line"></i>
                                 </div>
@@ -60,7 +60,7 @@ class Sidebar {
                             </a>
                         </li>
                         <li>
-                            <a href="../completed/index.html" id="completed-link" class="nav-item">
+                            <a href="../../components/completed/index.html" id="completed-link" class="nav-item">
                                 <div class="nav-icon">
                                     <i class="fas fa-check-circle"></i>
                                 </div>
@@ -68,7 +68,7 @@ class Sidebar {
                             </a>
                         </li>
                         <li>
-                            <a href="../ignore/index.html" id="ignored-contacts-link" class="nav-item">
+                            <a href="../../components/ignore/index.html" id="ignored-contacts-link" class="nav-item">
                                 <div class="nav-icon">
                                     <i class="fas fa-user-slash"></i>
                                 </div>

@@ -1,9 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Exponha a API do Electron para o mundo principal
-contextBridge.exposeInMainWorld('electronAPI', {
+contextBridge.exposeInMainWorld('electron', {
     // Método para abrir um chat do WhatsApp
-    openWhatsAppChat: (chatId) => ipcRenderer.invoke('openWhatsAppChat', chatId),
+    openWhatsAppChat: (chatId) => {
+        console.log('Preload: Abrindo chat para:', chatId);
+        return ipcRenderer.send('redirectToChat', chatId);
+    },
     
     navigate: (path) => ipcRenderer.send('navigate', path),
     

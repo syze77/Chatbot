@@ -7,10 +7,10 @@ const hydraBot = require('hydra-bot');
 const path = require('path');
 const { ipcMain } = require('electron');
 const express = require('express');
-const { getDatabase } = require('./database.js');
+const { getDatabase } = require('../utils/database.js');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
-const { handleRecovery } = require('./recovery'); // Add this line
+const { handleRecovery } = require('./recovery.js'); 
 
 // Atualizar caminhos de recursos
 const assetsPath = path.join(__dirname, '../assets');
@@ -330,7 +330,6 @@ async function startListeningForMessages(conn, io) {
     });
 }
 
-// Adicionar nova função auxiliar
 async function checkIgnoredContact(chatId) {
     return new Promise((resolve) => {
         getDatabase().get(
@@ -902,33 +901,33 @@ function getSubProblemText(problem, subProblem) {
 }
 
 // Obtém URL do vídeo para subproblema
-function getVideoUrlForSubProblem(subProblem, chatId) { // Adicionar parâmetro chatId
+function getVideoUrlForSubProblem(subProblem, chatId) {
   const mainProblem = userCurrentTopic[chatId].problem;
   
   const videoUrls = {
-    'Falha no acesso ao sistema': {
+    'Acesso ao sistema': {
       '1': 'https://www.youtube.com/watch?v=acesso-conta',
       '2': 'https://www.youtube.com/watch?v=sistema-nao-carrega',
       '3': 'https://www.youtube.com/watch?v=outros-problemas-acesso'
     },
-    'Erro ao cadastrar aluno/funcionário': {
+    'Cadastro de aluno/outros': {
       '1': 'https://www.youtube.com/watch?v=cadastro-aluno',
       '2': 'https://www.youtube.com/watch?v=cadastro-funcionario',
       '3': 'https://www.youtube.com/watch?v=outros-problemas-cadastro'
     },
-    'Problemas com o diário de classe': {
+    'Dificuldade com o diário de classe': {
       '1': 'https://www.youtube.com/watch?v=insercao-notas-diario',
       '2': 'https://www.youtube.com/watch?v=visualizacao-registros',
       '3': 'https://www.youtube.com/watch?v=outros-problemas-diario'
     },
-    'Falha no registro de notas': {
+    'Dificuldade no registro de notas': {
       '1': 'https://www.youtube.com/watch?v=registro-notas',
       '2': 'https://www.youtube.com/watch?v=salvar-notas',
       '3': 'https://www.youtube.com/watch?v=outros-problemas-notas'
     }
   };
 
-  return videoUrls[mainProblem]?.[subProblem] || 'https://www.youtube.com/watch?v=ajuda-geral';
+return videoUrls[mainProblem]?.[subProblem] || 'Opção Invalida, por favor selecione uma opção válida.';
 }
 
 // Processa feedback do vídeo

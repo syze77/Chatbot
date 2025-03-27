@@ -2,8 +2,8 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
-const { startHydraBot, redirectToWhatsAppChat, server, getRecentContacts, getBotConnection } = require('./bot.js');
-const { initializeDatabase, getDatabase } = require('./database.js');
+const { startHydraBot, redirectToWhatsAppChat, server, getRecentContacts, getBotConnection } = require('../core/bot.js');
+const { initializeDatabase, getDatabase } = require('../utils/database.js');
 
 // Configuração do servidor HTTP e Socket.IO
 const httpServer = http.createServer(server);
@@ -77,7 +77,7 @@ function createWindow() {
         });
     });
 
-    win.loadFile('components/initial/index.html');
+    win.loadFile(path.join(__dirname, '../../components/initial/index.html'));
 
     if (process.env.NODE_ENV === 'development') {
         win.webContents.openDevTools();

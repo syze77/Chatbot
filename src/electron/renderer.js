@@ -189,8 +189,8 @@ function createNotification(title, data) {
 
         const options = {
             body: notificationBody,
-            icon: './assets/notification-icon.png',
-            badge: './assets/badge-icon.png',
+            icon: '../../../assets/notification-icon.png',
+            badge: '../../../assets/badge-icon.png',
             tag: `problem-${isStringData ? Date.now() : data.chatId}`,
             renotify: true,
             requireInteraction: true,
@@ -445,8 +445,13 @@ async function handleAttendProblem(problem) {
 
             // Redireciona para o WhatsApp
             console.log('Redirecionando para WhatsApp:', problem.chatId);
-            const formattedChatId = problem.chatId.replace('@c.us', '');
-            window.electron.openWhatsAppChat(formattedChatId);
+            
+            // Garante que o chatId está no formato correto
+            let whatsappId = problem.chatId;
+            if (!whatsappId.includes('@')) {
+                whatsappId = `${whatsappId}@c.us`;
+            }
+            window.electron.openWhatsAppChat(whatsappId);
         }
     } catch (error) {
         console.error('Erro ao atender problema:', error);
