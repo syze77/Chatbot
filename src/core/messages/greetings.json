@@ -1,10 +1,9 @@
 {
     "welcome": [
-        "Oi! Seja bem-vindo ao nosso atendimento.\n👋Por favor, envie suas informações no seguinte formato.",
-        "Olá! Que bom ter você aqui! Estamos prontos para ajudar.\n👋Por favor, envie suas informações no seguinte formato.",
-        "Seja bem-vindo(a)! É um prazer atender você.\n👋Por favor, envie suas informações no seguinte formato.",
-        "Oi! Obrigado por entrar em contato conosco.\n👋Por favor, envie suas informações no seguinte formato.",
-        "Olá! Estamos felizes em receber você.\n👋Por favor, envie suas informações no seguinte formato."
+        "Olá! Bem-vindo ao atendimento. Para iniciarmos, por favor, envie suas informações no formato abaixo:",
+        "Oi! Para que eu possa te ajudar melhor, preciso de algumas informações. Por favor, envie no formato:",
+        "Seja bem-vindo! Para começarmos seu atendimento, envie seus dados assim:",
+        "Olá! Para um atendimento personalizado, preciso que você envie suas informações dessa forma:"
     ],
     "template": "Nome:\nCidade:\nCargo:\nEscola:",
     "attendantAvailable": "Olá %s! Um atendente está disponível agora para ajudá-lo.",

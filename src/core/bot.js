@@ -34,6 +34,12 @@ const CONFIG = {
     DEFAULT_HEADLESS: false
 };
 
+// Add this near the other constants at the top
+const RESPONSE_DELAY = {
+    MIN: 30000, // 30 seconds
+    MAX: 120000 // 120 seconds
+};
+
 /**
  * Estado global da aplicação
  * bot: Instância principal do bot
@@ -193,7 +199,11 @@ async function startHydraBot(io) {
         }
 
         // Atualizar usuários em espera e status
-        await updateWaitingUsers(io);
+        try {
+            await updateWaitingUsers(io);
+        } catch (error) {
+            console.error('Error updating waiting users:', error);
+        }
         await sendStatusUpdateToMainProcess(io);
 
       } catch (error) {
@@ -575,15 +585,34 @@ async function getChatState(chatId) {
     });
 }
 
-//Função para envio formatado de mensagens
+// Add this helper function
+function getRandomDelay() {
+    return Math.floor(Math.random() * (RESPONSE_DELAY.MAX - RESPONSE_DELAY.MIN + 1) + RESPONSE_DELAY.MIN);
+}
+
+function getRandomWelcomeMessage() {
+    // Change from greetings.welcomeMessages to greetings.welcome
+    const messages = greetings.welcome;
+    if (!Array.isArray(messages) || messages.length === 0) {
+        return 'Olá! Por favor, envie suas informações no formato:';
+    }
+    const randomIndex = Math.floor(Math.random() * messages.length);
+    return messages[randomIndex];
+}
+
+// Modify the sendFormattedMessage function
 async function sendFormattedMessage(conn, chatId, type) {
+    // Add delay before any message
+    await new Promise(resolve => setTimeout(resolve, getRandomDelay()));
+    
     switch (type) {
         case 'template':
-            await sendMessage(conn, chatId, greetings.welcome);
+            await sendMessage(conn, chatId, getRandomWelcomeMessage());
+            await new Promise(resolve => setTimeout(resolve, CONFIG.MESSAGE_DELAY));
             await sendMessage(conn, chatId, greetings.template);
             break;
         default:
-            await sendMessage(conn, chatId, defaultMessage);
+            await sendMessage(conn, chatId, getRandomWelcomeMessage());
     }
 }
 
@@ -595,13 +624,15 @@ async function handleChatClosed(chatId, io) {
             `UPDATE problems 
              SET status = 'completed', 
              date_completed = datetime('now') 
-             WHERE chatId = ? AND status = 'active'`,
+             WHERE chatId = ?`,
             [chatId],
             io
         );
 
         // Obter próximo usuário na lista de espera
         const nextUser = await getNextInWaitingList();
+        
+        // Verificar se existe próximo usuário
         if (nextUser) {
             // Atualizar status do próximo usuário
             await updateDatabaseAndNotify(
@@ -1514,64 +1545,75 @@ server.get('/getSchools', async (req, res) => {
 async function getRecentContacts(conn) {
     try {
         if (!conn || !conn.client) {
-            throw new Error('Conexão não inicializada');
+            console.error('Conexão ou cliente não disponível');
+            return [];
         }
 
         console.log('Iniciando busca de contatos...');
 
         try {
-            // Tentar diferentes métodos para obter contatos
-            let allContacts;
-            
-            // Método 1: Tentar getContacts direto
-            try {
-                allContacts = await conn.client.getAllContacts();
-            } catch (err) {
-                console.log('Método 1 falhou, tentando método 2...');
-                // Método 2: Tentar via store
-                allContacts = conn.client.store?.contacts;
-            }
+            const chats = await conn.client.getAllChats();
+            console.log('Chats obtidos:', chats?.length || 0);
 
-            if (!allContacts) {
-                console.log('Método 2 falhou, tentando método 3...');
-                // Método 3: Tentar via chats
-                const chats = await conn.client.getChats();
-                allContacts = chats.filter(chat => !chat.isGroup);
-            }
-
-            if (!allContacts || Object.keys(allContacts).length === 0) {
-                console.warn('Nenhum contato encontrado após tentar todos os métodos');
+            if (!chats || !Array.isArray(chats)) {
+                console.error('Chats inválidos ou vazios');
                 return [];
             }
 
-            console.log('Contatos encontrados:', Object.keys(allContacts).length);
-
-            // Processar contatos
-            const contacts = Array.isArray(allContacts) ? allContacts : Object.values(allContacts);
-            
-            return contacts
-                .filter(contact => {
-                    return contact && 
-                           contact.id && 
-                           !contact.isGroup && 
-                           contact.id.server !== 'g.us';
+            // Filtrar e mapear os contatos
+            const contacts = chats
+                .filter(chat => {
+                    // Verificar se é um chat individual e não um grupo
+                    const isGroup = typeof chat.id === 'string' ? 
+                        chat.id.includes('g.us') : 
+                        (chat.id?.remote?.includes('g.us') || chat.id?.server === 'g.us');
+                    
+                    return chat && chat.id && !isGroup;
                 })
-                .map(contact => ({
-                    id: contact.id._serialized || contact.id,
-                    name: contact.name || contact.pushname || 'Sem nome',
-                    number: contact.id.user || contact.id.split('@')[0],
-                    lastMessageTime: contact.lastMessageTime || null,
-                    imageUrl: contact.profilePicUrl || null,
-                    description: contact.status || null
-                }));
+                .map(chat => {
+                    try {
+                        console.log('Processando chat:', chat.id);
+                        
+                        // Extrair ID do chat de forma segura
+                        let chatId, number;
+                        if (typeof chat.id === 'string') {
+                            chatId = chat.id;
+                            number = chat.id.split('@')[0];
+                        } else if (chat.id?.remote) {
+                            chatId = chat.id.remote;
+                            number = chat.id.remote.split('@')[0];
+                        } else if (chat.id?._serialized) {
+                            chatId = chat.id._serialized;
+                            number = chat.id.user;
+                        } else {
+                            chatId = `${chat.id.user}@c.us`;
+                            number = chat.id.user;
+                        }
 
-        } catch (error) {
-            console.error('Erro ao processar contatos:', error);
+                        return {
+                            id: chatId,
+                            name: chat.name || chat.contact?.pushname || number,
+                            number: number,
+                            lastMessageTime: chat.lastMessageTime || chat.t || Date.now(),
+                            unreadCount: chat.unreadCount || 0
+                        };
+                    } catch (err) {
+                        console.error('Erro ao processar chat específico:', err);
+                        return null;
+                    }
+                })
+                .filter(contact => contact !== null)
+                .sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+
+            console.log('Total de contatos processados:', contacts.length);
+            return contacts;
+
+        } catch (err) {
+            console.error('Erro ao processar chats:', err);
             return [];
         }
     } catch (error) {
-        console.error('Erro detalhado ao obter contatos:', error);
-        console.error('Stack trace:', error.stack);
+        console.error('Erro geral em getRecentContacts:', error);
         return [];
     }
 }

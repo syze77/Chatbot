@@ -228,16 +228,24 @@ function setupIpcHandlers() {
 
     ipcMain.handle('get-contacts', async () => {
         try {
+            console.log('Iniciando obtenção de contatos...');
+            
             const botConn = getBotConnection();
             if (!botConn) {
-                throw new Error('Bot não está conectado');
+                console.error('Conexão do bot não disponível');
+                return { contacts: [], ignoredContacts: [] };
             }
 
+            console.log('Obtendo contatos recentes...');
             const contacts = await getRecentContacts(botConn);
+            console.log('Contatos obtidos:', contacts.length);
+
+            console.log('Obtendo contatos ignorados...');
             const ignoredContacts = await executeQuery(
                 'SELECT id FROM ignored_contacts',
                 []
             );
+            console.log('Contatos ignorados:', ignoredContacts.length);
 
             return {
                 contacts,

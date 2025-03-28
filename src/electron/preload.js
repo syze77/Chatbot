@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Exponha a API do Electron para o mundo principal
-contextBridge.exposeInMainWorld('electron', {
+contextBridge.exposeInMainWorld('electronAPI', {
     // Método para abrir um chat do WhatsApp
     openWhatsAppChat: (chatId) => {
         console.log('Preload: Abrindo chat para:', chatId);
@@ -31,5 +31,9 @@ contextBridge.exposeInMainWorld('electron', {
                 throw error;
             }
         }
-    }
+    },
+    
+    // Adicionar métodos para gerenciar contatos
+    getContacts: () => ipcRenderer.invoke('get-contacts'),
+    saveIgnoredContacts: (contacts) => ipcRenderer.invoke('save-ignored-contacts', contacts),
 });
