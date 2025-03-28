@@ -1,0 +1,19 @@
+{
+    "serverStarted": "Servidor Hydra iniciado!",
+    "connectionEstablished": "Conexão Hydra estabelecida.",
+    "socketConfigured": "Socket listeners configurados",
+    "processedMessage": "Mensagem já processada: %s",
+    "duplicateMessage": "Mensagem duplicada ignorada para %s: %s",
+    "duplicateSend": "Tentativa de envio duplicado evitada: %s",
+    "similarMessage": "Mensagem muito similar ignorada: %s",
+    "activeChat": "Chat %s já possui atendimento ativo",
+    "clientInserted": "Cliente inserido com ID %s",
+    "problemUpdated": "Descrição do problema atualizada para id %s",
+    "problemCompleted": "Problema com id %s marcado como concluído.",
+    "searchingContacts": "Iniciando busca de contatos...",
+    "methodFailed": "Método %d falhou, tentando método %d...",
+    "noContacts": "Nenhum contato encontrado após tentar todos os métodos",
+    "contactsFound": "Contatos encontrados: %d",
+    "redirecting": "Redirecionando para: %s",
+    "invalidChat": "ID de chat inválido: %s"
+}

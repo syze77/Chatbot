@@ -1,0 +1,14 @@
+{
+    "welcome": [
+        "Oi! Seja bem-vindo ao nosso atendimento.\n👋Por favor, envie suas informações no seguinte formato.",
+        "Olá! Que bom ter você aqui! Estamos prontos para ajudar.\n👋Por favor, envie suas informações no seguinte formato.",
+        "Seja bem-vindo(a)! É um prazer atender você.\n👋Por favor, envie suas informações no seguinte formato.",
+        "Oi! Obrigado por entrar em contato conosco.\n👋Por favor, envie suas informações no seguinte formato.",
+        "Olá! Estamos felizes em receber você.\n👋Por favor, envie suas informações no seguinte formato."
+    ],
+    "template": "Nome:\nCidade:\nCargo:\nEscola:",
+    "attendantAvailable": "Olá %s! Um atendente está disponível agora para ajudá-lo.",
+    "queueUpdate": "Atualização: %s, sua posição atual na fila é %dº lugar.",
+    "attendantAssigned": "Um atendente está analisando seu problema e entrará em contato em breve.",
+    "nextInLine": "Olá %s! Sua vez chegou. Estamos iniciando seu atendimento."
+}

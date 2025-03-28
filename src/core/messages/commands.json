@@ -1,0 +1,6 @@
+{
+    "allowedCommands": ["1", "2", "3", "4", "5", "6", "voltar", "sim", "não", "menu"],
+    "backCommand": "voltar",
+    "backMessage": "Digite 'voltar' para retornar ao menu anterior.",
+    "nextInQueueMessage": "Obrigado por aguardar, %s. Estamos iniciando seu atendimento."
+}

@@ -12,6 +12,14 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const { handleRecovery } = require('./recovery.js'); 
 
+// Adicionar imports no início do arquivo
+const greetings = require('./messages/greetings.json');
+const dialogs = require('./messages/dialogs.json');
+const errors = require('./messages/errors.json');
+const finished = require('./messages/finished.json');
+const commands = require('./messages/commands.json');
+const logs = require('./messages/logs.json');
+
 // Atualizar caminhos de recursos
 const assetsPath = path.join(__dirname, '../assets');
 
@@ -51,14 +59,7 @@ const EVENT_TIMEOUT = 2000; // 2 seconds timeout for duplicate events
  * Template de boas-vindas e coleta de informações
  * Solicita dados básicos do usuário para início do atendimento
  */
-const defaultMessage = `Olá! Para iniciarmos seu atendimento, envie suas informações no formato abaixo:
-
-Nome:
-Cidade:
-Cargo: (Aluno, Supervisor, Secretário, Professor, Administrador, Responsável)
-Escola: (Informe o nome da escola, se você for Aluno, Responsável, Professor ou Supervisor)
-
-⚠️ Atenção: Copie o template abaixo e preencha todas as informações corretamente para agilizar o seu atendimento.`;
+const defaultMessage = greetings.welcome;
 
 // Inicializar Express
 const server = express();
@@ -79,10 +80,10 @@ async function startHydraBot(io) {
       }
     });
 
-    console.log('Servidor Hydra iniciado!');
+    console.log(logs.serverStarted);
     setupEventListeners(io);
   } catch (error) {
-    console.error('Erro ao iniciar o Hydra:', error);
+    console.error(errors.connectionError);
   }
 
   io.on('connection', (socket) => {
@@ -122,11 +123,11 @@ async function startHydraBot(io) {
           await sendMessage(
             botConnection,
             chatId,
-            'Um atendente está analisando seu problema e entrará em contato em breve.'
+            greetings.attendantAssigned
           );
         }
       } catch (error) {
-        console.error('Erro ao atender problema:', error);
+        console.error(errors.processError.replace('%s', error));
       }
     });
 
@@ -186,7 +187,7 @@ async function startHydraBot(io) {
           await sendMessage(
             botConnection,
             nextInLine.chatId,
-            `Olá ${nextInLine.name}! Sua vez chegou. Estamos iniciando seu atendimento.`
+            greetings.nextInLine.replace('%s', nextInLine.name)
           );
           await sendProblemOptions(botConnection, nextInLine.chatId);
         }
@@ -196,7 +197,7 @@ async function startHydraBot(io) {
         await sendStatusUpdateToMainProcess(io);
 
       } catch (error) {
-        console.error('Erro ao finalizar atendimento:', error);
+        console.error(errors.processError.replace('%s', error));
       }
     });
   });
@@ -209,11 +210,11 @@ async function startHydraBot(io) {
 function setupEventListeners(io) {
   bot.on('connection', async (conn) => {
     if (conn.connect) {
-      console.log('Conexão Hydra estabelecida.');
+      console.log(logs.connectionEstablished);
       botConnection = conn;
       startListeningForMessages(conn, io);
     } else {
-      console.error('Erro na conexão Hydra.');
+      console.error(errors.connectionError);
     }
   });
 
@@ -233,7 +234,7 @@ function setupIpcListeners(io) {
       try {
         await sendMessage(botConnection, chatId, message);
       } catch (error) {
-        console.error('Erro ao enviar mensagem:', error);
+        console.error(errors.sendError.replace('%s', error));
       }
     }
   });
@@ -241,7 +242,7 @@ function setupIpcListeners(io) {
 
 function setupSocketListeners(io) {
   // Socket listeners são configurados na função startHydraBot
-  console.log('Socket listeners configurados');
+  console.log(logs.socketConfigured);
 }
 
 // Ouvir mensagens recebidas
@@ -255,7 +256,7 @@ async function startListeningForMessages(conn, io) {
 
         // Verificar se a mensagem já foi processada
         if (processedMessageIds.has(messageId)) {
-            console.log('Mensagem já processada:', messageId);
+            console.log(logs.processedMessage.replace('%s', messageId));
             return;
         }
 
@@ -302,7 +303,7 @@ async function startListeningForMessages(conn, io) {
             }
             
         } catch (error) {
-            console.error('Erro ao processar mensagem:', error);
+            console.error(errors.processError.replace('%s', error.message || 'Unknown error'));
         }
     });
 
@@ -429,7 +430,7 @@ async function handleNewUser(conn, chatId, userInfo, io) {
             await sendMessage(
                 conn, 
                 chatId, 
-                `Olá ${userInfo.name}! Um atendente está disponível para ajudá-lo.`
+                greetings.attendantAvailable.replace('%s', userInfo.name)
             );
             await sendProblemOptions(conn, chatId);
             userCurrentTopic[chatId] = 'problema';
@@ -438,14 +439,12 @@ async function handleNewUser(conn, chatId, userInfo, io) {
             await sendMessage(
                 conn,
                 chatId,
-                `Olá ${userInfo.name}!\n\nTodos os nossos atendentes estão ocupados no momento.\n` +
-                `Você está na ${position}ª posição da fila.\n` +
-                `Aguarde, você será notificado assim que um atendente estiver disponível.`
+                greetings.queueUpdate.replace('%s', userInfo.name).replace('%d', position)
             );
         }
     } catch (error) {
-        console.error('Erro ao processar novo usuário:', error);
-        await sendMessage(conn, chatId, 'Desculpe, ocorreu um erro. Por favor, tente novamente mais tarde.');
+        console.error(errors.processError.replace('%s', error));
+        await sendMessage(conn, chatId, errors.tryAgainLater);
     }
 }
 
@@ -558,11 +557,11 @@ async function handleUserMessage(conn, chatId, messageText, io) {
             await sendMessage(conn, chatId, defaultMessage);
         }
     } catch (error) {
-        console.error('Erro no processamento de mensagem:', error);
+        console.error(errors.processError.replace('%s', error));
     }
 }
 
-// Nova função para obter estado do chat
+//Função para obter estado do chat
 async function getChatState(chatId) {
     return new Promise((resolve, reject) => {
         getDatabase().get(
@@ -580,10 +579,11 @@ async function getChatState(chatId) {
 async function sendFormattedMessage(conn, chatId, type) {
     switch (type) {
         case 'template':
-            await sendMessage(conn, chatId, defaultMessage);
-            await sendMessage(conn, chatId, 'Nome:\nCidade:\nCargo:\nEscola:');
+            await sendMessage(conn, chatId, greetings.welcome);
+            await sendMessage(conn, chatId, greetings.template);
             break;
-        // Adicionar outros tipos conforme necessário
+        default:
+            await sendMessage(conn, chatId, defaultMessage);
     }
 }
 
@@ -616,7 +616,7 @@ async function handleChatClosed(chatId, io) {
             await sendMessage(
                 botConnection,
                 nextUser.chatId,
-                `Olá ${nextUser.name}! Um atendente está disponível agora para ajudá-lo.`
+                greetings.nextInLine.replace('%s', nextUser.name)
             );
             await sendProblemOptions(botConnection, nextUser.chatId);
         }
@@ -628,7 +628,7 @@ async function handleChatClosed(chatId, io) {
         await sendStatusUpdateToMainProcess(io);
 
     } catch (error) {
-        console.error('Erro ao finalizar atendimento:', error);
+        console.error(errors.processError.replace('%s', error));
     }
 }
 
@@ -682,22 +682,24 @@ async function sendMessage(conn, chatId, message) {
         const now = Date.now();
         const lastMessage = sentMessages.get(chatId);
 
-        // Verificar se a mesma mensagem foi enviada recentemente
         if (lastMessage && 
             lastMessage.text === message && 
             (now - lastMessage.timestamp) < DEBOUNCE_TIME) {
-            console.log('Mensagem muito similar ignorada:', message);
+            console.log(logs.similarMessage.replace('%s', message));
             return;
         }
 
         try {
+            if (!conn || !conn.client || !message) {
+                throw new Error('Invalid connection or message');
+            }
+
             await conn.client.sendMessage({
                 to: chatId,
                 body: message,
                 options: { type: 'sendText' }
             });
 
-            // Registrar mensagem enviada
             sentMessages.set(chatId, {
                 text: message,
                 timestamp: now
@@ -705,7 +707,7 @@ async function sendMessage(conn, chatId, message) {
 
             await new Promise(resolve => setTimeout(resolve, CONFIG.MESSAGE_DELAY));
         } catch (error) {
-            console.error('Erro ao enviar mensagem:', error);
+            console.error(errors.sendError.replace('%s', error.message || 'Unknown error'));
             throw error;
         }
     });
@@ -713,16 +715,7 @@ async function sendMessage(conn, chatId, message) {
 
 // Envia opções de problema para o usuário
 async function sendProblemOptions(conn, chatId) {
-  const problemOptions = `Por favor, selecione o tipo de dificuldade que você está enfrentando:
-
-1️⃣ Acesso ao sistema
-2️⃣ Cadastro de aluno/outros
-3️⃣ Dificuldade com o diário de classe
-4️⃣ Dificuldade no registro de notas
-5️⃣ Dificuldades com RFACE
-6️⃣ Outro problema`;
-
-  await sendMessage(conn, chatId, problemOptions);
+    await sendMessage(conn, chatId, dialogs.problemOptions);
 }
 
 /**
@@ -734,33 +727,37 @@ async function sendProblemOptions(conn, chatId) {
  * @param {Object} io - Instância do Socket.IO
  */
 async function handleProblemSelection(conn, chatId, messageText, io) {
-  switch (messageText) {
-    case '1':
-      await sendSubProblemOptions(conn, chatId, 'Acesso ao sistema');
-      break;
-    case '2':
-      await sendSubProblemOptions(conn, chatId, 'Cadastro de aluno/outros');
-      break;
-    case '3':
-      await sendSubProblemOptions(conn, chatId, 'Dificuldade com o diário de classe');
-      break;
-    case '4':
-      await sendSubProblemOptions(conn, chatId, 'Dificuldade no registro de notas');
-      break;
-    case '5':
-    case '6':
-      await sendMessage(conn, chatId, 'Por favor, descreva detalhadamente a dificuldade que você está enfrentando:');
-      userCurrentTopic[chatId] = { 
-        state: 'descricaoProblema',
-        type: 'custom'
-      };
-      break;
-    case 'voltar':
-      await sendProblemOptions(conn, chatId);
-      break;
-    default:
-      await sendMessage(conn, chatId, 'Opção inválida. Por favor, selecione uma opção válida.');
-  }
+    switch (messageText) {
+        case '1':
+            await sendMessage(conn, chatId, dialogs.subProblems.accessSystem.title);
+            userCurrentTopic[chatId] = { problem: 'Acesso ao sistema', stage: 'subproblema' };
+            break;
+        case '2':
+            await sendMessage(conn, chatId, dialogs.subProblems.registration.title);
+            userCurrentTopic[chatId] = { problem: 'Cadastro de aluno/outros', stage: 'subproblema' };
+            break;
+        case '3':
+            await sendMessage(conn, chatId, dialogs.subProblems.classLog.title);
+            userCurrentTopic[chatId] = { problem: 'Dificuldade com o diário de classe', stage: 'subproblema' };
+            break;
+        case '4':
+            await sendMessage(conn, chatId, dialogs.subProblems.grades.title);
+            userCurrentTopic[chatId] = { problem: 'Dificuldade no registro de notas', stage: 'subproblema' };
+            break;
+        case '5':
+        case '6':
+            await sendMessage(conn, chatId, dialogs.describeIssue);
+            userCurrentTopic[chatId] = { 
+                state: 'descricaoProblema',
+                type: 'custom'
+            };
+            break;
+        case commands.backCommand:
+            await sendProblemOptions(conn, chatId);
+            break;
+        default:
+            await sendMessage(conn, chatId, errors.invalidOption);
+    }
 }
 
 // Envia opções de subproblema para o usuário
@@ -770,39 +767,53 @@ async function sendSubProblemOptions(conn, chatId, problem) {
   await sendMessage(conn, chatId, subProblemOptions);
 }
 
-// Obtém opções de subproblema
+// Update getSubProblemOptions function
 function getSubProblemOptions(problem) {
-  const options = {
-    'Acesso ao sistema': `Selecione o subtópico:
+    const problemMap = {
+        'Acesso ao sistema': 'accessSystem',
+        'Cadastro de aluno/outros': 'registration',
+        'Dificuldade com o diário de classe': 'classLog',
+        'Dificuldade no registro de notas': 'grades'
+    };
 
-1️⃣ Não consigo acessar o sistema
-2️⃣ Sistema não está abrindo
-3️⃣ Outro problema relacionado ao acesso
+    const key = problemMap[problem];
+    if (key && dialogs.subProblems[key]) {
+        return `${dialogs.subProblems[key].title}\n\n${commands.backMessage}`;
+    }
+    return errors.invalidOption;
+}
 
-Digite 'voltar' para retornar ao menu anterior.`,
-    'Cadastro de aluno/outros': `Selecione o subtópico:
+// Update getSubProblemText function
+function getSubProblemText(problem, subProblem) {
+    const problemMap = {
+        'Acesso ao sistema': 'accessSystem',
+        'Cadastro de aluno/outros': 'registration',
+        'Dificuldade com o diário de classe': 'classLog',
+        'Dificuldade no registro de notas': 'grades'
+    };
 
-1️⃣ Dificuldade ao inserir informações do estudante
-2️⃣ Dificuldade ao inserir informações do funcionário
-3️⃣ Outro problema relacionado ao cadastro
+    const key = problemMap[problem];
+    if (key && dialogs.subProblems[key]?.options[subProblem]) {
+        return dialogs.subProblems[key].options[subProblem];
+    }
+    return 'Outro problema';
+}
 
-Digite 'voltar' para retornar ao menu anterior.`,
-    'Dificuldade com o diário de classe': `Selecione o subtópico:
+// Update getVideoUrlForSubProblem function
+function getVideoUrlForSubProblem(subProblem, chatId) {
+    const mainProblem = userCurrentTopic[chatId].problem;
+    const problemMap = {
+        'Acesso ao sistema': 'accessSystem',
+        'Cadastro de aluno/outros': 'registration',
+        'Dificuldade com o diário de classe': 'classLog',
+        'Dificuldade no registro de notas': 'grades'
+    };
 
-1️⃣ Dificuldade ao inserir notas
-2️⃣ Dificuldade ao realizar um registro
-3️⃣ Outro problema com o diário de classe
-
-Digite 'voltar' para retornar ao menu anterior.`,
-    'Dificuldade no registro de notas': `Selecione o subtópico:
-
-1️⃣ Não consigo inserir as notas
-2️⃣ As notas não estão sendo salvas corretamente
-3️⃣ Outro problema com o registro de notas
-
-Digite 'voltar' para retornar ao menu anterior.`
-  };
-  return options[problem] || 'Opção inválida. Por favor, selecione uma opção válida.';
+    const key = problemMap[mainProblem];
+    if (key && dialogs.subProblems[key]?.videos[subProblem]) {
+        return dialogs.subProblems[key].videos[subProblem];
+    }
+    return errors.invalidOption;
 }
 
 // Processa seleção de subproblema
@@ -858,7 +869,7 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
             );
         });
 
-        await sendMessage(conn, chatId, `Aqui está um vídeo que pode ajudar a resolver seu problema: ${videoUrl}`);
+        await sendMessage(conn, chatId, dialogs.watchVideo.replace('%s', videoUrl));
         await sendMessage(conn, chatId, 'O vídeo foi suficiente para resolver seu problema? (sim/não)');
         userCurrentTopic[chatId] = 'videoFeedback';
 
@@ -875,78 +886,37 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
 
 // Obtém texto do subproblema
 function getSubProblemText(problem, subProblem) {
-  const subProblemTexts = {
-    'Acesso ao sistema': {
-      '1': 'Não consigo acessar o sistema',
-      '2': 'Sistema não está abrindo',
-      '3': 'Outro problema relacionado ao acesso'
-    },
-    'Cadastro de aluno/outros': {
-      '1': 'Dificuldade ao inserir informações do estudante',
-      '2': 'Dificuldade ao inserir informações do funcionário',
-      '3': 'Outro problema relacionado ao cadastro'
-    },
-    'Dificuldade com o diário de classe': {
-      '1': 'Dificuldade ao inserir notas',
-      '2': 'Dificuldade ao realizar um registro',
-      '3': 'Outro problema com o diário de classe'
-    },
-    'Dificuldade no registro de notas': {
-      '1': 'Não consigo inserir as notas',
-      '2': 'As notas não estão sendo salvas corretamente',
-      '3': 'Outro problema com o registro de notas'
-    }
-  };
-  return subProblemTexts[problem] ? subProblemTexts[problem][subProblem] : 'Outro problema';
-}
+    const problemMap = {
+        'Acesso ao sistema': 'accessSystem',
+        'Cadastro de aluno/outros': 'registration',
+        'Dificuldade com o diário de classe': 'classLog',
+        'Dificuldade no registro de notas': 'grades'
+    };
 
-// Obtém URL do vídeo para subproblema
-function getVideoUrlForSubProblem(subProblem, chatId) {
-  const mainProblem = userCurrentTopic[chatId].problem;
-  
-  const videoUrls = {
-    'Acesso ao sistema': {
-      '1': 'https://www.youtube.com/watch?v=acesso-conta',
-      '2': 'https://www.youtube.com/watch?v=sistema-nao-carrega',
-      '3': 'https://www.youtube.com/watch?v=outros-problemas-acesso'
-    },
-    'Cadastro de aluno/outros': {
-      '1': 'https://www.youtube.com/watch?v=cadastro-aluno',
-      '2': 'https://www.youtube.com/watch?v=cadastro-funcionario',
-      '3': 'https://www.youtube.com/watch?v=outros-problemas-cadastro'
-    },
-    'Dificuldade com o diário de classe': {
-      '1': 'https://www.youtube.com/watch?v=insercao-notas-diario',
-      '2': 'https://www.youtube.com/watch?v=visualizacao-registros',
-      '3': 'https://www.youtube.com/watch?v=outros-problemas-diario'
-    },
-    'Dificuldade no registro de notas': {
-      '1': 'https://www.youtube.com/watch?v=registro-notas',
-      '2': 'https://www.youtube.com/watch?v=salvar-notas',
-      '3': 'https://www.youtube.com/watch?v=outros-problemas-notas'
+    const key = problemMap[problem];
+    if (key && dialogs.subProblems[key]?.options[subProblem]) {
+        return dialogs.subProblems[key].options[subProblem];
     }
-  };
-
-return videoUrls[mainProblem]?.[subProblem] || 'Opção Invalida, por favor selecione uma opção válida.';
+    return 'Outro problema';
 }
 
 // Processa feedback do vídeo
 async function handleVideoFeedback(conn, chatId, messageText, io) {
     try {
         if (messageText.toLowerCase() === 'sim') {
-            await sendMessage(conn, chatId, 'Ficamos felizes em ajudar! Se precisar de mais algum atendimento, envie suas informações novamente no formato:');
-            await sendMessage(conn, chatId, `Nome:\nCidade:\nCargo:\nEscola:`);
+            await sendMessage(conn, chatId, finished.helpfulVideo);
+            await sendMessage(conn, chatId, greetings.template);
             // Resetar o tópico para permitir novo atendimento
             delete userCurrentTopic[chatId];
             await closeChat(chatId, io);
         } else if (messageText.toLowerCase() === 'não') {
-            await sendMessage(conn, chatId, 'Por favor, descreva o problema que você está enfrentando:');
+            await sendMessage(conn, chatId, dialogs.describeIssue);
             userCurrentTopic[chatId] = {
                 state: 'descricaoProblema',
                 previousState: 'videoFeedback'
             };
         } else {
-            await sendMessage(conn, chatId, 'Resposta inválida. Por favor, responda com "sim" ou "não".');
+            await sendMessage(conn, chatId, errors.invalidYesNo);
         }
     } catch (error) {
         console.error('Erro em handleVideoFeedback:', error);
@@ -1003,7 +973,7 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
         await sendMessage(
             conn, 
             chatId, 
-            'Problema registrado com sucesso. Um atendente analisará sua solicitação e entrará em contato em breve.'
+            finished.problemRegistered
         );
 
         // Atualizar status
@@ -1020,7 +990,7 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
         await sendMessage(
             conn, 
             chatId, 
-            'Ocorreu um erro ao registrar seu problema. Por favor, tente novamente.'
+            errors.tryAgainLater
         );
         userCurrentTopic[chatId] = 'problema';
         await sendProblemOptions(conn, chatId);
@@ -1158,7 +1128,7 @@ async function closeChat(chatId, io) {
             await sendMessage(
                 botConnection,
                 nextUser.chatId,
-                `Olá ${nextUser.name}! Sua vez chegou. Estamos iniciando seu atendimento.`
+                greetings.nextInLine.replace('%s', nextUser.name)
             );
             await sendProblemOptions(botConnection, nextUser.chatId);
         }
@@ -1170,7 +1140,7 @@ async function closeChat(chatId, io) {
         await sendStatusUpdateToMainProcess(io);
 
     } catch (error) {
-        console.error('Erro ao finalizar atendimento:', error);
+        console.error(errors.processError.replace('%s', error));
     }
 }
 
@@ -1188,6 +1158,22 @@ async function getNextInWaitingList() {
             }
         );
     });
+}
+
+// Update attendNextUserInQueue function
+async function attendNextUserInQueue(conn, io) {
+    const nextUser = activeChatsList.find(chat => chat.isWaiting);
+    if (nextUser) {
+        nextUser.isWaiting = false;
+        await sendMessage(
+            conn, 
+            nextUser.chatId, 
+            commands.nextInQueueMessage.replace('%s', nextUser.name)
+        );
+        await sendProblemOptions(conn, nextUser.chatId);
+        userCurrentTopic[nextUser.chatId] = 'problema';
+        sendStatusUpdateToMainProcess(io);
+    }
 }
 
 // Atender o próximo usuário na fila
@@ -1243,7 +1229,7 @@ async function updateWaitingUsers(io) {
             const user = waitingUsers[i];
             const currentPosition = i + 1; // Posição baseada no índice + 1
             
-            const message = `Atualização: ${user.name}, sua posição atual na fila é ${currentPosition}º lugar.`;
+            const message = greetings.queueUpdate.replace('%s', user.name).replace('%d', currentPosition);
             
             if (botConnection) {
                 await sendMessage(botConnection, user.chatId, message);
@@ -1270,6 +1256,9 @@ function getStatusText(status) {
  * Endpoint: /generateReport
  * Suporta filtros por período, cidade e escola
  */
+const { generateXLSXReport } = require('./reports/templates/xlsx/report.template.js');
+const { generatePDFReport } = require('./reports/templates/pdf/report.template.js');
+
 server.get('/generateReport', async (req, res) => {
     try {
         const { start, end, format, city, school } = req.query;
@@ -1302,87 +1291,20 @@ server.get('/generateReport', async (req, res) => {
 
         const problems = await queryDatabase(query, params);
 
-        // Manipular formato de exportação Excel
         if (format === 'xlsx') {
-            const Excel = require('exceljs');
-            const workbook = new Excel.Workbook();
-            const worksheet = workbook.addWorksheet('Atendimentos');
-
-            // Configurar colunas
-            worksheet.columns = [
-                { header: 'Nome', key: 'name', width: 30 },
-                { header: 'Cidade', key: 'city', width: 20 },
-                { header: 'Escola', key: 'school', width: 30 },
-                { header: 'Cargo', key: 'position', width: 20 },
-                { header: 'Problema', key: 'description', width: 50 },
-                { header: 'Status', key: 'status', width: 15 },
-                { header: 'Data Início', key: 'formatted_date', width: 20 },
-                { header: 'Data Conclusão', key: 'formatted_date_completed', width: 20 },
-                { header: 'Duração (min)', key: 'duration_minutes', width: 15 }
-            ];
-
-            // Adicionar linhas
-            worksheet.addRows(problems);
-
-            // Estilizar linha de cabeçalho
-            worksheet.getRow(1).font = { bold: true };
-            worksheet.getRow(1).fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFE0E0E0' }
-            };
-
+            const workbook = await generateXLSXReport(problems, start, end);
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.xlsx`);
-
             await workbook.xlsx.write(res);
             return;
         }
 
-        // Geração de PDF
         const doc = new PDFDocument({ size: 'A4', margin: 50 });
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.pdf`);
         doc.pipe(res);
-
-        // Calcular estatísticas
-        const totalAtendimentos = problems.length;
-        const concluidos = problems.filter(p => p.status === 'completed').length;
-        const tempoMedioMinutos = concluidos ? Math.round(
-            problems.reduce((acc, p) => acc + (p.duration_minutes || 0), 0) / concluidos
-        ) : 0;
-
-        // Cabeçalho e estatísticas
-        doc.fontSize(20).text('Relatório de Atendimentos', { align: 'center' }).moveDown(1);
-        doc.fontSize(12).text(`Período: ${new Date(start).toLocaleDateString()} a ${new Date(end).toLocaleDateString()}`).moveDown(2);
         
-        doc.fontSize(14).text('Estatísticas', { underline: true }).moveDown(1);
-        doc.fontSize(12)
-           .text(`Total de Atendimentos: ${totalAtendimentos}`)
-           .text(`Atendimentos Concluídos: ${concluidos}`)
-           .text(`Tempo Médio: ${Math.floor(tempoMedioMinutos/60)}h ${tempoMedioMinutos%60}min`)
-           .moveDown(2);
-
-        // Listagem de problemas
-        doc.fontSize(14).text('Detalhamento', { underline: true }).moveDown(1);
-
-        problems.forEach((problem) => {
-            const duracao = problem.duration_minutes
-                ? `${Math.floor(problem.duration_minutes/60)}h ${problem.duration_minutes%60}min`
-                : 'Em andamento';
-
-            doc.fontSize(12)
-               .text(`Data: ${problem.formatted_date}`)
-               .text(`Nome: ${problem.name}`)
-               .text(`Cargo: ${problem.position}`)
-               .text(`Escola: ${problem.school}`)
-               .text(`Cidade: ${problem.city}`)
-               .text(`Problema: ${problem.description}`)
-               .text(`Status: ${getStatusText(problem.status)}`)
-               .text(`Duração: ${duracao}`)
-               .moveDown(1);
-        });
-
+        generatePDFReport(doc, problems, start, end);
         doc.end();
 
     } catch (error) {
@@ -1414,8 +1336,8 @@ server.get('/getChartData', async (req, res) => {
         
         const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
         
-        console.log('Query conditions:', conditions); // Log de depuração
-        console.log('Query parameters:', params); // Log de depuração
+        console.log('Query conditions:', conditions); 
+        console.log('Query parameters:', params);
         
         // Query para dados mensais 
         const monthlyQuery = `
