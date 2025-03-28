@@ -12,7 +12,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const { handleRecovery } = require('./recovery.js'); 
 
-// Adicionar imports no início do arquivo
+//Importar mensagens e diálogos                                            
 const greetings = require('./messages/greetings.json');
 const dialogs = require('./messages/dialogs.json');
 const errors = require('./messages/errors.json');
@@ -20,24 +20,23 @@ const finished = require('./messages/finished.json');
 const commands = require('./messages/commands.json');
 const logs = require('./messages/logs.json');
 
-// Atualizar caminhos de recursos
+//Caminhos de recursos
 const assetsPath = path.join(__dirname, '../assets');
 
 /**
  * Configurações globais do sistema
  */
 const CONFIG = {
-    MESSAGE_DELAY: 1000,
+    MESSAGE_DELAY: 5000,
     MAX_ACTIVE_CHATS: 3,
     MESSAGE_HISTORY_LIMIT: 50,
     DUPLICATE_MESSAGE_WINDOW: 60000,
     DEFAULT_HEADLESS: false
 };
 
-// Add this near the other constants at the top
 const RESPONSE_DELAY = {
-    MIN: 30000, // 30 seconds
-    MAX: 120000 // 120 seconds
+    MIN: 30000, // 30 segundos
+    MAX: 120000 // 120 segundos
 };
 
 /**
@@ -1594,7 +1593,16 @@ async function getRecentContacts(conn) {
                             id: chatId,
                             name: chat.name || chat.contact?.pushname || number,
                             number: number,
-                            lastMessageTime: chat.lastMessageTime || chat.t || Date.now(),
+                            // Fix timestamp handling
+                            lastMessageTime: (() => {
+                                const timestamp = chat.lastMessageTime || chat.t;
+                                // Check if timestamp is already in milliseconds (13 digits)
+                                if (timestamp && timestamp.toString().length === 13) {
+                                    return Math.floor(timestamp / 1000);
+                                }
+                                // If timestamp is in seconds (10 digits) or undefined
+                                return timestamp || Math.floor(Date.now() / 1000);
+                            })(),
                             unreadCount: chat.unreadCount || 0
                         };
                     } catch (err) {

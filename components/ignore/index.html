@@ -208,7 +208,11 @@
                         ${contact.description ? 
                             `<span class="contact-description">${contact.description}</span>` : ''}
                         ${contact.lastMessageTime ? 
-                            `<span class="last-message-time">Última mensagem: ${new Date(contact.lastMessageTime).toLocaleString()}</span>` : ''}
+                            `<span class="last-message-time">Última mensagem: ${new Intl.DateTimeFormat('pt-BR', {
+                                dateStyle: 'short',
+                                timeStyle: 'short',
+                                timeZone: 'America/Sao_Paulo'
+                            }).format(contact.lastMessageTime * 1000)}</span>` : ''}
                     </div>
                 `;
                 
