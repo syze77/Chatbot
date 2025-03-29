@@ -88,5 +88,5 @@ module.exports = {
     initializeDatabase,    
     getDatabase: () => db,
     queryDatabase,
-    db  // Export db instance directly
+    db  
 };
