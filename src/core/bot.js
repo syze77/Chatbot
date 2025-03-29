@@ -85,7 +85,7 @@ async function startHydraBot(io) {
       }
     });
 
-    console.log(logs.serverStarted);
+    console.log('Bot initialized successfully');
     setupEventListeners(io);
   } catch (error) {
     console.error(errors.connectionError);
@@ -316,7 +316,6 @@ async function startListeningForMessages(conn, io) {
         }
     });
 
-    // Modificar a função sendMessage para incluir verificação de duplicação
     const originalSendMessage = sendMessage;
     global.sendMessage = async (conn, chatId, message) => {
         const messageId = `send_${chatId}_${Date.now()}`;
@@ -584,13 +583,11 @@ async function getChatState(chatId) {
     });
 }
 
-// Add this helper function
 function getRandomDelay() {
     return Math.floor(Math.random() * (RESPONSE_DELAY.MAX - RESPONSE_DELAY.MIN + 1) + RESPONSE_DELAY.MIN);
 }
 
 function getRandomWelcomeMessage() {
-    // Change from greetings.welcomeMessages to greetings.welcome
     const messages = greetings.welcome;
     if (!Array.isArray(messages) || messages.length === 0) {
         return 'Olá! Por favor, envie suas informações no formato:';
@@ -599,9 +596,8 @@ function getRandomWelcomeMessage() {
     return messages[randomIndex];
 }
 
-// Modify the sendFormattedMessage function
 async function sendFormattedMessage(conn, chatId, type) {
-    // Add delay before any message
+    
     await new Promise(resolve => setTimeout(resolve, getRandomDelay()));
     
     switch (type) {
@@ -797,7 +793,6 @@ async function sendSubProblemOptions(conn, chatId, problem) {
   await sendMessage(conn, chatId, subProblemOptions);
 }
 
-// Update getSubProblemOptions function
 function getSubProblemOptions(problem) {
     const problemMap = {
         'Acesso ao sistema': 'accessSystem',
@@ -813,7 +808,6 @@ function getSubProblemOptions(problem) {
     return errors.invalidOption;
 }
 
-// Update getSubProblemText function
 function getSubProblemText(problem, subProblem) {
     const problemMap = {
         'Acesso ao sistema': 'accessSystem',
@@ -829,7 +823,6 @@ function getSubProblemText(problem, subProblem) {
     return 'Outro problema';
 }
 
-// Update getVideoUrlForSubProblem function
 function getVideoUrlForSubProblem(subProblem, chatId) {
     const mainProblem = userCurrentTopic[chatId].problem;
     const problemMap = {
@@ -1190,7 +1183,7 @@ async function getNextInWaitingList() {
     });
 }
 
-// Update attendNextUserInQueue function
+
 async function attendNextUserInQueue(conn, io) {
     const nextUser = activeChatsList.find(chat => chat.isWaiting);
     if (nextUser) {
@@ -1333,14 +1326,14 @@ async function getRecentContacts(conn) {
                             id: chatId,
                             name: chat.name || chat.contact?.pushname || number,
                             number: number,
-                            // Fix timestamp handling
+                            
                             lastMessageTime: (() => {
                                 const timestamp = chat.lastMessageTime || chat.t;
-                                // Check if timestamp is already in milliseconds (13 digits)
+                              
                                 if (timestamp && timestamp.toString().length === 13) {
                                     return Math.floor(timestamp / 1000);
                                 }
-                                // If timestamp is in seconds (10 digits) or undefined
+                                
                                 return timestamp || Math.floor(Date.now() / 1000);
                             })(),
                             unreadCount: chat.unreadCount || 0
