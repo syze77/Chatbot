@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { db, queryDatabase } = require('../utils/database.js');
 
-// Mudar para usar prefixo na rota
 router.get('/api/statistics/getChartData', async (req, res) => {
     try {
         const { city, school } = req.query;
@@ -21,7 +20,6 @@ router.get('/api/statistics/getChartData', async (req, res) => {
         
         const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-        // Query modificada para dados mensais com preenchimento correto
         const monthlyQuery = `
             WITH RECURSIVE 
             months(month_num) AS (
@@ -44,7 +42,6 @@ router.get('/api/statistics/getChartData', async (req, res) => {
             FROM months
             ORDER BY months.month_num`;
 
-        // Query modificada para dados semanais
         const weeklyQuery = `
             WITH RECURSIVE 
             dates(date) AS (
@@ -75,16 +72,21 @@ router.get('/api/statistics/getChartData', async (req, res) => {
         const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         
-        // Nomes dos dias da semana em português
+        // Nomes dos dias da semana em português 
         const weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'];          
 
         const processed = {
             weekly: {
                 labels: weeklyData.map(row => {
                     const date = new Date(row.date);
-                    return weekDays[date.getDay()];
-                }),
-                data: weeklyData.map(row => row.count)
+                    const dayIndex = date.getDay() - 1; 
+                    return dayIndex >= 0 && dayIndex < 5 ? weekDays[dayIndex] : '';
+                }).filter(label => label !== ''),
+                data: weeklyData.map(row => row.count).filter((_, index) => {
+                    const date = new Date(weeklyData[index].date);
+                    const day = date.getDay();
+                    return day >= 1 && day <= 5;
+                })
             },
             monthly: {
                 labels: monthNames,
@@ -99,7 +101,6 @@ router.get('/api/statistics/getChartData', async (req, res) => {
     }
 });
 
-// Mudar para usar prefixo na rota
 router.get('/api/statistics/getCompletedAttendances', async (req, res) => {
     try {
         const { date, position, city, school } = req.query;
@@ -150,7 +151,6 @@ router.get('/api/statistics/getCompletedAttendances', async (req, res) => {
 
         const completedAttendances = await queryDatabase(query, params);
         
-        // Format the response data
         const formattedAttendances = completedAttendances.map(att => ({
             ...att,
             date: att.formatted_date,
