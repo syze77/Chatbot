@@ -5,7 +5,7 @@ const { queryDatabase } = require('../utils/database.js');
 const { generateXLSXReport } = require('../core/reports/templates/xlsx/report.template.js');
 const { generatePDFReport } = require('../core/reports/templates/pdf/report.template.js');
 
-router.get('/generateReport', async (req, res) => {
+router.get('/api/reports/generateReport', async (req, res) => {
     try {
         const { start, end, format, city, school } = req.query;
         
@@ -37,25 +37,37 @@ router.get('/generateReport', async (req, res) => {
 
         const problems = await queryDatabase(query, params);
 
+        if (!Array.isArray(problems)) {
+            throw new Error('Dados inválidos retornados da consulta');
+        }
+
         if (format === 'xlsx') {
-            const workbook = await generateXLSXReport(problems, start, end);
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.xlsx`);
+            const workbook = await generateXLSXReport(problems, start, end);
             await workbook.xlsx.write(res);
             return;
         }
 
-        const doc = new PDFDocument({ size: 'A4', margin: 50 });
+        const doc = new PDFDocument({ 
+            size: 'A4', 
+            margin: 50,
+            bufferPages: true
+        });
+        
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.pdf`);
-        doc.pipe(res);
         
+        doc.pipe(res);
         generatePDFReport(doc, problems, start, end);
         doc.end();
 
     } catch (error) {
         console.error('Erro ao gerar relatório:', error);
-        res.status(500).json({ error: 'Erro ao gerar relatório' });
+        res.status(500).json({ 
+            error: 'Erro ao gerar relatório',
+            details: error.message
+        });
     }
 });
 

@@ -2,8 +2,13 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
+const express = require('express');
 const { startHydraBot, redirectToWhatsAppChat, server, getRecentContacts, getBotConnection } = require('../core/bot.js');
 const { initializeDatabase, getDatabase } = require('../utils/database.js');
+
+const statisticsRoutes = require('../routes/statistics.js');
+const filtersRoutes = require('../routes/filters.js');
+const reportsRoutes = require('../routes/reports.js');
 
 // Configuração do servidor HTTP e Socket.IO
 const httpServer = http.createServer(server);
@@ -55,7 +60,6 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
-            // Adicionar configurações de segurança
             webSecurity: true,
             sandbox: true
         }
@@ -83,6 +87,22 @@ function createWindow() {
         win.webContents.openDevTools();
     }
 }
+
+// Add express middleware
+server.use(express.json());
+server.use(express.urlencoded({ extended: true }));
+
+// Add CORS middleware
+server.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    next();
+});
+
+// Setup routes
+server.use('/', statisticsRoutes);
+server.use('/', filtersRoutes);
+server.use('/', reportsRoutes);
 
 // Configuração das rotas do servidor
 server.get('/getProblemsData', async (req, res) => {
@@ -263,8 +283,8 @@ app.whenReady().then(async () => {
     try {
         await initializeDatabase();
         createWindow();
-        startHydraBot(io);
         setupIpcHandlers();
+        startHydraBot(io);
 
         httpServer.listen(3000, () => {
             console.log('Servidor rodando na porta 3000');

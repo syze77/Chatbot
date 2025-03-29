@@ -76,11 +76,15 @@
 
         async function loadCompletedAttendances() {
             try {
-                const response = await fetch('http://localhost:3000/getCompletedAttendances');
+                console.log('Fetching completed attendances...');
+                const response = await fetch('http://localhost:3000/api/statistics/getCompletedAttendances');
+                console.log('Response status:', response.status);
                 const completedAttendances = await response.json();
+                console.log('Received attendances:', completedAttendances);
                 displayCompletedAttendances(completedAttendances);
             } catch (error) {
                 console.error('Erro ao carregar atendimentos:', error);
+                displayCompletedAttendances([]); // Show empty state on error
             }
         }
 
@@ -118,37 +122,37 @@
             const completedList = document.getElementById('completed-list');
             completedList.innerHTML = '';
 
-            if (attendances.length === 0) {
+            if (!attendances || attendances.length === 0) {
                 completedList.innerHTML = '<div class="no-results">Nenhum atendimento concluído encontrado.</div>';
                 return;
             }
 
             attendances.forEach(attendance => {
-                const duration = calculateDuration(attendance.duration_minutes);
+                const duration = calculateDuration(attendance.duration_minutes || 0);
                 
                 const item = document.createElement('div');
                 item.className = 'completed-item';
                 item.innerHTML = `
                     <div class="user-info-section">
-                        <div class="user-name">${attendance.name}</div>
-                        <div class="user-details"><i class="fas fa-user-tag"></i> ${attendance.position}</div>
-                        <div class="user-details"><i class="fas fa-map-marker-alt"></i> ${attendance.city}</div>
-                        <div class="user-details"><i class="fas fa-school"></i> ${attendance.school}</div>
+                        <div class="user-name">${attendance.name || 'Sem nome'}</div>
+                        <div class="user-details"><i class="fas fa-user-tag"></i> ${attendance.position || 'Não informado'}</div>
+                        <div class="user-details"><i class="fas fa-map-marker-alt"></i> ${attendance.city || 'Não informado'}</div>
+                        <div class="user-details"><i class="fas fa-school"></i> ${attendance.school || 'Não informado'}</div>
                     </div>
                     
                     <div class="problem-section">
                         <div class="problem-title">Problema Relatado</div>
-                        <div class="problem-description">${attendance.description}</div>
+                        <div class="problem-description">${attendance.description || 'Sem descrição'}</div>
                     </div>
                     
                     <div class="time-section">
                         <div class="time-info">
                             <i class="fas fa-clock"></i> Início<br>
-                            <strong>${attendance.date}</strong>
+                            <strong>${attendance.date || 'Data não registrada'}</strong>
                         </div>
                         <div class="time-info">
                             <i class="fas fa-check-circle"></i> Conclusão<br>
-                            <strong>${attendance.date_completed}</strong>
+                            <strong>${attendance.date_completed || 'Data não registrada'}</strong>
                         </div>
                         <div class="duration-badge">
                             <i class="fas fa-hourglass-end"></i> ${duration}
@@ -157,13 +161,15 @@
                 `;
                 completedList.appendChild(item);
             });
+
+            console.log('Attendances displayed:', attendances.length);
         }
 
         async function filterByDate(date) {
             if (!date) return loadCompletedAttendances();
             
             try {
-                const response = await fetch(`http://localhost:3000/getCompletedAttendances?date=${date}`);
+                const response = await fetch(`http://localhost:3000/api/statistics/getCompletedAttendances?date=${date}`);
                 const filteredAttendances = await response.json();
                 displayCompletedAttendances(filteredAttendances);
             } catch (error) {
@@ -175,7 +181,7 @@
             if (!position) return loadCompletedAttendances();
             
             try {
-                const response = await fetch(`http://localhost:3000/getCompletedAttendances?position=${position}`);
+                const response = await fetch(`http://localhost:3000/api/statistics/getCompletedAttendances?position=${position}`);
                 const filteredAttendances = await response.json();
                 displayCompletedAttendances(filteredAttendances);
             } catch (error) {

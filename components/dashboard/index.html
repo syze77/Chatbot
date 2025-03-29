@@ -155,7 +155,7 @@
                 if (city) params.append('city', city);
                 if (school) params.append('school', school);
                 
-                const response = await fetch(`http://localhost:3000/getChartData?${params}`);
+                const response = await fetch(`http://localhost:3000/api/statistics/getChartData?${params}`);
                 if (!response.ok) throw new Error('Erro na resposta do servidor');
                 
                 const data = await response.json();
@@ -211,7 +211,7 @@
                 school: school
             });
 
-            fetch(`http://localhost:3000/generateReport?${params}`)
+            fetch(`http://localhost:3000/api/reports/generateReport?${params}`)
                 .then(response => response.blob())
                 .then(blob => {
                     const url = window.URL.createObjectURL(blob);
@@ -249,7 +249,7 @@
 
         async function loadCities() {
             try {
-                const response = await fetch('http://localhost:3000/getCities');
+                const response = await fetch('http://localhost:3000/api/filters/getCities');
                 const cities = await response.json();
                 const cityFilter = document.getElementById('cityFilter');
                 
@@ -268,8 +268,8 @@
         async function loadSchools(city = '') {
             try {
                 const url = city 
-                    ? `http://localhost:3000/getSchools?city=${encodeURIComponent(city)}`
-                    : 'http://localhost:3000/getSchools';
+                    ? `http://localhost:3000/api/filters/getSchools?city=${encodeURIComponent(city)}`
+                    : 'http://localhost:3000/api/filters/getSchools';
                 const response = await fetch(url);
                 const schools = await response.json();
                 const schoolFilter = document.getElementById('schoolFilter');
@@ -321,7 +321,7 @@
                     school: schoolFilter.value
                 });
                 
-                const response = await fetch(`http://localhost:3000/getChartData?${params}`);
+                const response = await fetch(`http://localhost:3000/api/statistics/getChartData?${params}`);
                 if (!response.ok) throw new Error('Erro na resposta do servidor');
                 
                 const data = await response.json();

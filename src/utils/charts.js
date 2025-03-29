@@ -120,14 +120,13 @@ function initMonthlyChart() {
 
 async function updateChartData(weeklyData, monthlyData) {
     if (weeklyData) {
-        // Ensure we're only showing workdays (Monday to Friday)
         const filteredData = {
             labels: weeklyData.labels.filter((_, index) => {
-                const dayLabel = weeklyData.labels[index].split(' ')[0];
+                const dayLabel = weeklyData.labels[index];
                 return !['DOM', 'SAB'].includes(dayLabel);
             }),
             data: weeklyData.data.filter((_, index) => {
-                const dayLabel = weeklyData.labels[index].split(' ')[0];
+                const dayLabel = weeklyData.labels[index];
                 return !['DOM', 'SAB'].includes(dayLabel);
             })
         };

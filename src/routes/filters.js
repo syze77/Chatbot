@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { queryDatabase } = require('../utils/database.js');
 
-router.get('/getCities', async (req, res) => {
+router.get('/api/filters/getCities', async (req, res) => {
     try {
         const query = `
             SELECT DISTINCT city 
@@ -18,7 +18,7 @@ router.get('/getCities', async (req, res) => {
     }
 });
 
-router.get('/getSchools', async (req, res) => {
+router.get('/api/filters/getSchools', async (req, res) => {
     try {
         const { city } = req.query;
         let query = `

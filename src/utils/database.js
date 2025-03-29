@@ -9,18 +9,25 @@ let db;
 // Função de inicialização do banco de dados
 function initializeDatabase() {
     return new Promise((resolve, reject) => {
-        const dbPath = path.join(__dirname, '../data/bot_data.db');
+        const dataDir = path.join(__dirname, '../data');
+        const dbPath = path.join(dataDir, 'bot_data.db');
+
+        // Verifica se o diretório 'data' existe, caso contrário, cria-o
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+
         const dbExists = fs.existsSync(dbPath);
-        
+
         db = new sqlite3.Database(dbPath, (err) => {
             if (err) {
                 console.error('Erro ao abrir o banco de dados:', err);
                 reject(err);
                 return;
             }
-            
+
             console.log(dbExists ? 'Conectado ao banco de dados SQLite existente.' : 'Criando novo banco de dados SQLite.');
-            
+
             // Só cria as tabelas se o banco for novo
             if (!dbExists) {
                 db.serialize(() => {
@@ -46,7 +53,6 @@ function initializeDatabase() {
                         console.log('Banco de dados inicializado com sucesso');
                     });
 
-                    
                     db.run(`CREATE TABLE IF NOT EXISTS ignored_contacts (
                         id TEXT PRIMARY KEY,
                         name TEXT,
@@ -68,8 +74,19 @@ function initializeDatabase() {
     });
 }
 
+function queryDatabase(query, params = []) {
+    return new Promise((resolve, reject) => {
+        db.all(query, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+        });
+    });
+}
+
 // Exportação das funções do módulo
 module.exports = {
     initializeDatabase,    
-    getDatabase: () => db  
+    getDatabase: () => db,
+    queryDatabase,
+    db  // Export db instance directly
 };

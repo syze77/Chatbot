@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { queryDatabase } = require('../utils/database.js');
+const { db, queryDatabase } = require('../utils/database.js');
 
-router.get('/getChartData', async (req, res) => {
+// Mudar para usar prefixo na rota
+router.get('/api/statistics/getChartData', async (req, res) => {
     try {
         const { city, school } = req.query;
         let conditions = ['problems.description IS NOT NULL'];
@@ -75,7 +76,7 @@ router.get('/getChartData', async (req, res) => {
                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         
         // Nomes dos dias da semana em português
-        const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'];          
 
         const processed = {
             weekly: {
@@ -98,7 +99,8 @@ router.get('/getChartData', async (req, res) => {
     }
 });
 
-router.get('/getCompletedAttendances', async (req, res) => {
+// Mudar para usar prefixo na rota
+router.get('/api/statistics/getCompletedAttendances', async (req, res) => {
     try {
         const { date, position, city, school } = req.query;
         let query = `
@@ -110,12 +112,14 @@ router.get('/getCompletedAttendances', async (req, res) => {
                 city, 
                 school, 
                 description,
-                strftime('%d/%m/%Y %H:%M', datetime(date, 'localtime')) as date,
-                strftime('%d/%m/%Y %H:%M', datetime(date_completed, 'localtime')) as date_completed,
+                date,
+                date_completed,
                 status,
                 CAST(
                     (julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER
-                ) as duration_minutes
+                ) as duration_minutes,
+                strftime('%d/%m/%Y %H:%M', datetime(date)) as formatted_date,
+                strftime('%d/%m/%Y %H:%M', datetime(date_completed)) as formatted_date_completed
             FROM problems 
             WHERE status = 'completed'
             AND description IS NOT NULL`;
@@ -145,7 +149,15 @@ router.get('/getCompletedAttendances', async (req, res) => {
         query += ` ORDER BY date_completed DESC`;
 
         const completedAttendances = await queryDatabase(query, params);
-        res.json(completedAttendances);
+        
+        // Format the response data
+        const formattedAttendances = completedAttendances.map(att => ({
+            ...att,
+            date: att.formatted_date,
+            date_completed: att.formatted_date_completed
+        }));
+
+        res.json(formattedAttendances);
     } catch (error) {
         console.error('Erro ao buscar atendimentos concluídos:', error);
         res.status(500).json({ error: 'Erro ao buscar atendimentos concluídos' });
