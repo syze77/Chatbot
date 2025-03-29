@@ -1,5 +1,3 @@
-const weekDays = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-
 let dailyProblemsChart;
 let monthlyProblemsChart;
 
@@ -49,15 +47,15 @@ function initDailyChart() {
                     ticks: {
                         stepSize: 1,
                         precision: 0,
-                        color: '#E4E6EF' // Cor do texto no eixo Y para dark theme
+                        color: '#E4E6EF'
                     },
                     grid: {
-                        color: 'rgba(255, 255, 255, 0.1)' // Grade mais visível no dark theme
+                        color: 'rgba(255, 255, 255, 0.1)'
                     }
                 },
                 x: {
                     ticks: {
-                        color: '#E4E6EF' // Cor do texto no eixo X para dark theme
+                        color: '#E4E6EF'
                     },
                     grid: {
                         display: false
@@ -151,17 +149,14 @@ function updateChartsTheme(isDark) {
     const textColor = isDark ? '#E4E6EF' : '#666';
     const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
 
-    // Update daily chart
     dailyProblemsChart.data.datasets[0].backgroundColor = chartColor.bg;
     dailyProblemsChart.data.datasets[0].borderColor = chartColor.border;
     dailyProblemsChart.options.scales.y.ticks.color = textColor;
     dailyProblemsChart.options.scales.x.ticks.color = textColor;
     dailyProblemsChart.options.scales.y.grid.color = gridColor;
     
-    // Update monthly chart
     monthlyProblemsChart.options.plugins.legend.labels.color = textColor;
     
-    // Apply updates
     dailyProblemsChart.update();
     monthlyProblemsChart.update();
 }
