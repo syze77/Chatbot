@@ -1,27 +1,95 @@
 {
     "name": "whatsapp-electron-bot",
     "version": "1.0.0",
-    "description": "",
+    "description": "Um chatbot para WhatsApp desenvolvido com Electron",
+    "author": "thg <ok.email@exemplo.com>",
     "main": "src/electron/main.js",
     "scripts": {
         "start": "concurrently \"npm run start-bot\" \"npm run start-electron\"",
         "start-bot": "node src/core/bot.js",
-        "start-electron": "electron ."
+        "start-electron": "electron .",
+        "build": "electron-builder",
+        "dist": "electron-builder --win",
+        "postinstall": "electron-builder install-app-deps"
+    },
+    "build": {
+        "appId": "com.yourcompany.whatsapp-bot",
+        "productName": "WhatsApp Bot",
+        "directories": {
+            "output": "dist",
+            "buildResources": "assets"
+        },
+        "files": [
+            "src/**/*",
+            "package.json",
+            "components/**/*",
+            "node_modules/**/*",
+            "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+            "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+            "!**/node_modules/.bin",
+            "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+        ],
+        "extraResources": [
+            {
+                "from": "src/core",
+                "to": "core",
+                "filter": ["**/*"]
+            },
+            {
+                "from": "components",
+                "to": "components",
+                "filter": ["**/*"]
+            },
+            {
+                "from": "assets",
+                "to": "assets",
+                "filter": ["**/*"]
+            },
+            {
+                "from": "node_modules/puppeteer-core/.local-chromium",
+                "to": "app/chromium",
+                "filter": ["**/*", "chrome-win/**/*"]
+            },
+            {
+                "from": "node_modules/puppeteer-core/.local-chromium/win64-*/chrome-win",
+                "to": "app/chromium/chrome-win",
+                "filter": ["**/*"]
+            }
+        ],
+        "win": {
+            "target": "nsis",
+            "icon": "assets/ico.ico",
+            "signAndEditExecutable": false,
+            "requestedExecutionLevel": "asInvoker"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "perMachine": true
+        },
+        "asar": false,
+        "asarUnpack": [
+            "node_modules/puppeteer-core/.local-chromium/**/*",
+            "components/**/*",
+            "assets/**/*"
+        ]
     },
     "devDependencies": {
+        "electron": "^33.2.0",
+        "electron-builder": "^26.0.12",
         "concurrently": "^7.6.0"
     },
     "dependencies": {
         "chart.js": "^4.4.7",
-        "electron": "^33.2.0",
         "exceljs": "^4.4.0",
         "express": "^4.21.2",
         "hydra-bot": "^1.0.33",
         "mime-types": "^2.1.35",
         "open": "^10.1.0",
         "pdfkit": "^0.15.2",
-        "puppeteer": "^23.9.0",
-        "puppeteer-core": "^23.9.0",
+        "puppeteer-core": "^20.9.0",
+        "@puppeteer/browsers": "^1.4.6",
         "qrcode": "^1.5.4",
         "qrcode.js": "^0.0.1",
         "socket.io": "^4.8.1",
