@@ -17,7 +17,7 @@
         "productName": "WhatsApp Bot",
         "directories": {
             "output": "dist",
-            "buildResources": "assets"
+            "buildResources": "assets/**"
         },
         "files": [
             "src/**/*",
@@ -43,16 +43,6 @@
             {
                 "from": "assets",
                 "to": "assets",
-                "filter": ["**/*"]
-            },
-            {
-                "from": "node_modules/puppeteer-core/.local-chromium",
-                "to": "app/chromium",
-                "filter": ["**/*", "chrome-win/**/*"]
-            },
-            {
-                "from": "node_modules/puppeteer-core/.local-chromium/win64-*/chrome-win",
-                "to": "app/chromium/chrome-win",
                 "filter": ["**/*"]
             }
         ],
