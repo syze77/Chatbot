@@ -1,12 +1,12 @@
 {
-    "problemOptions": "Por favor, selecione o tipo de dificuldade que você está enfrentando:\n\n1️⃣ Acesso ao sistema\n2️⃣ Cadastro de aluno/outros\n3️⃣ Dificuldade com o diário de classe\n4️⃣ Dificuldade no registro de notas\n5️⃣ Dificuldades com RFACE\n6️⃣ Outro problema",
+    "problemOptions": "Por favor, selecione o tipo de dificuldade que você está enfrentando:\n\n1️⃣ Acesso ao sistema\n2️⃣ Cadastro de aluno/funcionário\n3️⃣ Dificuldade com diário de classe\n4️⃣ Movimentação de Alunos\n5️⃣ Dificuldades com RFACE\n6️⃣ Outro problema",
     "subProblems": {
         "accessSystem": {
-            "title": "Selecione o subtópico:\n\n1️⃣ Não consigo acessar o sistema\n2️⃣ Sistema não está abrindo\n3️⃣ Outro problema relacionado ao acesso",
+            "title": "Selecione o subtópico:\n\n1️⃣ Recuperação de senha\n2️⃣ Recuperação de email\n3️⃣ Como acessar a plataforma professor",
             "options": {
-                "1": "Não consigo acessar o sistema",
-                "2": "Sistema não está abrindo",
-                "3": "Outro problema relacionado ao acesso"
+                "1": "Recuperação de senha",
+                "2": "Recuperação de email",
+                "3": "Como acessar a plataforma professor"
             },
             "videos": {
                 "1": "https://www.youtube.com/watch?v=acesso-conta",
@@ -15,42 +15,54 @@
             }
         },
         "registration": {
-            "title": "Selecione o subtópico:\n\n1️⃣ Dificuldade ao inserir informações do estudante\n2️⃣ Dificuldade ao inserir informações do funcionário\n3️⃣ Outro problema relacionado ao cadastro",
+            "title": "Selecione o subtópico:\n\n1️⃣ Dificuldade ao inserir informações do estudante\n2️⃣ Dificuldade ao inserir informações do funcionário\n3️⃣ Vínculo de perfil\n4️⃣ Vínculo de escola",
             "options": {
                 "1": "Dificuldade ao inserir informações do estudante",
                 "2": "Dificuldade ao inserir informações do funcionário",
-                "3": "Outro problema relacionado ao cadastro"
+                "3": "Vínculo de perfil",
+                "4": "Vínculo de escola"
             },
             "videos": {
                 "1": "https://www.youtube.com/watch?v=cadastro-aluno",
                 "2": "https://www.youtube.com/watch?v=cadastro-funcionario",
-                "3": "https://www.youtube.com/watch?v=outros-problemas-cadastro"
+                "3": "https://www.youtube.com/watch?v=vinculo-perfil",
+                "4": "https://www.youtube.com/watch?v=vinculo-escola"
             }
         },
         "classLog": {
-            "title": "Selecione o subtópico:\n\n1️⃣ Dificuldade ao inserir notas\n2️⃣ Dificuldade ao realizar um registro\n3️⃣ Outro problema com o diário de classe",
+            "title": "Selecione o subtópico:\n\n1️⃣ Dificuldade ao inserir notas\n2️⃣ Dificuldade ao realizar um registro\n3️⃣ Dificuldade ao lançar conceitos\n4️⃣ Dificuldade com planejamento ou plano de aula\n5️⃣ Inativação de notas para alunos especiais\n6️⃣ Replicação de registro de aula\n7️⃣ Impressão de relatórios (frequência, avaliação e ações)",
             "options": {
                 "1": "Dificuldade ao inserir notas",
                 "2": "Dificuldade ao realizar um registro",
-                "3": "Outro problema com o diário de classe"
+                "3": "Dificuldade ao lançar conceitos",
+                "4": "Dificuldade com planejamento ou plano de aula",
+                "5": "Inativação de notas para alunos especiais",
+                "6": "Replicação de registro de aula",
+                "7": "Impressão de relatórios (frequência, avaliação e ações)"
             },
             "videos": {
                 "1": "https://www.youtube.com/watch?v=insercao-notas-diario",
                 "2": "https://www.youtube.com/watch?v=visualizacao-registros",
-                "3": "https://www.youtube.com/watch?v=outros-problemas-diario"
+                "3": "https://www.youtube.com/watch?v=lancamento-conceitos",
+                "4": "https://www.youtube.com/watch?v=planejamento-aula",
+                "5": "https://www.youtube.com/watch?v=inativacao-notas",
+                "6": "https://www.youtube.com/watch?v=replicacao-registro",
+                "7": "https://www.youtube.com/watch?v=impressao-relatorios"
             }
         },
-        "grades": {
-            "title": "Selecione o subtópico:\n\n1️⃣ Não consigo inserir as notas\n2️⃣ As notas não estão sendo salvas corretamente\n3️⃣ Outro problema com o registro de notas",
+        "studentMovement": {
+            "title": "Selecione o subtópico:\n\n1️⃣ Transferência de alunos\n2️⃣ Remanejamento de alunos\n3️⃣ Reclassificação de alunos\n4️⃣ Matricular alunos transferidos",
             "options": {
-                "1": "Não consigo inserir as notas",
-                "2": "As notas não estão sendo salvas corretamente",
-                "3": "Outro problema com o registro de notas"
+                "1": "Transferência de alunos",
+                "2": "Remanejamento de alunos",
+                "3": "Reclassificação de alunos",
+                "4": "Matricular alunos transferidos"
             },
             "videos": {
-                "1": "https://www.youtube.com/watch?v=registro-notas",
-                "2": "https://www.youtube.com/watch?v=salvar-notas",
-                "3": "https://www.youtube.com/watch?v=outros-problemas-notas"
+                "1": "https://www.youtube.com/watch?v=transferencia-alunos",
+                "2": "https://www.youtube.com/watch?v=remanejamento-alunos",
+                "3": "https://www.youtube.com/watch?v=reclassificacao-alunos",
+                "4": "https://www.youtube.com/watch?v=matricula-transferidos"
             }
         }
     },

@@ -11,6 +11,7 @@ const { getDatabase } = require('../utils/database.js');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const { handleRecovery } = require('./recovery.js'); 
+const { getRecentContacts } = require('./contacts/getcontacts.js');
 
 //Importar mensagens e diálogos                                            
 const greetings = require('./messages/greetings.json');
@@ -22,6 +23,8 @@ const logs = require('./messages/logs.json');
 
 //Caminhos de recursos
 const assetsPath = path.join(__dirname, '../assets');
+
+const PROBLEM_MAPPINGS = require('./messages/problemMappings.json');
 
 /**
  * Configurações globais do sistema
@@ -760,15 +763,15 @@ async function handleProblemSelection(conn, chatId, messageText, io) {
             break;
         case '2':
             await sendMessage(conn, chatId, dialogs.subProblems.registration.title);
-            userCurrentTopic[chatId] = { problem: 'Cadastro de aluno/outros', stage: 'subproblema' };
+            userCurrentTopic[chatId] = { problem: 'Cadastro de aluno/funcionário', stage: 'subproblema' };
             break;
         case '3':
             await sendMessage(conn, chatId, dialogs.subProblems.classLog.title);
-            userCurrentTopic[chatId] = { problem: 'Dificuldade com o diário de classe', stage: 'subproblema' };
+            userCurrentTopic[chatId] = { problem: 'Diário de classe', stage: 'subproblema' };
             break;
         case '4':
-            await sendMessage(conn, chatId, dialogs.subProblems.grades.title);
-            userCurrentTopic[chatId] = { problem: 'Dificuldade no registro de notas', stage: 'subproblema' };
+            await sendMessage(conn, chatId, dialogs.subProblems.studentMovement.title);
+            userCurrentTopic[chatId] = { problem: 'Movimentação de Alunos', stage: 'subproblema' };
             break;
         case '5':
         case '6':
@@ -794,14 +797,7 @@ async function sendSubProblemOptions(conn, chatId, problem) {
 }
 
 function getSubProblemOptions(problem) {
-    const problemMap = {
-        'Acesso ao sistema': 'accessSystem',
-        'Cadastro de aluno/outros': 'registration',
-        'Dificuldade com o diário de classe': 'classLog',
-        'Dificuldade no registro de notas': 'grades'
-    };
-
-    const key = problemMap[problem];
+    const key = PROBLEM_MAPPINGS[problem];
     if (key && dialogs.subProblems[key]) {
         return `${dialogs.subProblems[key].title}\n\n${commands.backMessage}`;
     }
@@ -809,14 +805,7 @@ function getSubProblemOptions(problem) {
 }
 
 function getSubProblemText(problem, subProblem) {
-    const problemMap = {
-        'Acesso ao sistema': 'accessSystem',
-        'Cadastro de aluno/outros': 'registration',
-        'Dificuldade com o diário de classe': 'classLog',
-        'Dificuldade no registro de notas': 'grades'
-    };
-
-    const key = problemMap[problem];
+    const key = PROBLEM_MAPPINGS[problem];
     if (key && dialogs.subProblems[key]?.options[subProblem]) {
         return dialogs.subProblems[key].options[subProblem];
     }
@@ -825,14 +814,7 @@ function getSubProblemText(problem, subProblem) {
 
 function getVideoUrlForSubProblem(subProblem, chatId) {
     const mainProblem = userCurrentTopic[chatId].problem;
-    const problemMap = {
-        'Acesso ao sistema': 'accessSystem',
-        'Cadastro de aluno/outros': 'registration',
-        'Dificuldade com o diário de classe': 'classLog',
-        'Dificuldade no registro de notas': 'grades'
-    };
-
-    const key = problemMap[mainProblem];
+    const key = PROBLEM_MAPPINGS[mainProblem];
     if (key && dialogs.subProblems[key]?.videos[subProblem]) {
         return dialogs.subProblems[key].videos[subProblem];
     }
@@ -850,7 +832,7 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
 
         const mainProblem = userCurrentTopic[chatId].problem;
         const subProblemText = getSubProblemText(mainProblem, messageText);
-        const videoUrl = getVideoUrlForSubProblem(messageText, chatId); // Adicionar chatId aqui
+        const videoUrl = getVideoUrlForSubProblem(messageText, chatId); 
 
         // Buscar informações do usuário
         const userInfo = await new Promise((resolve, reject) => {
@@ -905,22 +887,6 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
         await sendMessage(conn, chatId, 'Ocorreu um erro ao processar sua solicitação. Por favor, tente novamente.');
         userCurrentTopic[chatId] = 'problema';
     }
-}
-
-// Obtém texto do subproblema
-function getSubProblemText(problem, subProblem) {
-    const problemMap = {
-        'Acesso ao sistema': 'accessSystem',
-        'Cadastro de aluno/outros': 'registration',
-        'Dificuldade com o diário de classe': 'classLog',
-        'Dificuldade no registro de notas': 'grades'
-    };
-
-    const key = problemMap[problem];
-    if (key && dialogs.subProblems[key]?.options[subProblem]) {
-        return dialogs.subProblems[key].options[subProblem];
-    }
-    return 'Outro problema';
 }
 
 // Processa feedback do vídeo
@@ -1272,91 +1238,6 @@ function getStatusText(status) {
         'pending': 'Pendente'
     };
     return statusMap[status] || status;
-}
-
-async function getRecentContacts(conn) {
-    try {
-        if (!conn || !conn.client) {
-            console.error('Conexão ou cliente não disponível');
-            return [];
-        }
-
-        console.log('Iniciando busca de contatos...');
-
-        try {
-            const chats = await conn.client.getAllChats();
-            console.log('Chats obtidos:', chats?.length || 0);
-
-            if (!chats || !Array.isArray(chats)) {
-                console.error('Chats inválidos ou vazios');
-                return [];
-            }
-
-            // Filtrar e mapear os contatos
-            const contacts = chats
-                .filter(chat => {
-                    // Verificar se é um chat individual e não um grupo
-                    const isGroup = typeof chat.id === 'string' ? 
-                        chat.id.includes('g.us') : 
-                        (chat.id?.remote?.includes('g.us') || chat.id?.server === 'g.us');
-                    
-                    return chat && chat.id && !isGroup;
-                })
-                .map(chat => {
-                    try {
-                        console.log('Processando chat:', chat.id);
-                        
-                        // Extrair ID do chat de forma segura
-                        let chatId, number;
-                        if (typeof chat.id === 'string') {
-                            chatId = chat.id;
-                            number = chat.id.split('@')[0];
-                        } else if (chat.id?.remote) {
-                            chatId = chat.id.remote;
-                            number = chat.id.remote.split('@')[0];
-                        } else if (chat.id?._serialized) {
-                            chatId = chat.id._serialized;
-                            number = chat.id.user;
-                        } else {
-                            chatId = `${chat.id.user}@c.us`;
-                            number = chat.id.user;
-                        }
-
-                        return {
-                            id: chatId,
-                            name: chat.name || chat.contact?.pushname || number,
-                            number: number,
-                            
-                            lastMessageTime: (() => {
-                                const timestamp = chat.lastMessageTime || chat.t;
-                              
-                                if (timestamp && timestamp.toString().length === 13) {
-                                    return Math.floor(timestamp / 1000);
-                                }
-                                
-                                return timestamp || Math.floor(Date.now() / 1000);
-                            })(),
-                            unreadCount: chat.unreadCount || 0
-                        };
-                    } catch (err) {
-                        console.error('Erro ao processar chat específico:', err);
-                        return null;
-                    }
-                })
-                .filter(contact => contact !== null)
-                .sort((a, b) => b.lastMessageTime - a.lastMessageTime);
-
-            console.log('Total de contatos processados:', contacts.length);
-            return contacts;
-
-        } catch (err) {
-            console.error('Erro ao processar chats:', err);
-            return [];
-        }
-    } catch (error) {
-        console.error('Erro geral em getRecentContacts:', error);
-        return [];
-    }
 }
 
 module.exports = {
