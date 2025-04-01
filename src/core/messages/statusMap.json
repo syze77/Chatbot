@@ -1,0 +1,6 @@
+{
+    "active": "Em atendimento",
+    "waiting": "Em espera",
+    "completed": "Concluído", 
+    "pending": "Pendente"
+}

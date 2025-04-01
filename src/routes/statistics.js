@@ -45,11 +45,11 @@ router.get('/api/statistics/getChartData', async (req, res) => {
         const weeklyQuery = `
             WITH RECURSIVE 
             dates(date) AS (
-                SELECT date('now', '-6 days')
+                SELECT date('now', 'weekday 0', '-7 days')
                 UNION ALL
                 SELECT date(date, '+1 day')
                 FROM dates
-                WHERE date < date('now')
+                WHERE date < date('now', 'weekday 4')
             )
             SELECT 
                 dates.date,
@@ -61,6 +61,7 @@ router.get('/api/statistics/getChartData', async (req, res) => {
                     0
                 ) as count
             FROM dates
+            WHERE strftime('%w', date) BETWEEN '1' AND '5'
             ORDER BY dates.date`;
 
         const [weeklyData, monthlyData] = await Promise.all([
@@ -78,14 +79,13 @@ router.get('/api/statistics/getChartData', async (req, res) => {
         const processed = {
             weekly: {
                 labels: weeklyData.map(row => {
-                    const date = new Date(row.date);
-                    const dayIndex = date.getDay() - 1; 
-                    return dayIndex >= 0 && dayIndex < 5 ? weekDays[dayIndex] : '';
+                    const date = new Date(row.date + 'T00:00:00-03:00'); 
+                    console.log('Date:', date, 'Day:', date.getDay()); 
+                    return weekDays[date.getDay() - 1] || '';
                 }).filter(label => label !== ''),
                 data: weeklyData.map(row => row.count).filter((_, index) => {
-                    const date = new Date(weeklyData[index].date);
-                    const day = date.getDay();
-                    return day >= 1 && day <= 5;
+                    const date = new Date(weeklyData[index].date + 'T00:00:00-03:00');
+                    return date.getDay() >= 1 && date.getDay() <= 5;
                 })
             },
             monthly: {

@@ -33,17 +33,23 @@
             {
                 "from": "src/core",
                 "to": "core",
-                "filter": ["**/*"]
+                "filter": [
+                    "**/*"
+                ]
             },
             {
                 "from": "components",
                 "to": "components",
-                "filter": ["**/*"]
+                "filter": [
+                    "**/*"
+                ]
             },
             {
                 "from": "assets",
                 "to": "assets",
-                "filter": ["**/*"]
+                "filter": [
+                    "**/*"
+                ]
             }
         ],
         "win": {
@@ -66,26 +72,22 @@
         ]
     },
     "devDependencies": {
+        "concurrently": "^7.6.0",
         "electron": "^33.2.0",
-        "electron-builder": "^26.0.12",
-        "concurrently": "^7.6.0"
+        "electron-builder": "^26.0.12"
     },
     "dependencies": {
         "chart.js": "^4.4.7",
+        "date-fns": "^4.1.0",
         "exceljs": "^4.4.0",
         "express": "^4.21.2",
         "hydra-bot": "^1.0.33",
-        "mime-types": "^2.1.35",
         "open": "^10.1.0",
         "pdfkit": "^0.15.2",
         "puppeteer-core": "^20.9.0",
-        "@puppeteer/browsers": "^1.4.6",
         "qrcode": "^1.5.4",
-        "qrcode.js": "^0.0.1",
         "socket.io": "^4.8.1",
         "socket.io-client": "^4.8.1",
-        "sqlite3": "^5.1.6",
-        "ws": "^8.18.0",
-        "xlsx": "^0.18.5"
+        "sqlite3": "^5.1.6"
     }
 }

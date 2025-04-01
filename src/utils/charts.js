@@ -118,19 +118,27 @@ function initMonthlyChart() {
 
 async function updateChartData(weeklyData, monthlyData) {
     if (weeklyData) {
-        const filteredData = {
-            labels: weeklyData.labels.filter((_, index) => {
-                const dayLabel = weeklyData.labels[index];
-                return !['DOM', 'SAB'].includes(dayLabel);
-            }),
-            data: weeklyData.data.filter((_, index) => {
-                const dayLabel = weeklyData.labels[index];
-                return !['DOM', 'SAB'].includes(dayLabel);
-            })
-        };
+        const staticDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'];
+        const today = new Date();
+        const dayOfWeek = today.getDay(); 
 
-        dailyProblemsChart.data.labels = filteredData.labels;
-        dailyProblemsChart.data.datasets[0].data = filteredData.data;
+        
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            dailyProblemsChart.data.labels = staticDays;
+            dailyProblemsChart.data.datasets[0].data = new Array(5).fill(0);
+        } else {
+            
+            const dataMap = new Map();
+            weeklyData.labels.forEach((day, index) => {
+                dataMap.set(day, weeklyData.data[index]);
+            });
+
+            dailyProblemsChart.data.labels = staticDays;
+            dailyProblemsChart.data.datasets[0].data = staticDays.map(day => 
+                dataMap.get(day) || 0
+            );
+        }
+
         dailyProblemsChart.update('none');
     }
 
