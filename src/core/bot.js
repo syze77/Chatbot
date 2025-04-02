@@ -803,7 +803,6 @@ function getSubProblemOptions(problem) {
     }
     return errors.invalidOption;
 }
-
 function getSubProblemText(problem, subProblem) {
     const key = PROBLEM_MAPPINGS[problem];
     if (key && dialogs.subProblems[key]?.options[subProblem]) {
@@ -831,8 +830,16 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
         }
 
         const mainProblem = userCurrentTopic[chatId].problem;
-        const subProblemText = getSubProblemText(mainProblem, messageText);
-        const videoUrl = getVideoUrlForSubProblem(messageText, chatId); 
+        const problemKey = PROBLEM_MAPPINGS[mainProblem];
+
+        // Verifica se é uma opção válida para o problema específico
+        if (!problemKey || !dialogs.subProblems[problemKey]?.options[messageText]) {
+            await sendMessage(conn, chatId, errors.invalidOption);
+            return;
+        }
+
+        const subProblemText = dialogs.subProblems[problemKey].options[messageText];
+        const videoUrl = dialogs.subProblems[problemKey].videos[messageText];
 
         // Buscar informações do usuário
         const userInfo = await new Promise((resolve, reject) => {

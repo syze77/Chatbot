@@ -2,5 +2,13 @@
     "allowedCommands": ["1", "2", "3", "4", "5", "6", "voltar", "sim", "não", "menu"],
     "backCommand": "voltar",
     "backMessage": "Digite 'voltar' para retornar ao menu anterior.",
-    "nextInQueueMessage": "Obrigado por aguardar, %s. Estamos iniciando seu atendimento."
+    "nextInQueueMessage": "Obrigado por aguardar, %s. Estamos iniciando seu atendimento.",
+    "problemMapping": {
+        "1": "Acesso ao sistema",
+        "2": "Cadastro de aluno/funcionário",
+        "3": "Diário de classe",
+        "4": "Movimentação de Alunos",
+        "5": "Dificuldades com RFACE",
+        "6": "Outro problema"
+    }
 }
