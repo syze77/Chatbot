@@ -1,6 +1,8 @@
 const PDFDocument = require('pdfkit');
 const { format, parseISO } = require('date-fns');
 
+const labelSpacing = 50; // Add this constant at the top level of the file
+
 function generatePDFReport(doc, problems, startDate, endDate) {
     // Configurações de estilo
     const colors = {
@@ -15,13 +17,19 @@ function generatePDFReport(doc, problems, startDate, endDate) {
     const margin = 50;
     const pageWidth = doc.page.width - 2 * margin;
 
+    // Ordena os problemas pela data
+    problems.sort((a, b) => new Date(a.date) - new Date(b.date));
+
     // Primeira página
     addHeader(doc, pageWidth, margin, colors);
     addSummary(doc, problems, startDate, endDate, margin, pageWidth, colors);
     addFooter(doc, pageNumber, margin, colors);
 
     // Lista de atendimentos
-    problems.forEach((problem) => {
+    problems.forEach((problem, index) => {
+        // Adiciona o número sequencial ao problema
+        problem.sequentialNumber = index + 1;
+        
         // Verifica se precisa de nova página
         if (doc.y > doc.page.height - 150) {
             addFooter(doc, pageNumber, margin, colors);
@@ -72,13 +80,14 @@ function addSummary(doc, problems, startDate, endDate, margin, pageWidth, colors
        .fillColor(colors.text)
        .text('PERÍODO ANALISADO:', margin + 20, summaryTop + 20)
        .font('Helvetica-Bold')
-       .text(`${formattedStartDate} - ${formattedEndDate}`, margin + 150, summaryTop + 20);
+       .text(`${formattedStartDate} - ${formattedEndDate}`, margin + 200, summaryTop + 20); 
 
     // Grid de métricas
+    const totalMinutes = problems.reduce((acc, curr) => acc + parseInt(curr.duration_minutes), 0);
     const metrics = [
         { label: 'Total de Atendimentos', value: problems.length },
-        { label: 'Tempo Total (min)', value: problems.reduce((acc, curr) => acc + parseInt(curr.duration_minutes), 0) },
-        { label: 'Tempo Médio/Atendimento', value: (problems.reduce((acc, curr) => acc + parseInt(curr.duration_minutes), 0) / problems.length).toFixed(1) }
+        { label: 'Tempo Total (h)', value: (totalMinutes / 60).toFixed(1) },
+        { label: 'Tempo Médio/Atendimento (h)', value: ((totalMinutes / problems.length) / 60).toFixed(1) }
     ];
 
     const boxWidth = pageWidth / metrics.length;
@@ -104,7 +113,7 @@ function addProblemDetails(doc, problem, margin, pageWidth, colors) {
         addHeader(doc, pageWidth, margin, colors);
     }
 
-    const contentHeight = 150; // reduzido de 200 para 150
+    const contentHeight = 150; 
     
     const startY = doc.y > margin + 100 ? doc.y : margin + 100;
     
@@ -112,7 +121,7 @@ function addProblemDetails(doc, problem, margin, pageWidth, colors) {
     doc.fontSize(14)
        .fillColor(colors.primary)
        .font('Helvetica-Bold')
-       .text(`ATENDIMENTO #${problem.id}`, margin, startY, {
+       .text(`ATENDIMENTO #${problem.sequentialNumber}`, margin, startY, {
            underline: true
        });
 
@@ -124,7 +133,7 @@ function addProblemDetails(doc, problem, margin, pageWidth, colors) {
         { label: 'Cidade:', value: problem.city },
         { label: 'Escola:', value: problem.school },
         { label: 'Cargo:', value: problem.position },
-        { label: 'Duração:', value: `${problem.duration_minutes} minutos` }
+        { label: 'Duração:', value: `${problem.duration_minutes}min` }
     ];
 
     createDetailGrid(doc, details, margin, doc.y + 15, pageWidth, colors);
@@ -166,7 +175,10 @@ function createDetailGrid(doc, items, x, y, width, colors) {
            .fillColor(colors.text)
            .text(`${item.label}`, posX, posY)
            .font('Helvetica-Bold')
-           .text(item.value, posX + 60, posY);
+           .text(item.value, posX + labelSpacing, posY, {
+               width: colWidth - labelSpacing, 
+               ellipsis: true 
+           });
     });
 }
 
