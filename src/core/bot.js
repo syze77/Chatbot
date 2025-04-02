@@ -30,7 +30,7 @@ const PROBLEM_MAPPINGS = require('./messages/problemMappings.json');
  * Configurações globais do sistema
  */
 const CONFIG = {
-    MESSAGE_DELAY: 10000,
+    MESSAGE_DELAY: 5000, 
     MAX_ACTIVE_CHATS: 3,
     MESSAGE_HISTORY_LIMIT: 50,
     DUPLICATE_MESSAGE_WINDOW: 60000,
@@ -606,7 +606,7 @@ async function sendFormattedMessage(conn, chatId, type) {
     switch (type) {
         case 'template':
             await sendMessage(conn, chatId, getRandomWelcomeMessage());
-            await new Promise(resolve => setTimeout(resolve, CONFIG.MESSAGE_DELAY));
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Changed from CONFIG.MESSAGE_DELAY to 5000
             await sendMessage(conn, chatId, greetings.template);
             break;
         default:
@@ -774,6 +774,10 @@ async function handleProblemSelection(conn, chatId, messageText, io) {
             userCurrentTopic[chatId] = { problem: 'Movimentação de Alunos', stage: 'subproblema' };
             break;
         case '5':
+            await sendMessage(conn, chatId, dialogs.rfaceContact);
+            await sendMessage(conn, chatId, greetings.template);
+            delete userCurrentTopic[chatId]; 
+            break;
         case '6':
             await sendMessage(conn, chatId, dialogs.describeIssue);
             userCurrentTopic[chatId] = { 
@@ -1098,26 +1102,32 @@ function sendProblemToFrontEnd(problemData) {
 // Fechar o chat
 async function closeChat(chatId, io) {
     try {
+        // Emitir atualização imediata para remover o card
+        io.emit('statusUpdate', {
+            activeChats: [],
+            waitingList: [],
+            problems: [],
+            completedChats: []
+        });
+
         // Marcar chat como concluído
-        await updateDatabaseAndNotify(
+        await getDatabase().run(
             `UPDATE problems 
              SET status = 'completed', 
              date_completed = datetime('now') 
              WHERE chatId = ?`,
-            [chatId],
-            io
+            [chatId]
         );
 
         // Obter próximo usuário na lista de espera
         const nextUser = await getNextInWaitingList();
         if (nextUser) {
             // Atualizar status do próximo usuário
-            await updateDatabaseAndNotify(
+            await getDatabase().run(
                 `UPDATE problems 
                  SET status = 'active' 
                  WHERE chatId = ?`,
-                [nextUser.chatId],
-                io
+                [nextUser.chatId]
             );
 
             // Enviar mensagem para o próximo usuário
