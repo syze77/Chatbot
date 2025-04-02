@@ -696,10 +696,10 @@ function capitalize(str) {
  */
 // Controle de mensagens recentes
 const recentMessages = new Map();
-const MESSAGE_TIMEOUT = 2000; // 2 segundos de intervalo mínimo entre mensagens idênticas
+const MESSAGE_TIMEOUT = 2000; 
 
 const sentMessages = new Map();
-const DEBOUNCE_TIME = 2000; // 2 segundos
+const DEBOUNCE_TIME = 2000; 
 
 
 async function sendMessage(conn, chatId, message) {
