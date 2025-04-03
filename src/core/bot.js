@@ -30,10 +30,10 @@ const PROBLEM_MAPPINGS = require('./messages/problemMappings.json');
  * Configurações globais do sistema
  */
 const CONFIG = {
-    MESSAGE_DELAY: 5000, 
+    MESSAGE_DELAY: 1500, // Reduzido para 1.5 segundos
     MAX_ACTIVE_CHATS: 3,
     MESSAGE_HISTORY_LIMIT: 50,
-    DUPLICATE_MESSAGE_WINDOW: 60000,
+    DUPLICATE_MESSAGE_WINDOW: 30000,
     DEFAULT_HEADLESS: false
 };
 
@@ -600,13 +600,13 @@ function getRandomWelcomeMessage() {
 }
 
 async function sendFormattedMessage(conn, chatId, type) {
-    
-    await new Promise(resolve => setTimeout(resolve, getRandomDelay()));
-    
     switch (type) {
         case 'template':
+            // Mantém delay inicial longo
+            await new Promise(resolve => setTimeout(resolve, getRandomDelay()));
             await sendMessage(conn, chatId, getRandomWelcomeMessage());
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Changed from CONFIG.MESSAGE_DELAY to 5000
+            // Reduz delay do template
+            await new Promise(resolve => setTimeout(resolve, 1500));
             await sendMessage(conn, chatId, greetings.template);
             break;
         default:
@@ -1102,15 +1102,7 @@ function sendProblemToFrontEnd(problemData) {
 // Fechar o chat
 async function closeChat(chatId, io) {
     try {
-        // Emitir atualização imediata para remover o card
-        io.emit('statusUpdate', {
-            activeChats: [],
-            waitingList: [],
-            problems: [],
-            completedChats: []
-        });
-
-        // Marcar chat como concluído
+        // Primeiro atualiza o banco
         await getDatabase().run(
             `UPDATE problems 
              SET status = 'completed', 
@@ -1119,10 +1111,25 @@ async function closeChat(chatId, io) {
             [chatId]
         );
 
-        // Obter próximo usuário na lista de espera
+        // Busca status atualizado imediatamente após a mudança
+        const [active, waiting, pending, completed] = await Promise.all([
+            queryDatabase('SELECT * FROM problems WHERE status = "active" ORDER BY date DESC'),
+            queryDatabase('SELECT * FROM problems WHERE status = "waiting" ORDER BY date ASC'),
+            queryDatabase('SELECT * FROM problems WHERE status = "pending" ORDER BY date DESC'),
+            queryDatabase('SELECT * FROM problems WHERE status = "completed" ORDER BY date_completed DESC LIMIT 10')
+        ]);
+
+        // Emite atualização com dados reais
+        io.emit('statusUpdate', {
+            activeChats: active,
+            waitingList: waiting,
+            problems: pending,
+            completedChats: completed
+        });
+
+        // Processa próximo usuário na fila
         const nextUser = await getNextInWaitingList();
         if (nextUser) {
-            // Atualizar status do próximo usuário
             await getDatabase().run(
                 `UPDATE problems 
                  SET status = 'active' 
@@ -1130,7 +1137,6 @@ async function closeChat(chatId, io) {
                 [nextUser.chatId]
             );
 
-            // Enviar mensagem para o próximo usuário
             await sendMessage(
                 botConnection,
                 nextUser.chatId,
@@ -1139,11 +1145,8 @@ async function closeChat(chatId, io) {
             await sendProblemOptions(botConnection, nextUser.chatId);
         }
 
-        // Atualizar posições de todos os usuários em espera
+        // Atualiza posições dos usuários em espera
         await updateWaitingUsers(io);
-        
-        // Buscar e transmitir atualização final de status
-        await sendStatusUpdateToMainProcess(io);
 
     } catch (error) {
         console.error(errors.processError.replace('%s', error));
