@@ -30,7 +30,7 @@ const PROBLEM_MAPPINGS = require('./messages/problemMappings.json');
  * Configurações globais do sistema
  */
 const CONFIG = {
-    MESSAGE_DELAY: 1500, // Reduzido para 1.5 segundos
+    MESSAGE_DELAY: 1500, 
     MAX_ACTIVE_CHATS: 3,
     MESSAGE_HISTORY_LIMIT: 50,
     DUPLICATE_MESSAGE_WINDOW: 30000,
@@ -61,7 +61,7 @@ const messageHistory = new Map();
 
 // Add these two new declarations
 const processedEvents = new Set();
-const EVENT_TIMEOUT = 2000; // 2 seconds timeout for duplicate events
+const EVENT_TIMEOUT = 2000; 
 
 /**
  * Template de boas-vindas e coleta de informações

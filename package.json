@@ -1,11 +1,11 @@
 {
     "name": "whatsapp-electron-bot",
     "version": "1.0.0",
-    "description": "Um chatbot para WhatsApp desenvolvido com Electron",
-    "author": "thg <ok.email@exemplo.com>",
+    "description": "Um chatbot para WhatsApp",
+    "author": "Redenet Soluções em TI <ok.email@exemplo.com>",
     "main": "src/electron/main.js",
     "scripts": {
-        "start": "concurrently \"npm run start-bot\" \"npm run start-electron\"",
+        "start": "electron .",
         "start-bot": "node src/core/bot.js",
         "start-electron": "electron .",
         "build": "electron-builder",
@@ -14,10 +14,10 @@
     },
     "build": {
         "appId": "com.yourcompany.whatsapp-bot",
-        "productName": "WhatsApp Bot",
+        "productName": "iEscolar Bot",
         "directories": {
             "output": "dist",
-            "buildResources": "assets/**"
+            "buildResources": "build"
         },
         "files": [
             "src/**/*",
@@ -31,30 +31,24 @@
         ],
         "extraResources": [
             {
-                "from": "src/core",
-                "to": "core",
-                "filter": [
-                    "**/*"
-                ]
+                "from": "./src/core",
+                "to": "./app/core",
+                "filter": ["**/*"]
             },
             {
-                "from": "components",
-                "to": "components",
-                "filter": [
-                    "**/*"
-                ]
+                "from": "./components",
+                "to": "./app/components",
+                "filter": ["**/*"]
             },
             {
-                "from": "assets",
-                "to": "assets",
-                "filter": [
-                    "**/*"
-                ]
+                "from": "./assets",
+                "to": "./app/assets",
+                "filter": ["**/*"]
             }
         ],
         "win": {
             "target": "nsis",
-            "icon": "assets/ico.ico",
+            "icon": "./assets/ico.ico",
             "signAndEditExecutable": false,
             "requestedExecutionLevel": "asInvoker"
         },
@@ -68,11 +62,10 @@
         "asarUnpack": [
             "node_modules/puppeteer-core/.local-chromium/**/*",
             "components/**/*",
-            "assets/**/*"
+            "assets/*"
         ]
     },
     "devDependencies": {
-        "concurrently": "^7.6.0",
         "electron": "^33.2.0",
         "electron-builder": "^26.0.12"
     },
