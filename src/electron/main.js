@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeTheme } = require('electron');
 const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -57,6 +57,14 @@ function createWindow() {
         width: 1200,
         height: 800,
         autoHideMenuBar: true,
+        frame: true,
+        backgroundColor: '#343a40',
+        titleBarStyle: 'default',
+        titleBarOverlay: {
+            color: '#343a40',
+            symbolColor: '#ffffff',
+            height: 30
+        },
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -65,6 +73,11 @@ function createWindow() {
             sandbox: true
         }
     });
+
+    win.setTitle('');
+    
+    // Remove focus listener and simplify theme handling
+    nativeTheme.themeSource = 'dark';
 
     // Configurar regras de segurança de conteúdo
     win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -89,11 +102,11 @@ function createWindow() {
     }
 }
 
-// Add express middleware
+
 server.use(express.json());
 server.use(express.urlencoded({ extended: true }));
 
-// Add CORS middleware
+
 server.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
@@ -277,6 +290,23 @@ function setupIpcHandlers() {
             return { contacts: [], ignoredContacts: [] };
         }
     });
+
+    // Simplify theme handler
+    ipcMain.handle('set-system-theme', (event, theme) => {
+        try {
+            const isDark = theme === 'dark';
+            const themeColor = isDark ? '#343a40' : '#ffffff';
+            const symbolColor = isDark ? '#ffffff' : '#000000';
+            
+            nativeTheme.themeSource = theme;
+            win.setBackgroundColor(themeColor);
+            
+            return theme;
+        } catch (error) {
+            console.error('Erro ao alterar tema:', error);
+            throw error;
+        }
+    });
 }
 
 // Inicialização do aplicativo
@@ -298,6 +328,7 @@ app.whenReady().then(async () => {
                 win.webContents.send('statusUpdate', initialData);
             });
         }
+        
     } catch (error) {
         console.error('Erro durante a inicialização:', error);
         app.quit();

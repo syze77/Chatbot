@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getTheme: () => localStorage.getItem('theme'),
     setTheme: (theme) => localStorage.setItem('theme', theme),
 
+    setSystemTheme: (theme) => ipcRenderer.invoke('set-system-theme', theme),
+
     invoke: async (channel, data) => {
         console.log('Enviando para canal:', channel, 'dados:', data);
         

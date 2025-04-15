@@ -179,7 +179,7 @@ class Sidebar {
         }
     }
 
-    static initializeTheme() {
+    static async initializeTheme() {
         const savedTheme = localStorage.getItem('theme');
         if (savedTheme === 'dark') {
             document.body.classList.add('dark-theme');
@@ -187,22 +187,31 @@ class Sidebar {
             const text = document.querySelector('.theme-toggle span');
             icon.classList.replace('fa-moon', 'fa-sun');
             text.textContent = 'Modo Claro';
+            await window.electronAPI.setSystemTheme('dark');
         }
     }
 
-    static toggleTheme() {
-        document.body.classList.toggle('dark-theme');
-        const icon = document.querySelector('.theme-toggle i');
-        const text = document.querySelector('.theme-toggle span');
-        
-        if (document.body.classList.contains('dark-theme')) {
-            icon.classList.replace('fa-moon', 'fa-sun');
-            text.textContent = 'Modo Claro';
-            localStorage.setItem('theme', 'dark');
-        } else {
-            icon.classList.replace('fa-sun', 'fa-moon');
-            text.textContent = 'Modo Escuro';
-            localStorage.setItem('theme', 'light');
+    static async toggleTheme() {
+        try {
+            document.body.classList.toggle('dark-theme');
+            const icon = document.querySelector('.theme-toggle i');
+            const text = document.querySelector('.theme-toggle span');
+            
+            const isDark = document.body.classList.contains('dark-theme');
+            
+            if (isDark) {
+                icon.classList.replace('fa-moon', 'fa-sun');
+                text.textContent = 'Modo Claro';
+                localStorage.setItem('theme', 'dark');
+                await window.electronAPI.setSystemTheme('dark');
+            } else {
+                icon.classList.replace('fa-sun', 'fa-moon');
+                text.textContent = 'Modo Escuro';
+                localStorage.setItem('theme', 'light');
+                await window.electronAPI.setSystemTheme('light');
+            }
+        } catch (error) {
+            console.error('Erro ao alternar tema:', error);
         }
     }
 }
