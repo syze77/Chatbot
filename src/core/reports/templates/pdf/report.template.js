@@ -1,7 +1,7 @@
 const PDFDocument = require('pdfkit');
 const { format, parseISO } = require('date-fns');
 
-const labelSpacing = 50; // Add this constant at the top level of the file
+const labelSpacing = 50; 
 
 function generatePDFReport(doc, problems, startDate, endDate) {
     // Configurações de estilo
