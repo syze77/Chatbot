@@ -93,13 +93,13 @@ function addSummary(doc, problems, startDate, endDate, margin, pageWidth, colors
     const boxWidth = pageWidth / metrics.length;
     metrics.forEach((metric, index) => {
         const x = margin + (index * boxWidth);
-        doc.rect(x, summaryTop + 60, boxWidth - 10, 50)
+        doc.rect(x, summaryTop + 60, boxWidth - 3, 50)
            .fillColor(colors.secondary)
            .fill()
            .fontSize(14)
            .fillColor('white')
            .text(metric.value.toString(), x + 10, summaryTop + 70)
-           .fontSize(10)
+           .fontSize(9)
            .text(metric.label.toUpperCase(), x + 10, summaryTop + 90);
     });
 
