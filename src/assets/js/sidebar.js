@@ -52,6 +52,14 @@ class Sidebar {
                             </a>
                         </li>
                         <li>
+                            <a href="../../components/cards/index.html" id="cards-link" class="nav-item">
+                                <div class="nav-icon">
+                                    <i class="fas fa-tasks"></i>
+                                </div>
+                                <span class="nav-text">Cards</span>
+                            </a>
+                        </li>
+                        <li>
                             <a href="../../components/dashboard/index.html" id="dashboard-link" class="nav-item">
                                 <div class="nav-icon">
                                     <i class="fas fa-chart-line"></i>

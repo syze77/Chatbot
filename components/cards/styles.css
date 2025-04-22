@@ -1,0 +1,251 @@
+body {
+    display: flex;
+    font-family: 'Inter', sans-serif;
+    background-color: #f8f9fa;
+}
+.sidebar {
+    width: 250px;
+    background: #343a40;
+    color: white;
+    min-height: 100vh;
+    transition: width 0.3s;
+}
+.sidebar.collapsed {
+    width: 60px;
+}
+.sidebar h1, .sidebar ul {
+    margin: 10px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.sidebar h1 {
+    font-size: 1.5rem;
+}
+.sidebar ul li {
+    list-style: none;
+    margin: 15px 0;
+}
+.sidebar ul li a {
+    color: white;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    padding: 5px 10px;
+    transition: background-color 0.3s;
+}
+.sidebar ul li a:hover {
+    background-color: #495057;
+    border-radius: 5px;
+}
+.sidebar ul li a i {
+    margin-right: 10px;
+}
+.sidebar.collapsed h1, .sidebar.collapsed ul li a span {
+    display: none;
+}
+.cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    padding: 20px;
+}
+
+.card-item {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.card-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.card-status {
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-pending {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.status-completed {
+    background-color: #28a745;
+    color: #fff;
+}
+
+.card-info {
+    margin-bottom: 15px;
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: #6c757d;
+}
+
+.card-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+}
+
+.card-link {
+    color: #17a2b8;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.complete-btn {
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: none;
+    background-color: #28a745;
+    color: white;
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.complete-btn:hover {
+    background-color: #218838;
+    transform: translateY(-2px);
+}
+
+.complete-btn:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Dark theme styles */
+.dark-theme .card-item {
+    background: #2D2D2D;
+    border-color: #3a3b3c;
+}
+
+.dark-theme .card-title {
+    color: #E4E6EF;
+}
+
+.dark-theme .info-item {
+    color: #a2a3b7;
+}
+
+.dark-theme .card-link {
+    color: #3699FF;
+}
+
+@media (max-width: 768px) {
+    .cards-container {
+        grid-template-columns: 1fr;
+        padding: 10px;
+    }
+
+    .filter-section {
+        padding: 15px;
+    }
+
+    .filter-container {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .filter-group {
+        width: 100%;
+    }
+
+    .card-item {
+        margin: 10px 0;
+    }
+
+    .card-actions {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .card-actions button,
+    .card-actions a {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+.header {
+    margin: 0 0 20px 0;
+    padding: 20px;
+    border-radius: 10px;
+    position: relative;
+    z-index: 1;
+}
+
+.toggle-btn {
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 5px;
+    margin-right: 15px;
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .toggle-btn {
+        display: block;
+    }
+    
+    .header {
+        display: flex;
+        align-items: center;
+    }
+}
+
+.theme-toggle {
+    font-size: 0.95rem;
+}
+
+.theme-toggle i,
+.theme-toggle span {
+    color: #ffffff;
+}
+
+.dark-theme .theme-toggle i,
+.dark-theme .theme-toggle span {
+    color: #ffffff;
+}
+
+@media (min-width: 769px) {
+    .header {
+        margin: 0 0 20px 0;
+        border-radius: 10px;
+    }
+}

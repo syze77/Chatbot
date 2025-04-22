@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciamento de Cards</title>
+    <link rel="stylesheet" href="../../components/styles.css">
+    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+</head>
+<body>
+    <!-- Container para a Sidebar -->
+    <div id="sidebar-container"></div>
+
+    <!-- Conteúdo principal -->
+    <div class="content">
+        <!-- Header -->
+        <div class="header">
+                        <h2> Gerenciamento de Cards</h2>
+        </div>
+
+        <!-- Seção de filtros -->
+        <div class="filter-section">
+            <div class="filter-container">
+                <div class="filter-group">
+                    <label for="statusFilter">Status</label>
+                    <select class="form-control" id="statusFilter">
+                        <option value="all">Todos</option>
+                        <option value="pending">Pendentes</option>
+                        <option value="completed">Concluídos</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="dateFilter">Data</label>
+                    <input type="date" class="form-control" id="dateFilter">
+                </div>
+                <button class="apply-filter-btn" id="applyFilter">
+                    <i class="fas fa-filter"></i>
+                    Aplicar Filtros
+                </button>
+            </div>
+        </div>
+
+        <!-- Container dos cards -->
+        <div class="cards-container" id="cardsContainer">
+            <!-- Cards serão inseridos aqui dinamicamente -->
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="../../src/assets/js/sidebar.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../../src/routes/cards.js"></script>
+</body>
+</html>
