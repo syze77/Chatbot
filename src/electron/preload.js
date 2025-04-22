@@ -5,7 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Método para abrir um chat do WhatsApp
     openWhatsAppChat: (chatId) => {
         console.log('Preload: Abrindo chat para:', chatId);
-        return ipcRenderer.send('redirectToChat', chatId);
+        return ipcRenderer.invoke('openWhatsAppChat', chatId);
     },
     
     navigate: (path) => ipcRenderer.send('navigate', path),

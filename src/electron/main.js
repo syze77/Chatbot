@@ -159,7 +159,9 @@ function setupIpcHandlers() {
 
     ipcMain.handle('openWhatsAppChat', async (event, chatId) => {
         try {
-            await redirectToWhatsAppChat(chatId);
+            console.log('Main: Tentando abrir chat para:', chatId);
+            const result = await redirectToWhatsAppChat(chatId);
+            return result;
         } catch (error) {
             console.error('Erro ao abrir chat do WhatsApp:', error);
             throw error;

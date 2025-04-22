@@ -138,157 +138,6 @@ function displayProblem(description, chatId, userName) {
     problemListContainer.insertBefore(problemItem, problemListContainer.firstChild);
 }
 
-// Sistema de notificações
-async function showNotification(title, data) {
-    try {
-        if (!window.isSecureContext) {
-            console.error('Notificações requerem contexto seguro (HTTPS ou localhost)');
-            return;
-        }
-
-        if (!('Notification' in window)) {
-            console.error('Este navegador não suporta notificações');
-            return;
-        }
-
-        if (Notification.permission === 'default') {
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') return;
-        }
-
-        if (Notification.permission === 'granted') {
-            createNotification(title, data);
-        }
-    } catch (error) {
-        console.error('Erro ao mostrar notificação:', error);
-    }
-}
-
-function createNotification(title, data) {
-    try {
-        console.log('Dados recebidos na notificação:', data); 
-
-        const isStringData = typeof data === 'string';
-        
-        let notificationBody;
-        
-        if (isStringData) {
-            notificationBody = data;
-        } else {
-            const lines = [];
-            if (data.name) lines.push(`Nome: ${data.name}`);
-            if (data.position) lines.push(`Cargo: ${data.position}`);
-            if (data.school) lines.push(`Escola: ${data.school}`);
-            if (data.city) lines.push(`Cidade: ${data.city}`);
-            if (data.description) lines.push(`Problema: ${data.description}`);
-            
-            notificationBody = lines.join('\n');
-        }
-
-        console.log('Corpo da notificação:', notificationBody);
-
-        const options = {
-            body: notificationBody,
-            icon: '../../../assets/notification-icon.png',
-            badge: '../../../assets/badge-icon.png',
-            tag: `problem-${isStringData ? Date.now() : data.chatId}`,
-            renotify: true,
-            requireInteraction: true,
-            silent: false,
-            data: data
-        };
-
-        const notification = new Notification(title, options);
-
-        notification.onclick = function(event) {
-            event.preventDefault();
-            window.focus();
-            
-            if (!isStringData && data.chatId) {
-                const problemElement = document.querySelector(`[data-chat-id="${data.chatId}"]`);
-                if (problemElement) {
-                    problemElement.scrollIntoView({ behavior: 'smooth' });
-                    problemElement.classList.add('highlight');
-                    
-                    setTimeout(() => {
-                        problemElement.classList.remove('highlight');
-                    }, 2000);
-                }
-            }
-            
-            this.close();
-        };
-
-        notification.onshow = function() {
-            playNotificationSound();
-            showBellIcon();
-        };
-
-        setTimeout(() => {
-            notification.close();
-        }, 30000);
-
-        return notification;
-    } catch (error) {
-        console.error('Erro ao criar notificação:', error);
-        return null;
-    }
-}
-
-function playNotificationSound() {
-    try {
-        const sound = document.getElementById('notification-sound');
-        if (sound) {
-            sound.currentTime = 0;
-            const playPromise = sound.play();
-            if (playPromise !== undefined) {
-                playPromise.catch((error) => {
-                    console.log('Erro ao reproduzir som:', error);
-                });
-            }
-        }
-    } catch (error) {
-        console.error('Erro ao reproduzir som de notificação:', error);
-    }
-}
-
-function showBellIcon() {
-    const problemHeader = document.querySelector('.status-header i.fa-exclamation-triangle');
-    if (problemHeader) {
-        problemHeader.classList.add('fa-bell', 'notification-animation');
-        setTimeout(() => {
-            problemHeader.classList.remove('notification-animation');
-        }, 1000);
-    }
-}
-
-// Adicionar estilos de notificação
-const notificationStyles = document.createElement('style');
-notificationStyles.textContent = `
-    .notification-animation {
-        animation: bell-ring 1s ease;
-    }
-
-    @keyframes bell-ring {
-        0% { transform: rotate(0); }
-        20% { transform: rotate(15deg); }
-        40% { transform: rotate(-15deg); }
-        60% { transform: rotate(7deg); }
-        80% { transform: rotate(-7deg); }
-        100% { transform: rotate(0); }
-    }
-
-    .highlight {
-        animation: highlight-pulse 2s ease;
-    }
-
-    @keyframes highlight-pulse {
-        0% { background-color: rgba(255, 193, 7, 0.5); }
-        100% { background-color: transparente; }
-    }
-`;
-document.head.appendChild(notificationStyles);
-
 function updateSection(items, container, type, includePosition = false) {
     if (!container) return;
     
@@ -443,15 +292,18 @@ async function handleAttendProblem(problem) {
             // Aguarda um pequeno delay para garantir que o servidor processou
             await new Promise(resolve => setTimeout(resolve, 500));
 
-            // Redireciona para o WhatsApp
-            console.log('Redirecionando para WhatsApp:', problem.chatId);
-            
             // Garante que o chatId está no formato correto
             let whatsappId = problem.chatId;
             if (!whatsappId.includes('@')) {
                 whatsappId = `${whatsappId}@c.us`;
             }
-            window.electron.openWhatsAppChat(whatsappId);
+
+            try {
+                await window.electronAPI.openWhatsAppChat(whatsappId);
+            } catch (error) {
+                console.error('Erro ao abrir chat:', error);
+                alert('Erro ao abrir chat do WhatsApp. Por favor, tente novamente.');
+            }
         }
     } catch (error) {
         console.error('Erro ao atender problema:', error);
