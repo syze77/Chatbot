@@ -90,10 +90,12 @@ function addSummary(doc, problems, startDate, endDate, margin, pageWidth, colors
         .text(`${formattedStartDate} - ${formattedEndDate}`, margin + 200, summaryTop + 20);
 
     const totalMinutes = problems.reduce((acc, curr) => acc + parseInt(curr.duration_minutes), 0);
+    const averageTime = problems.length > 0 ? (totalMinutes / problems.length) : 0;
+
     const metrics = [
         { label: 'Total de Atendimentos', value: problems.length },
         { label: 'Tempo Total (h)', value: (totalMinutes / 60).toFixed(1) },
-        { label: 'Tempo Médio/Atendimento (h)', value: ((totalMinutes / problems.length) / 60).toFixed(1) }
+        { label: 'Tempo Médio/Atendimento (h)', value: (averageTime / 60).toFixed(1) }
     ];
 
     const boxWidth = pageWidth / metrics.length;
@@ -124,6 +126,15 @@ function addProblemDetails(doc, problem, margin, pageWidth, colors) {
         .font('Helvetica-Bold')
         .text(`ATENDIMENTO #${problem.sequentialNumber}`, margin, startY, { underline: true });
 
+    const duration = parseInt(problem.duration_minutes);
+    const hours = Math.floor(duration / 60);
+    const minutes = duration % 60;
+    const durationText = hours > 0 
+        ? minutes > 0 
+            ? `${hours}h${minutes}min`
+            : `${hours}h`
+        : `${minutes}min`;
+
     const details = [
         { label: 'Data:', value: problem.formatted_date },
         { label: 'Status:', value: getStatusBadge(problem.status) },
@@ -131,7 +142,7 @@ function addProblemDetails(doc, problem, margin, pageWidth, colors) {
         { label: 'Cidade:', value: problem.city },
         { label: 'Escola:', value: problem.school },
         { label: 'Cargo:', value: problem.position },
-        { label: 'Duração:', value: `${problem.duration_minutes}min` }
+        { label: 'Duração:', value: durationText }
     ];
 
     createDetailGrid(doc, details, margin, doc.y + 15, pageWidth, colors);
