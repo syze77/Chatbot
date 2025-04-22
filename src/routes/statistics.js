@@ -49,7 +49,7 @@ router.get('/api/statistics/getChartData', async (req, res) => {
                 UNION ALL
                 SELECT date(date, '+1 day')
                 FROM dates
-                WHERE date < date('now', 'weekday 4')
+                WHERE date < date('now', 'weekday 5')
             )
             SELECT 
                 dates.date,
