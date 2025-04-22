@@ -279,32 +279,73 @@ function createItemElement(item, type, includePosition) {
 // Função para manipular o atendimento de um problema
 async function handleAttendProblem(problem) {
     try {
-        const confirmAttend = confirm(`Deseja atender o problema relatado por ${problem.name}?`);
-        if (confirmAttend) {
-            console.log('Iniciando atendimento para:', problem);
+        const modal = new bootstrap.Modal(document.getElementById('attendantModal'));
+        modal.show();
 
-            // Emite evento para o servidor
-            socket.emit('attendProblem', {
-                chatId: problem.chatId,
-                attendantId: 'CURRENT_USER_ID'
+        return new Promise((resolve, reject) => {
+            const confirmBtn = document.getElementById('confirmAttendBtn');
+            const attendantSelect = document.getElementById('attendantSelect');
+            const attendantInput = document.getElementById('attendantName');
+            const otherAttendantGroup = document.getElementById('otherAttendantGroup');
+
+            // Mostrar/ocultar campo de input baseado na seleção
+            attendantSelect.addEventListener('change', () => {
+                otherAttendantGroup.style.display = 
+                    attendantSelect.value === 'outro' ? 'block' : 'none';
+                if (attendantSelect.value !== 'outro') {
+                    attendantInput.value = '';
+                }
             });
+            
+            const handleConfirm = async () => {
+                let attendantName = attendantSelect.value;
+                
+                if (attendantName === 'outro') {
+                    attendantName = attendantInput.value.trim();
+                    if (!attendantName) {
+                        alert('Por favor, insira o nome do atendente');
+                        return;
+                    }
+                }
 
-            // Aguarda um pequeno delay para garantir que o servidor processou
-            await new Promise(resolve => setTimeout(resolve, 500));
+                modal.hide();
+                confirmBtn.removeEventListener('click', handleConfirm);
 
-            // Garante que o chatId está no formato correto
-            let whatsappId = problem.chatId;
-            if (!whatsappId.includes('@')) {
-                whatsappId = `${whatsappId}@c.us`;
-            }
+                try {
+                    console.log('Iniciando atendimento para:', problem);
 
-            try {
-                await window.electronAPI.openWhatsAppChat(whatsappId);
-            } catch (error) {
-                console.error('Erro ao abrir chat:', error);
-                alert('Erro ao abrir chat do WhatsApp. Por favor, tente novamente.');
-            }
-        }
+                    socket.emit('attendProblem', {
+                        chatId: problem.chatId,
+                        attendantId: attendantName,
+                        problemDescription: problem.description
+                    });
+
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    let whatsappId = problem.chatId;
+                    if (!whatsappId.includes('@')) {
+                        whatsappId = `${whatsappId}@c.us`;
+                    }
+
+                    await window.electronAPI.openWhatsAppChat(whatsappId);
+                    resolve();
+                } catch (error) {
+                    console.error('Erro ao abrir chat:', error);
+                    alert('Erro ao abrir chat do WhatsApp. Por favor, tente novamente.');
+                    reject(error);
+                }
+            };
+
+            confirmBtn.addEventListener('click', handleConfirm);
+            
+            document.getElementById('attendantModal').addEventListener('hidden.bs.modal', () => {
+                attendantSelect.value = 'Júnior Araújo'; 
+                otherAttendantGroup.style.display = 'none';
+                attendantInput.value = '';
+                confirmBtn.removeEventListener('click', handleConfirm);
+                resolve();
+            }, { once: true });
+        });
     } catch (error) {
         console.error('Erro ao atender problema:', error);
         alert('Erro ao iniciar atendimento. Por favor, tente novamente.');
@@ -313,8 +354,35 @@ async function handleAttendProblem(problem) {
 
 // Função para finalizar um atendimento
 function handleEndChat(chat) {
-    const confirmEnd = confirm(`Deseja finalizar o atendimento de ${chat.name}?`);
-    if (confirmEnd) {
+    const modal = new bootstrap.Modal(document.getElementById('endChatModal'));
+    const cardCreatedSelect = document.getElementById('cardCreatedSelect');
+    const cardLinkGroup = document.getElementById('cardLinkGroup');
+    const cardLinkInput = document.getElementById('cardLink');
+    const confirmEndBtn = document.getElementById('confirmEndBtn');
+
+    // Reset do modal
+    cardCreatedSelect.value = 'no';
+    cardLinkGroup.style.display = 'none';
+    cardLinkInput.value = '';
+
+    // Mostrar/ocultar campo de link baseado na seleção
+    cardCreatedSelect.addEventListener('change', () => {
+        cardLinkGroup.style.display = 
+            cardCreatedSelect.value === 'yes' ? 'block' : 'none';
+        if (cardCreatedSelect.value === 'no') {
+            cardLinkInput.value = '';
+        }
+    });
+
+    // Handler para confirmar finalização
+    const handleConfirm = () => {
+        if (cardCreatedSelect.value === 'yes' && !cardLinkInput.value.trim()) {
+            alert('Por favor, insira o link do card');
+            return;
+        }
+
+        modal.hide();
+        
         // Remove o item da lista de problemas
         const problemItem = Array.from(problemListContainer.children)
             .find(item => item.dataset.chatId === chat.chatId);
@@ -325,14 +393,22 @@ function handleEndChat(chat) {
         // Notifica o servidor sobre o fim do atendimento
         socket.emit('endChat', {
             chatId: chat.chatId,
-            id: chat.id
+            id: chat.id,
+            cardCreated: cardCreatedSelect.value === 'yes',
+            cardLink: cardLinkInput.value.trim()
         });
 
         // Atualiza mensagem quando não há mais problemas
         if (problemListContainer.children.length === 0) {
             problemListContainer.innerHTML = '<div class="empty-message">Nenhum problema relatado.</div>';
         }
-    }
+
+        // Remove event listeners
+        confirmEndBtn.removeEventListener('click', handleConfirm);
+    };
+
+    confirmEndBtn.addEventListener('click', handleConfirm);
+    modal.show();
 }
 
 // Buscar dados do banco de dados SQLite e atualizar a UI
@@ -482,7 +558,7 @@ const additionalStyles = `
 
 style.textContent += additionalStyles;
 
-// Adicionar novos estilos para a badge de posição na fila
+//Badge de posição na fila
 const queueStyles = document.createElement('style');
 queueStyles.textContent = `
     .queue-badge {
@@ -507,3 +583,217 @@ queueStyles.textContent = `
     }
 `;
 document.head.appendChild(queueStyles);
+
+const modalHTML = `
+<div id="attendantModal" class="modal fade custom-modal" tabindex="-1" style="display: none;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-headset"></i>
+                    Iniciar Atendimento
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="attendantSelect">Selecione o Atendente:</label>
+                    <select class="form-control" id="attendantSelect">
+                        <option value="Júnior Araújo">Júnior Araújo</option>
+                        <option value="Júnior Parnaiba">Júnior Parnaiba</option>
+                        <option value="outro">Outro</option>
+                    </select>
+                </div>
+                <div class="form-group mt-3" id="otherAttendantGroup" style="display: none;">
+                    <label for="attendantName">Nome do Atendente:</label>
+                    <input type="text" class="form-control" id="attendantName" placeholder="Digite o nome do atendente">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="confirmAttendBtn">
+                    <i class="fas fa-check"></i>
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>`;
+
+document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+const modalStyles = `
+    .custom-modal .modal-content {
+        border: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        background-color: #ffffff;
+        color: #212529;
+    }
+
+    .custom-modal .modal-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 1rem;
+    }
+
+    .custom-modal .form-control {
+        background-color: #ffffff;
+        border-color: #ced4da;
+        color: #212529;
+    }
+
+    .dark-theme .custom-modal .modal-content {
+        background-color: #2b3035;
+        color: #e9ecef;
+        border: 1px solid #495057;
+    }
+
+    .dark-theme .custom-modal .modal-header {
+        background-color: #343a40;
+        border-color: #495057;
+    }
+
+    .dark-theme .custom-modal .modal-footer {
+        background-color: #343a40;
+        border-color: #495057;
+    }
+
+    .dark-theme .custom-modal .modal-body {
+        background-color: #2b3035;
+    }
+
+    .dark-theme .custom-modal .form-control {
+        background-color: #212529;
+        border-color: #495057;
+        color: #e9ecef;
+    }
+
+    .dark-theme .custom-modal .form-control:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    .dark-theme .custom-modal .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
+    }
+
+    .dark-theme .custom-modal label {
+        color: #e9ecef;
+    }
+
+    .dark-theme .custom-modal .form-control::placeholder {
+        color: #6c757d;
+    }
+
+    .dark-theme .custom-modal .btn-outline-secondary {
+        color: #e9ecef;
+        border-color: #6c757d;
+    }
+
+    .dark-theme .custom-modal .btn-outline-secondary:hover {
+        background-color: #6c757d;
+        color: #fff;
+    }
+
+    .custom-modal .modal-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .custom-modal .modal-title i {
+        color: #28a745;
+    }
+
+    .custom-modal .modal-body {
+        padding: 1.5rem;
+    }
+
+    .custom-modal .form-group label {
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .custom-modal .form-control {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.95rem;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+    }
+
+    .custom-modal .form-control:focus {
+        border-color: #28a745;
+        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+    }
+
+    .custom-modal .modal-footer {
+        padding: 1rem;
+        gap: 8px;
+    }
+
+    .custom-modal .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .custom-modal .btn-success {
+        background-color: #28a745;
+        border-color: #28a745;
+        color: #fff;
+    }
+
+    .custom-modal .btn-success:hover {
+        background-color: #218838;
+        border-color: #1e7e34;
+    }
+
+    .custom-modal .modal-content,
+    .custom-modal .form-control,
+    .custom-modal .btn {
+        transition: all 0.2s ease-in-out;
+    }
+`;
+
+style.textContent += modalStyles;
+
+document.body.insertAdjacentHTML('beforeend', `
+<div id="endChatModal" class="modal fade custom-modal" tabindex="-1" style="display: none;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-check-circle"></i>
+                    Finalizar Atendimento
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="cardCreatedSelect">Foi necessário criar um card?</label>
+                    <select class="form-control" id="cardCreatedSelect">
+                        <option value="no">Não</option>
+                        <option value="yes">Sim</option>
+                    </select>
+                </div>
+                <div class="form-group mt-3" id="cardLinkGroup" style="display: none;">
+                    <label for="cardLink">Link do Card:</label>
+                    <input type="text" class="form-control" id="cardLink" placeholder="Cole o link do card aqui">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="confirmEndBtn">
+                    <i class="fas fa-check"></i>
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>`);
