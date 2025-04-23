@@ -353,19 +353,17 @@ async function handleAttendProblem(problem) {
 }
 
 // Função para finalizar um atendimento
-function handleEndChat(chat) {
+async function handleEndChat(chat) {
     const modal = new bootstrap.Modal(document.getElementById('endChatModal'));
     const cardCreatedSelect = document.getElementById('cardCreatedSelect');
     const cardLinkGroup = document.getElementById('cardLinkGroup');
     const cardLinkInput = document.getElementById('cardLink');
     const confirmEndBtn = document.getElementById('confirmEndBtn');
 
-    // Reset do modal
     cardCreatedSelect.value = 'no';
     cardLinkGroup.style.display = 'none';
     cardLinkInput.value = '';
 
-    // Mostrar/ocultar campo de link baseado na seleção
     cardCreatedSelect.addEventListener('change', () => {
         cardLinkGroup.style.display = 
             cardCreatedSelect.value === 'yes' ? 'block' : 'none';
@@ -374,15 +372,14 @@ function handleEndChat(chat) {
         }
     });
 
-    // Handler para confirmar finalização
-    const handleConfirm = () => {
+    const handleConfirm = async () => {
         if (cardCreatedSelect.value === 'yes' && !cardLinkInput.value.trim()) {
             alert('Por favor, insira o link do card');
             return;
         }
 
         modal.hide();
-        
+
         // Remove o item da lista de problemas
         const problemItem = Array.from(problemListContainer.children)
             .find(item => item.dataset.chatId === chat.chatId);
@@ -390,7 +387,21 @@ function handleEndChat(chat) {
             problemItem.remove();
         }
 
-        // Notifica o servidor sobre o fim do atendimento
+        // Criar card apenas se necessário
+        if (cardCreatedSelect.value === 'yes') {
+            try {
+                // Usar a API do módulo de cards
+                socket.emit('createCard', {
+                    chatId: chat.chatId,
+                    cardLink: cardLinkInput.value.trim()
+                });
+            } catch (error) {
+                console.error('Erro ao criar card:', error);
+                alert('Erro ao criar o card. O atendimento será finalizado mesmo assim.');
+            }
+        }
+
+        // Notificar sobre o fim do atendimento
         socket.emit('endChat', {
             chatId: chat.chatId,
             id: chat.id,
@@ -398,12 +409,10 @@ function handleEndChat(chat) {
             cardLink: cardLinkInput.value.trim()
         });
 
-        // Atualiza mensagem quando não há mais problemas
         if (problemListContainer.children.length === 0) {
             problemListContainer.innerHTML = '<div class="empty-message">Nenhum problema relatado.</div>';
         }
 
-        // Remove event listeners
         confirmEndBtn.removeEventListener('click', handleConfirm);
     };
 

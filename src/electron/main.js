@@ -10,10 +10,14 @@ const { getAllContacts, saveIgnoredContacts } = require('../core/contacts/contac
 const statisticsRoutes = require('../routes/statistics.js');
 const filtersRoutes = require('../routes/filters.js');
 const reportsRoutes = require('../routes/reports.js');
+const problemCardsRoutes = require('../routes/api/problemCards.js'); // Add this line
 
 // Configuração do servidor HTTP e Socket.IO
 const httpServer = http.createServer(server);
 const io = socketIo(httpServer);
+
+// Add Socket.IO instance to app for use in routes
+server.set('io', io);
 
 let win;
 
@@ -57,7 +61,6 @@ function createWindow() {
     win = new BrowserWindow({
         width: 1200,
         height: 800,
-        autoHideMenuBar: true,
         frame: true,
         backgroundColor: '#343a40',
         titleBarStyle: 'default',
@@ -110,6 +113,7 @@ server.use(express.urlencoded({ extended: true }));
 
 server.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
     next();
 });
@@ -118,6 +122,7 @@ server.use((req, res, next) => {
 server.use('/', statisticsRoutes);
 server.use('/', filtersRoutes);
 server.use('/', reportsRoutes);
+server.use('/api/problem-cards', problemCardsRoutes); // Add this line
 
 // Configuração das rotas do servidor
 server.get('/getProblemsData', async (req, res) => {

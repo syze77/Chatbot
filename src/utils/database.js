@@ -17,8 +17,6 @@ function initializeDatabase() {
             fs.mkdirSync(dataDir, { recursive: true });
         }
 
-        const dbExists = fs.existsSync(dbPath);
-
         db = new sqlite3.Database(dbPath, (err) => {
             if (err) {
                 console.error('Erro ao abrir o banco de dados:', err);
@@ -26,50 +24,55 @@ function initializeDatabase() {
                 return;
             }
 
-            console.log(dbExists ? 'Conectado ao banco de dados SQLite existente.' : 'Criando novo banco de dados SQLite.');
+            console.log('Conectado ao banco de dados SQLite.');
 
-            // Só cria as tabelas se o banco for novo
-            if (!dbExists) {
-                db.serialize(() => {
-                    // Definição da estrutura da tabela 'problems'
-                    db.run(`CREATE TABLE IF NOT EXISTS problems (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        date TEXT,
-                        name TEXT,
-                        city TEXT,
-                        position TEXT,
-                        school TEXT,
-                        chatId TEXT,
-                        description TEXT,
-                        status TEXT DEFAULT 'pending',
-                        date_completed TEXT DEFAULT NULL,
-                        attendant_id TEXT
-                    )`, (err) => {
-                        if (err) {
-                            console.error('Erro ao criar tabela:', err);
-                            reject(err);
-                            return;
-                        }
-                        console.log('Banco de dados inicializado com sucesso');
-                    });
-
-                    db.run(`CREATE TABLE IF NOT EXISTS ignored_contacts (
-                        id TEXT PRIMARY KEY,
-                        name TEXT,
-                        number TEXT,
-                        date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )`, (err) => {
-                        if (err) {
-                            console.error('Erro ao criar tabela:', err);
-                            reject(err);
-                            return;
-                        }
-                        resolve(db);
-                    });
+            // Sempre criar/verificar todas as tabelas, independente se o banco é novo ou não
+            db.serialize(() => {
+                // Criação da tabela problem_cards
+                db.run(`CREATE TABLE IF NOT EXISTS problem_cards (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chatId TEXT NOT NULL,
+                    card_link TEXT NOT NULL,
+                    card_status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
+                    updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
+                )`, (err) => {
+                    if (err) {
+                        console.error('Erro ao criar tabela problem_cards:', err);
+                        reject(err);
+                        return;
+                    }
+                    console.log('Tabela problem_cards verificada/criada com sucesso');
                 });
-            } else {
+
+                // Criação das outras tabelas
+                db.run(`CREATE TABLE IF NOT EXISTS problems (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT,
+                    name TEXT,
+                    city TEXT,
+                    position TEXT,
+                    school TEXT,
+                    chatId TEXT,
+                    description TEXT,
+                    status TEXT DEFAULT 'pending',
+                    date_completed TEXT DEFAULT NULL,
+                    attendant_id TEXT
+                )`);
+
+                db.run(`CREATE TABLE IF NOT EXISTS ignored_contacts (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    number TEXT,
+                    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )`);
+
+                // Adicionar índices para melhor performance
+                db.run(`CREATE INDEX IF NOT EXISTS idx_problem_cards_chatid ON problem_cards(chatId)`);
+                db.run(`CREATE INDEX IF NOT EXISTS idx_problem_cards_status ON problem_cards(card_status)`);
+                
                 resolve(db);
-            }
+            });
         });
     });
 }

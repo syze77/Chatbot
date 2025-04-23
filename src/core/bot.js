@@ -253,8 +253,52 @@ function setupIpcListeners(io) {
 }
 
 function setupSocketListeners(io) {
-  // Socket listeners são configurados na função startHydraBot
-  console.log(logs.socketConfigured);
+    console.log(logs.socketConfigured);
+    
+    // Adicionar handler para criação de cards
+    io.on('connection', (socket) => {
+        socket.on('createCard', async (data) => {
+            try {
+                console.log('Recebendo solicitação de criação de card:', data);
+                const { chatId, cardLink } = data;
+                
+                const db = getDatabase();
+                const query = `INSERT INTO problem_cards (chatId, card_link, card_status) 
+                             VALUES (?, ?, 'pending')`;
+                
+                db.run(query, [chatId, cardLink], function(err) {
+                    if (err) {
+                        console.error('Erro ao criar card:', err);
+                        socket.emit('cardError', { error: 'Erro ao salvar o card' });
+                        return;
+                    }
+                    
+                    // Buscar o card criado
+                    db.get('SELECT * FROM problem_cards WHERE id = ?', [this.lastID], (err, card) => {
+                        if (err) {
+                            console.error('Erro ao buscar card criado:', err);
+                            socket.emit('cardError', { error: 'Erro ao recuperar o card' });
+                            return;
+                        }
+                        
+                        console.log('Card criado com sucesso:', card);
+                        io.emit('cardCreated', card);
+                    });
+                });
+            } catch (error) {
+                console.error('Erro ao processar criação do card:', error);
+                socket.emit('cardError', { error: 'Erro interno do servidor' });
+            }
+        });
+
+        socket.on('cardUpdated', async (card) => {
+            try {
+                io.emit('cardUpdated', card);
+            } catch (error) {
+                console.error('Erro ao atualizar card:', error);
+            }
+        });
+    });
 }
 
 // Ouvir mensagens recebidas
