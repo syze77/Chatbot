@@ -1,7 +1,7 @@
 const PDFDocument = require('pdfkit');
 const { format, parseISO } = require('date-fns');
 
-const labelSpacing = 50;
+const labelSpacing = 80;
 
 function generatePDFReport(doc, problems, startDate, endDate) {
     const colors = {
@@ -142,6 +142,9 @@ function addProblemDetails(doc, problem, margin, pageWidth, colors) {
         { label: 'Cidade:', value: problem.city },
         { label: 'Escola:', value: problem.school },
         { label: 'Cargo:', value: problem.position },
+        { label: 'Atendente ID:', value: problem.attendant_id || 'BOT' },
+        { label: 'Card Link:', value: problem.card_link || 'NÃO FOI NECESSÁRIO' },
+        { label: 'Card Status:', value: problem.card_status || 'NÃO FOI NECESSÁRIO' },
         { label: 'Duração:', value: durationText }
     ];
 

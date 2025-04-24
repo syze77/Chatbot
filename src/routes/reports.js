@@ -23,16 +23,35 @@ router.get('/api/reports/generateReport', async (req, res) => {
         }
         
         const query = `
+            WITH ProblemCards AS (
+                SELECT 
+                    p.chatId,
+                    p.date as problem_date,
+                    MIN(pc.card_link) as card_link,
+                    MIN(pc.card_status) as card_status
+                FROM problems p
+                LEFT JOIN problem_cards pc ON 
+                    p.chatId = pc.chatId 
+                    AND pc.created_at >= p.date 
+                    AND pc.created_at <= COALESCE(p.date_completed, datetime(p.date, '+1 day'))
+                GROUP BY p.chatId, p.date
+            )
             SELECT 
                 problems.*,
-                strftime('%d/%m/%Y %H:%M', datetime(date, 'localtime')) as formatted_date,
-                strftime('%d/%m/%Y %H:%M', datetime(date_completed, 'localtime')) as formatted_date_completed,
-                CAST((julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER) as duration_minutes
+                strftime('%d/%m/%Y %H:%M', datetime(problems.date, 'localtime')) as formatted_date,
+                strftime('%d/%m/%Y %H:%M', datetime(problems.date_completed, 'localtime')) as formatted_date_completed,
+                CAST((julianday(problems.date_completed) - julianday(problems.date)) * 24 * 60 AS INTEGER) as duration_minutes,
+                attendant_id,
+                COALESCE(pc.card_link, 'NÃO FOI NECESSÁRIO') as card_link,
+                COALESCE(pc.card_status, 'NÃO FOI NECESSÁRIO') as card_status
             FROM problems 
-            WHERE date BETWEEN ? AND ?
-            AND description IS NOT NULL
+            LEFT JOIN ProblemCards pc ON 
+                problems.chatId = pc.chatId 
+                AND problems.date = pc.problem_date
+            WHERE problems.date BETWEEN ? AND ?
+            AND problems.description IS NOT NULL
             ${filter}
-            ORDER BY date DESC
+            ORDER BY problems.date DESC
         `;
 
         const problems = await queryDatabase(query, params);
