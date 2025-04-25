@@ -142,9 +142,9 @@ function addProblemDetails(doc, problem, margin, pageWidth, colors) {
         { label: 'Cidade:', value: problem.city },
         { label: 'Escola:', value: problem.school },
         { label: 'Cargo:', value: problem.position },
-        { label: 'Atendente ID:', value: problem.attendant_id || 'BOT' },
-        { label: 'Card Link:', value: problem.card_link || 'NÃO FOI NECESSÁRIO' },
-        { label: 'Card Status:', value: problem.card_status || 'NÃO FOI NECESSÁRIO' },
+        { label: 'Atendente ID:', value: problem.attendant_id || 'Bot' },
+        { label: 'Card Link:', value: problem.card_link || 'Não foi necessário' },
+        { label: 'Card Status:', value: problem.card_status || 'Não foi necessário' },
         { label: 'Duração:', value: durationText }
     ];
 

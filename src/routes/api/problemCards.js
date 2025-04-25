@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { getDatabase } = require('../../utils/database');
 
-// Debug route to check if API is accessible
 router.get('/test', (req, res) => {
     console.log('Test route accessed');
     res.json({ status: 'API is working' });
@@ -53,7 +52,6 @@ router.post('/create', async (req, res) => {
 
 // Listar todos os cards com filtros
 router.get('/', (req, res) => {
-    console.log('GET /api/problem-cards accessed');
     try {
         const db = getDatabase();
         const { status, date } = req.query;
@@ -73,15 +71,11 @@ router.get('/', (req, res) => {
         
         query += ' ORDER BY created_at DESC';
         
-        console.log('Executing query:', query);
-        console.log('With params:', params);
-        
         db.all(query, params, (err, cards) => {
             if (err) {
                 console.error('Database error:', err);
                 return res.status(500).json({ error: 'Erro ao buscar cards' });
             }
-            console.log('Found cards:', cards?.length || 0);
             res.json(cards || []);
         });
     } catch (error) {

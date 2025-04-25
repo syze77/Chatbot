@@ -974,7 +974,7 @@ body.dark-theme {
 
 .admin-role {
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.5) !important;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1165,11 +1165,6 @@ body.dark-theme {
     display: flex;
     align-items: center;
     gap: 4px;
-}
-
-.admin-role i {
-    color: #45aaf2;
-    font-size: 0.7rem;
 }
 
 .dark-theme .admin-profile {

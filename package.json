@@ -8,6 +8,7 @@
         "start": "electron .",
         "start-bot": "node src/core/bot.js",
         "start-electron": "electron .",
+        "dev": "nodemon",
         "build": "electron-builder",
         "dist": "electron-builder --win",
         "postinstall": "electron-builder install-app-deps"
@@ -33,17 +34,23 @@
             {
                 "from": "./src/core",
                 "to": "./app/core",
-                "filter": ["**/*"]
+                "filter": [
+                    "**/*"
+                ]
             },
             {
                 "from": "./components",
                 "to": "./app/components",
-                "filter": ["**/*"]
+                "filter": [
+                    "**/*"
+                ]
             },
             {
                 "from": "./assets",
                 "to": "./app/assets",
-                "filter": ["**/*"]
+                "filter": [
+                    "**/*"
+                ]
             }
         ],
         "win": {
@@ -67,7 +74,8 @@
     },
     "devDependencies": {
         "electron": "^33.2.0",
-        "electron-builder": "^26.0.12"
+        "electron-builder": "^26.0.12",
+        "nodemon": "^3.1.10"
     },
     "dependencies": {
         "chart.js": "^4.4.7",

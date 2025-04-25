@@ -200,9 +200,9 @@
                 </div>
                 <div class="card-body">
                     <div class="card-info">
-                        <div class="info-row">
-                            <i class="fas fa-user"></i>
-                            <span title="${card.chatId}">Chat: ${card.chatId.substring(0, 15)}...</span>
+                        <div class="info-row phone-format">
+                            <i class="fas fa-phone"></i>
+                            <span>${formatPhoneNumber(card.chatId)}</span>
                         </div>
                         <div class="info-row">
                             <i class="fas fa-calendar"></i>
@@ -355,6 +355,23 @@
                 date: dateFilter.value
             });
         });
+
+        function formatPhoneNumber(number) {
+            // Remove WhatsApp format
+            const cleaned = number.split('@')[0];
+            
+            // Remove country code (55) from the beginning
+            const withoutCountry = cleaned.startsWith('55') ? cleaned.slice(2) : cleaned;
+            
+            // Format as (XX) 9XXXX-XXXX, ensuring the 9 is always present
+            if (withoutCountry.length >= 8) {
+                const ddd = withoutCountry.slice(0, 2);
+                const mainNumber = withoutCountry.slice(2);
+                return `(${ddd}) 9${mainNumber.slice(0, 4)}-${mainNumber.slice(4)}`;
+            }
+            
+            return number;
+        }
     </script>
 </body>
 </html>
