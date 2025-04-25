@@ -450,11 +450,22 @@ style.textContent = `
         background-color: #ffffff;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         transition: all 0.3s ease;
+        color: #333333;
+    }
+
+    .dark-theme .chat-item {
+        background-color: #2b2b2b;
+        color: #e4e6ef;
+        border-color: #363636;
     }
 
     .chat-item:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .dark-theme .chat-item:hover {
+        background-color: #363636;
     }
 
     .problem-chat {
@@ -506,11 +517,18 @@ style.textContent = `
     }
 
     .problem-item:hover {
-        background-color: #fff9f9;
+        background-color: #363636;
         cursor: pointer;
     }
 `;
-document.head.appendChild(style);
+
+// Update problem-item hover style
+style.textContent += `
+    .problem-item:hover {
+        background-color: #363636;
+        cursor: pointer;
+    }
+`;
 
 const additionalStyles = `
     .action-buttons {

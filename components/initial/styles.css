@@ -83,6 +83,12 @@ body {
     border-radius: 10px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     transition: transform 0.3s ease;
+    background-color: #ffffff;
+}
+
+.dark-theme .card {
+    background-color: #2b2b2b;
+    color: #e4e6ef;
 }
 .card:hover {
     transform: translateY(-5px);
@@ -114,10 +120,22 @@ body {
     border-radius: 10px;
     background-color: #ffffff;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: background-color 0.3s ease;
+    transition: all 0.3s ease;
 }
+
 .chat-item:hover {
-    background-color: #e9ecef;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.dark-theme .chat-item {
+    background-color: #2b2b2b;
+    color: #e4e6ef;
+}
+
+.dark-theme .chat-item:hover {
+    background-color: #363636;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 .item-content {
@@ -135,7 +153,14 @@ body {
 }
 
 .problem-description {
-    color: #dc3545;
+    color: #212529 !important; /* Force black color in light theme */
+    font-size: 0.95em;
+    line-height: 1.4;
+    flex: 1;
+}
+
+.dark-theme .problem-description {
+    color: #e4e6ef !important; /* Force light color in dark theme */
 }
 
 .problem-item {
@@ -171,6 +196,24 @@ body {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.dark-theme .user-info {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.user-name {
+    font-size: 1.1em;
+    color: #212529 !important; /* Force black color in light theme */
+    font-weight: 600;
+}
+
+.dark-theme .user-name {
+    color: #e4e6ef !important; /* Force light color in dark theme */
 }
 
 .details {
@@ -254,4 +297,38 @@ justify-content: flex-end;
 
 .end-chat-btn i {
     font-size: 0.9em;
+}
+
+.problem-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 15px; /* Added gap between name and badge */
+}
+
+.user-name {
+    font-size: 1.1em;
+    color: #e4e6ef; /* Changed to light color for better contrast */
+    font-weight: 600;
+}
+
+.status-badge.problem {
+    background-color: #dc3545;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap; /* Prevents badge from wrapping */
+}
+
+/* Update header icons color */
+.status-header i {
+    color: #ffffff;
+    margin-right: 8px;
+}
+
+.dark-theme .status-header i {
+    color: #ffffff;
 }
