@@ -390,7 +390,11 @@ justify-content: flex-end;
 .dark-theme .modal .form-select {
     background-color: #363636;
     border-color: #444444;
-    color: #E4E6EF;
+    color: #ffffff !important; /* Força cor branca no texto do input */
+}
+
+.dark-theme .modal .form-control::placeholder {
+    color: #999999; /* Cor mais clara para o placeholder no dark theme */
 }
 
 .dark-theme .modal .btn-close {

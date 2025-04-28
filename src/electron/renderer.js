@@ -692,12 +692,11 @@ const modalStyles = `
     .dark-theme .custom-modal .form-control {
         background-color: #212529;
         border-color: #495057;
-        color: #e9ecef;
+        color: #ffffff;
     }
 
-    .dark-theme .custom-modal .form-control:focus {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    .dark-theme .custom-modal .form-control::placeholder {
+        color: #6c757d;
     }
 
     .dark-theme .custom-modal .btn-close {
