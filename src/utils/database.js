@@ -57,7 +57,8 @@ function initializeDatabase() {
                     description TEXT,
                     status TEXT DEFAULT 'pending',
                     date_completed TEXT DEFAULT NULL,
-                    attendant_id TEXT
+                    attendant_id TEXT,
+                    feedback_rating INTEGER DEFAULT NULL
                 )`);
 
                 db.run(`CREATE TABLE IF NOT EXISTS ignored_contacts (

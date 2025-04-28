@@ -12,6 +12,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const { handleRecovery } = require('./recovery.js'); 
 const { getRecentContacts } = require('./contacts/getcontacts.js');
+const ServiceFeedback = require('./modules/ServiceFeedback');
 
 //Importar mensagens e diálogos                                            
 const greetings = require('./messages/greetings.json');
@@ -608,6 +609,13 @@ async function handleUserMessage(conn, chatId, messageText, io) {
             await handleSubProblemSelection(conn, chatId, messageText, io);
         } else if (currentTopic === 'videoFeedback') {
             await handleVideoFeedback(conn, chatId, messageText, io);
+        } else if (currentTopic === 'serviceFeedback') {
+            const feedbackSuccess = await ServiceFeedback.handleFeedback(conn, chatId, messageText, io);
+            if (feedbackSuccess) {
+                delete userCurrentTopic[chatId];
+                await sendMessage(conn, chatId, greetings.template);
+            }
+            return;
         } else {
             await sendMessage(conn, chatId, defaultMessage);
         }
@@ -951,10 +959,8 @@ async function handleVideoFeedback(conn, chatId, messageText, io) {
     try {
         if (messageText.toLowerCase() === 'sim') {
             await sendMessage(conn, chatId, finished.helpfulVideo);
-            await sendMessage(conn, chatId, greetings.template);
-            // Resetar o tópico para permitir novo atendimento
-            delete userCurrentTopic[chatId];
-            await closeChat(chatId, io);
+            await ServiceFeedback.requestFeedback(botConnection, chatId);
+            userCurrentTopic[chatId] = 'serviceFeedback';
         } else if (messageText.toLowerCase() === 'não') {
             await sendMessage(conn, chatId, dialogs.describeIssue);
             userCurrentTopic[chatId] = {
@@ -1147,6 +1153,9 @@ function sendProblemToFrontEnd(problemData) {
 // Fechar o chat
 async function closeChat(chatId, io) {
     try {
+        await ServiceFeedback.requestFeedback(botConnection, chatId);
+        userCurrentTopic[chatId] = 'serviceFeedback';
+        
         // Primeiro atualiza o banco
         await getDatabase().run(
             `UPDATE problems 

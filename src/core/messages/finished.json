@@ -1,5 +1,8 @@
 {
-    "chatCompleted": "Atendimento finalizado. Se precisar de mais algum atendimento, envie suas informações novamente no formato:",
-    "helpfulVideo": "Ficamos felizes em ajudar! Se precisar de mais algum atendimento, envie suas informações novamente no formato:",
-    "problemRegistered": "Problema registrado com sucesso. Um atendente analisará sua solicitação e entrará em contato em breve."
+    "chatCompleted": "Atendimento finalizado! Agradecemos pela confiança.",
+    "helpfulVideo": "Ficamos felizes em poder ajudar!",
+    "problemRegistered": "Problema registrado com sucesso. Um atendente analisará sua solicitação e entrará em contato em breve.",
+    "feedbackRequest": "Por favor, avalie sua experiência de acordo com a escala de 1 a 5:\n5 - Muito satisfeito\n4 - Satisfeito\n3 - Neutro\n2 - Insatisfeito\n1 - Muito insatisfeito",
+    "feedbackThank": "Obrigado pelo seu feedback! Sua opinião é muito importante para melhorarmos nosso atendimento.",
+    "feedbackInvalid": "Por favor, envie uma avaliação válida de 1 a 5."
 }
