@@ -103,7 +103,7 @@ router.get('/api/statistics/getChartData', async (req, res) => {
 
 router.get('/api/statistics/getCompletedAttendances', async (req, res) => {
     try {
-        const { date, position, city, school } = req.query;
+        const { date, position, city, school, attendant } = req.query;
         let query = `
             SELECT 
                 id, 
@@ -116,6 +116,10 @@ router.get('/api/statistics/getCompletedAttendances', async (req, res) => {
                 date,
                 date_completed,
                 status,
+                CASE 
+                    WHEN attendant_id IS NULL THEN 'Bot'
+                    ELSE attendant_id
+                END as attendant,
                 CAST(
                     (julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER
                 ) as duration_minutes,
@@ -145,6 +149,15 @@ router.get('/api/statistics/getCompletedAttendances', async (req, res) => {
         if (school) {
             query += ` AND school = ?`;
             params.push(school);
+        }
+
+        if (attendant) {
+            if (attendant === 'Bot') {
+                query += ` AND attendant_id IS NULL`;
+            } else {
+                query += ` AND attendant_id = ?`;
+                params.push(attendant);
+            }
         }
         
         query += ` ORDER BY date_completed DESC`;

@@ -37,6 +37,13 @@
                     <option value="Responsável">Responsável</option>
                 </select>
             </div>
+            <div class="filter-group">
+                <label for="filterAttendant">Filtrar por Atendente</label>
+                <select id="filterAttendant" class="form-control" onchange="filterByAttendant(this.value)">
+                    <option value="">Todos os atendentes</option>
+                    <option value="Bot">Bot</option>
+                </select>
+            </div>
         </div>
 
         <div id="completed-list" class="completed-list">
@@ -46,10 +53,30 @@
     <script src="../../src/assets/js/sidebar.js"></script>
     <script src="../../src/electron/renderer.js"></script>
     <script>
+        async function loadAttendants() {
+            try {
+                const response = await fetch('http://localhost:3000/api/statistics/getCompletedAttendances');
+                const attendances = await response.json();
+                const uniqueAttendants = [...new Set(attendances.map(a => a.attendant))].filter(Boolean);
+                
+                const filterAttendant = document.getElementById('filterAttendant');
+                uniqueAttendants.forEach(attendant => {
+                    if (!filterAttendant.querySelector(`option[value="${attendant}"]`)) {
+                        const option = document.createElement('option');
+                        option.value = attendant;
+                        option.textContent = attendant;
+                        filterAttendant.appendChild(option);
+                    }
+                });
+            } catch (error) {
+                console.error('Erro ao carregar atendentes:', error);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             Sidebar.init();
-            
             loadCompletedAttendances();
+            loadAttendants();
         });
 
         function toggleSidebar() {
@@ -138,6 +165,7 @@
                         <div class="user-details"><i class="fas fa-user-tag"></i> ${attendance.position || 'Não informado'}</div>
                         <div class="user-details"><i class="fas fa-map-marker-alt"></i> ${attendance.city || 'Não informado'}</div>
                         <div class="user-details"><i class="fas fa-school"></i> ${attendance.school || 'Não informado'}</div>
+                        <div class="user-details"><i class="fas fa-headset"></i> Atendente: ${attendance.attendant || 'Não atribuído'}</div>
                     </div>
                     
                     <div class="problem-section">
@@ -186,6 +214,18 @@
                 displayCompletedAttendances(filteredAttendances);
             } catch (error) {
                 console.error('Erro ao filtrar por cargo:', error);
+            }
+        }
+
+        async function filterByAttendant(attendant) {
+            if (!attendant) return loadCompletedAttendances();
+            
+            try {
+                const response = await fetch(`http://localhost:3000/api/statistics/getCompletedAttendances?attendant=${attendant}`);
+                const filteredAttendances = await response.json();
+                displayCompletedAttendances(filteredAttendances);
+            } catch (error) {
+                console.error('Erro ao filtrar por atendente:', error);
             }
         }
     </script>
