@@ -819,8 +819,10 @@ async function handleProblemSelection(conn, chatId, messageText, io) {
             break;
         case '5':
             await sendMessage(conn, chatId, dialogs.rfaceContact);
-            await sendMessage(conn, chatId, greetings.template);
-            delete userCurrentTopic[chatId]; 
+            delete userCurrentTopic[chatId];
+            // Emitir evento endChat
+            io.emit('endChat', { chatId });
+            await closeChat(chatId, io);
             break;
         case '6':
             await sendMessage(conn, chatId, dialogs.describeIssue);
