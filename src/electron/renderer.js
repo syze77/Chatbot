@@ -66,7 +66,11 @@ const problemListContainer = document.getElementById('problem-list-container');
 function updateUI(data) {
     // Processa e valida os dados recebidos
     const processedData = {
-        activeChats: Array.isArray(data.activeChats) ? data.activeChats : [],
+        activeChats: Array.isArray(data.activeChats) ? 
+            // Remove duplicatas baseado no chatId
+            data.activeChats.filter((chat, index, self) =>
+                index === self.findIndex(t => t.chatId === chat.chatId)
+            ) : [],
         waitingList: Array.isArray(data.waitingList) ? data.waitingList : [],
         problems: Array.isArray(data.problems) ? data.problems : []
     };
@@ -284,6 +288,27 @@ function createItemElement(item, type, includePosition) {
 // Função para manipular o atendimento de um problema
 async function handleAttendProblem(problem) {
     try {
+        // Verifica se já existe um chat ativo com este chatId
+        const existingActiveChat = Array.from(activeChatList.children)
+            .find(item => item.dataset.chatId === problem.chatId);
+        
+        if (existingActiveChat) {
+            // Se já existe um chat ativo, apenas remove o card do problema
+            const problemCard = Array.from(problemListContainer.children)
+                .find(item => item.dataset.chatId === problem.chatId);
+            if (problemCard) {
+                problemCard.remove();
+            }
+            
+            // Abre o chat do WhatsApp
+            let whatsappId = problem.chatId;
+            if (!whatsappId.includes('@')) {
+                whatsappId = `${whatsappId}@c.us`;
+            }
+            await window.electronAPI.openWhatsAppChat(whatsappId);
+            return;
+        }
+
         const modal = new bootstrap.Modal(document.getElementById('attendantModal'));
         modal.show();
 
@@ -318,6 +343,18 @@ async function handleAttendProblem(problem) {
 
                 try {
                     console.log('Iniciando atendimento para:', problem);
+
+                    // Remove o card do problema antes de emitir o evento
+                    const problemCard = Array.from(problemListContainer.children)
+                        .find(item => item.dataset.chatId === problem.chatId);
+                    if (problemCard) {
+                        problemCard.remove();
+                    }
+
+                    // Adiciona mensagem vazia se não houver mais problemas
+                    if (problemListContainer.children.length === 0) {
+                        problemListContainer.innerHTML = '<div class="empty-message">Nenhum problema relatado.</div>';
+                    }
 
                     socket.emit('attendProblem', {
                         chatId: problem.chatId,
