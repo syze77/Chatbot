@@ -555,3 +555,58 @@ body.dark-theme .generate-report-btn:focus {
     box-shadow: 0 0 0 0.2rem rgba(54, 153, 255, 0.25);
     outline: none;
 }
+
+/* Dark theme styles for report modal */
+body.dark-theme .report-modal {
+    background-color: #2b2b2b;
+    color: #e4e6ef;
+}
+
+body.dark-theme .report-modal h3 {
+    color: #ffffff;
+}
+
+body.dark-theme .date-input-group label {
+    color: #e4e6ef;
+}
+
+body.dark-theme .date-input-group input {
+    background-color: #2b2b2b;
+    border-color: #444;
+    color: #e4e6ef;
+}
+
+body.dark-theme .date-input-group input:focus {
+    border-color: #3699FF;
+    box-shadow: 0 0 0 0.2rem rgba(54, 153, 255, 0.25);
+}
+
+body.dark-theme .format-option {
+    background-color: #2b2b2b;
+    border-color: #444;
+    color: #e4e6ef;
+}
+
+body.dark-theme .format-option:hover {
+    background-color: #363636;
+}
+
+body.dark-theme .format-option input[type="radio"]:checked + .format-icon {
+    color: #3699FF;
+}
+
+body.dark-theme .modal-buttons .cancel-btn {
+    background-color: #444;
+    color: #e4e6ef;
+}
+
+body.dark-theme .modal-buttons .generate-btn {
+    background-color: #2D2D2D;
+    color: #e4e6ef;
+    border: 1px solid #3a3b3c;
+}
+
+body.dark-theme .modal-buttons .generate-btn:hover {
+    background-color: #363636;
+    border-color: #4a4b4c;
+}

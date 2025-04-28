@@ -10,7 +10,7 @@ const { getAllContacts, saveIgnoredContacts } = require('../core/contacts/contac
 const statisticsRoutes = require('../routes/statistics.js');
 const filtersRoutes = require('../routes/filters.js');
 const reportsRoutes = require('../routes/reports.js');
-const problemCardsRoutes = require('../routes/api/problemCards.js'); // Add this line
+const problemCardsRoutes = require('../routes/api/problemCards.js');
 
 // Configuração do servidor HTTP e Socket.IO
 const httpServer = http.createServer(server);
@@ -62,6 +62,7 @@ function createWindow() {
         width: 1200,
         height: 800,
         frame: true,
+        autoHideMenuBar: true,
         backgroundColor: '#343a40',
         titleBarStyle: 'default',
         titleBarOverlay: {
@@ -122,7 +123,7 @@ server.use((req, res, next) => {
 server.use('/', statisticsRoutes);
 server.use('/', filtersRoutes);
 server.use('/', reportsRoutes);
-server.use('/api/problem-cards', problemCardsRoutes); // Add this line
+server.use('/api/problem-cards', problemCardsRoutes); 
 
 // Configuração das rotas do servidor
 server.get('/getProblemsData', async (req, res) => {
