@@ -218,12 +218,45 @@
                                 <i class="fas fa-check"></i>
                                 Concluir
                             </button>
-                        ` : ''}
+                        ` : `
+                            <button class="btn btn-warning btn-sm" onclick="reopenCard(${card.id})">
+                                <i class="fas fa-redo"></i>
+                                Reabrir
+                            </button>
+                        `}
                     </div>
                 </div>
             `;
 
             return div;
+        }
+
+        // Adicionar função para reabrir card
+        async function reopenCard(cardId) {
+            try {
+                const response = await fetch(`http://localhost:3000/api/problem-cards/${cardId}/reopen`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                const updatedCard = await response.json();
+                
+                // Atualiza o card na interface
+                const cardElement = document.querySelector(`[data-id="${cardId}"]`);
+                if (cardElement) {
+                    cardElement.replaceWith(createCardElement(updatedCard));
+                }
+
+                // Notifica outros clientes via Socket.IO
+                socket.emit('cardUpdated', updatedCard);
+            } catch (error) {
+                console.error('Erro ao reabrir card:', error);
+                alert('Erro ao reabrir o card. Por favor, tente novamente.');
+            }
         }
 
         // Função para marcar card como concluído

@@ -208,6 +208,31 @@ body {
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
+.btn-warning {
+    background: #ffc107 !important;
+    border-radius: 9px !important;
+    color: #000 !important;
+}
+
+.btn-warning:hover {
+    background: #ffca2c !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}
+
+body.dark-theme .btn-warning {
+    background: #ffc107 !important;
+    color: #000 !important;
+    border: none !important;
+}
+
+body.dark-theme .btn-warning:hover {
+    background: #ffca2c !important;
+    color: #000 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+}
+
 /* Form Controls in Dark Theme */
 body.dark-theme .form-control,
 body.dark-theme .form-select {

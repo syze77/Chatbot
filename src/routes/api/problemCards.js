@@ -120,4 +120,39 @@ router.put('/:id/complete', (req, res) => {
     }
 });
 
+// Reabrir card
+router.put('/:id/reopen', (req, res) => {
+    try {
+        const { id } = req.params;
+        const db = getDatabase();
+        
+        db.run(
+            'UPDATE problem_cards SET card_status = ?, updated_at = DATETIME("now") WHERE id = ?',
+            ['pending', id],
+            function(err) {
+                if (err) {
+                    console.error('Erro ao reabrir card:', err);
+                    return res.status(500).json({ error: 'Erro ao reabrir o card' });
+                }
+                
+                if (this.changes === 0) {
+                    return res.status(404).json({ error: 'Card não encontrado' });
+                }
+                
+                db.get('SELECT * FROM problem_cards WHERE id = ?', [id], (err, card) => {
+                    if (err) {
+                        return res.status(500).json({ error: 'Erro ao buscar card atualizado' });
+                    }
+                    
+                    req.app.get('io').emit('cardUpdated', card);
+                    res.json(card);
+                });
+            }
+        );
+    } catch (error) {
+        console.error('Erro ao reabrir card:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+
 module.exports = router;
