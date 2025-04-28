@@ -15,38 +15,38 @@
 <body>
     <div id="sidebar-container"></div>
     
-    <div class="content">
+    <div class="content initial-page">
         <div class="header">
             <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
             <h2>Status do Suporte</h2>
         </div>
         <div class="row g-4">
             <div class="col-lg-4">
-                <div class="card">
+                <div class="card initial-status-card">
                     <div class="status-header">
                         <i class="fas fa-headset"></i> Atendimentos Ativos
                     </div>
-                    <div id="active-chat-list" class="list-container">
+                    <div id="active-chat-list" class="initial-list-container">
                         <div class="empty-message">Nenhum atendimento ativo no momento.</div>
                     </div>
                 </div>
             </div>
             <div class="col-lg-4">
-                <div class="card">
+                <div class="card initial-status-card">
                     <div class="status-header">
                         <i class="fas fa-users"></i> Fila de Espera
                     </div>
-                    <div id="waiting-list-container" class="list-container">
+                    <div id="waiting-list-container" class="initial-list-container">
                         <div class="empty-message">Nenhum usuário na fila de espera.</div>
                     </div>
                 </div>
             </div>
             <div class="col-lg-4">
-                <div class="card">
+                <div class="card initial-status-card">
                     <div class="status-header">
                         <i class="fas fa-exclamation-triangle"></i> Problemas Relatados
                     </div>
-                    <div id="problem-list-container" class="list-container">
+                    <div id="problem-list-container" class="initial-list-container">
                         <div class="empty-message">Nenhum problema relatado.</div>
                     </div>
                 </div>

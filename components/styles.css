@@ -521,10 +521,18 @@ body {
     padding: 15px;
     border-radius: 10px;
     background-color: #f1f3f5;
-    transition: background-color 0.3s ease;
 }
 
-.dark-theme .list-container {
+.initial-list-container {
+    max-height: none !important;
+    height: calc(100vh - 200px);
+    overflow-y: auto;
+    padding: 15px;
+    border-radius: 10px;
+    background-color: #f1f3f5;
+}
+
+.dark-theme .initial-list-container {
     background-color: #1E1E1E;
 }
 

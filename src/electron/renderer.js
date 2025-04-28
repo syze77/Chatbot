@@ -89,6 +89,11 @@ function displayProblem(description, chatId, userName) {
     );
     
     if (existingProblem) {
+        // Atualizar descrição do problema existente
+        const descriptionElement = existingProblem.querySelector('.problem-description');
+        if (descriptionElement) {
+            descriptionElement.textContent = description;
+        }
         return;
     }
     

@@ -970,14 +970,13 @@ async function handleVideoFeedback(conn, chatId, messageText, io) {
 // Processa descrição do problema
 async function handleProblemDescription(conn, chatId, messageText, io) {
     try {
-        // Buscar informações do usuário
-        const userInfo = await new Promise((resolve, reject) => {
+        // Buscar o problema mais recente do usuário
+        const existingProblem = await new Promise((resolve, reject) => {
             getDatabase().get(
-                'SELECT name, city, position, school FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
+                'SELECT * FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
                 [chatId],
                 (err, row) => {
                     if (err) reject(err);
-                    else if (!row) reject(new Error('Usuário não encontrado'));
                     else resolve(row);
                 }
             );
@@ -986,32 +985,32 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
         const date = new Date().toISOString();
         const description = messageText;
 
-        // Criar novo registro de problema
-        await new Promise((resolve, reject) => {
-            getDatabase().run(
-                `INSERT INTO problems 
-                (chatId, name, city, position, school, description, status, date) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        if (existingProblem) {
+            // Atualizar o registro existente
+            await new Promise((resolve, reject) => {
+                getDatabase().run(
+                    `UPDATE problems 
+                    SET description = ?, 
+                        date = ?
+                    WHERE id = ?`,
+                    [description, date, existingProblem.id],
+                    function(err) {
+                        if (err) reject(err);
+                        else resolve(this.lastID);
+                    }
+                );
+            });
 
-                [
-                    chatId,
-                    userInfo.name,
-                    userInfo.city,
-                    userInfo.position,
-                    userInfo.school,
-                    description,
-                    'pending',
-                    date
-                ],
-                function(err) {
-                    if (err) reject(err);
-                    else resolve(this.lastID);
-                }
-            );
-        });
-
-        // Notificar o front-end sobre o novo problema
-        io.emit('userProblem', description, chatId, userInfo.name);
+            // Notificar o front-end sobre a atualização do problema
+            io.emit('userProblem', {
+                description,
+                chatId,
+                name: existingProblem.name,
+                city: existingProblem.city,
+                position: existingProblem.position,
+                school: existingProblem.school
+            });
+        }
 
         // Enviar confirmação para o usuário
         await sendMessage(
