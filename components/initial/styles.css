@@ -136,6 +136,53 @@ body {
     font-style: italic;
 }
 
+.problem-description-container {
+    background-color: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    margin: 5px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    -ms-word-break: break-all;
+    word-break: break-word;
+    -ms-hyphens: auto;
+    -moz-hyphens: auto;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+}
+
+.problem-description {
+    color: #495057;
+    font-size: 0.95em;
+    line-height: 1.4;
+    flex: 1;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    -ms-word-break: break-all;
+    word-break: break-word;
+    -ms-hyphens: auto;
+    -moz-hyphens: auto;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+    min-width: 0; /* Importante para evitar overflow em flexbox */
+    max-width: 100%;
+}
+
+.dark-theme .problem-description-container {
+    background-color: #343a40;
+}
+
+.dark-theme .problem-description {
+    color: #e9ecef;
+}
+
 .problem-description {
     color: #212529 !important; /* Force black color in light theme */
     font-size: 0.95em;

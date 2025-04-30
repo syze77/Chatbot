@@ -5,7 +5,7 @@ const socketIo = require('socket.io');
 const express = require('express');
 const { startHydraBot, redirectToWhatsAppChat, server, getRecentContacts, getBotConnection } = require('../core/bot.js');
 const { initializeDatabase, getDatabase } = require('../utils/database.js');
-const { getAllContacts, saveIgnoredContacts } = require('../core/contacts/contactManager.js');
+const { getAllContacts, saveIgnoredContacts } = require('../core/contacts/contactmanager.js');
 
 const statisticsRoutes = require('../routes/statistics.js');
 const filtersRoutes = require('../routes/filters.js');
