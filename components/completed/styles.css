@@ -156,6 +156,9 @@ body.dark-theme .filters-section {
 
 .problem-section {
     padding: 0 20px;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0; /* Importante para flexbox */
 }
 
 .time-section {
@@ -185,6 +188,29 @@ body.dark-theme .filters-section {
     font-weight: 600;
     color: #495057;
     margin-bottom: 10px;
+}
+
+.problem-description {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    -ms-word-break: break-all;
+    word-break: break-word;
+    -ms-hyphens: auto;
+    -moz-hyphens: auto;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+body.dark-theme .problem-description {
+    background-color: #343a40;
+    color: #e4e6ef;
 }
 
 .problem-description {
