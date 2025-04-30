@@ -144,22 +144,17 @@ async function startHydraBot(io) {
       try {
         const { chatId, id } = data;
         
-        // Criar um ID único para o evento
         const eventId = `end_${chatId}_${Date.now()}`;
-        
-        // Verificar se este evento já foi processado recentemente
         if (processedEvents.has(eventId)) {
           return;
         }
         
-        // Marcar evento como processado
         processedEvents.add(eventId);
         setTimeout(() => processedEvents.delete(eventId), EVENT_TIMEOUT);
 
-        // Remover chat da lista de atendidos por humanos
         humanAttendedChats.delete(chatId);
 
-        // Atualizar status do chat para concluído no banco de dados
+        // Apenas atualizar status no banco de dados
         await getDatabase().run(
           `UPDATE problems 
            SET status = 'completed', 
@@ -168,45 +163,9 @@ async function startHydraBot(io) {
           [chatId, id]
         );
 
-        // Enviar mensagem de conclusão para o usuário
-        if (botConnection) {
-          await sendMessage(
-            botConnection,
-            chatId,
-            'Atendimento finalizado. Se precisar de mais algum atendimento, envie suas informações novamente no formato:'
-          );
-          await sendMessage(
-            botConnection,
-            chatId,
-            `Nome:\nCidade:\nCargo:\nEscola:`
-          );
+        delete userCurrentTopic[chatId];
 
-          // Resetar tópico do usuário para permitir novo atendimento
-          delete userCurrentTopic[chatId];
-        }
-
-        // Processar próximo usuário na fila
-        const nextInLine = await getNextInWaitingList();
-        if (nextInLine) {
-          await getDatabase().run(
-            'UPDATE problems SET status = "active" WHERE chatId = ?',
-            [nextInLine.chatId]
-          );
-
-          await sendMessage(
-            botConnection,
-            nextInLine.chatId,
-            greetings.nextInLine.replace('%s', nextInLine.name)
-          );
-          await sendProblemOptions(botConnection, nextInLine.chatId);
-        }
-
-        // Atualizar usuários em espera e status
-        try {
-            await updateWaitingUsers(io);
-        } catch (error) {
-            console.error('Error updating waiting users:', error);
-        }
+        // Atualizar status
         await sendStatusUpdateToMainProcess(io);
 
       } catch (error) {
@@ -256,7 +215,6 @@ function setupIpcListeners(io) {
 function setupSocketListeners(io) {
     console.log(logs.socketConfigured);
     
-    // Adicionar handler para criação de cards
     io.on('connection', (socket) => {
         socket.on('createCard', async (data) => {
             try {
@@ -297,6 +255,18 @@ function setupSocketListeners(io) {
                 io.emit('cardUpdated', card);
             } catch (error) {
                 console.error('Erro ao atualizar card:', error);
+            }
+        });
+
+        socket.on('requestFeedback', async (data) => {
+            try {
+                const { chatId } = data;
+                if (botConnection) {
+                    await ServiceFeedback.requestFeedback(botConnection, chatId);
+                    userCurrentTopic[chatId] = 'serviceFeedback';
+                }
+            } catch (error) {
+                console.error('Erro ao solicitar feedback:', error);
             }
         });
     });

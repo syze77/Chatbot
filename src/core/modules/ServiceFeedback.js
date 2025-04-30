@@ -6,20 +6,23 @@ class ServiceFeedback {
         try {
             const rating = parseInt(messageText);
             if (rating >= 1 && rating <= 5) {
+                // 1. Salvar o feedback
                 await this.saveFeedback(chatId, rating);
+                
+                // 2. Enviar sequência de mensagens
                 await conn.client.sendMessage({
                     to: chatId,
                     body: finished.feedbackThank,
                     options: { type: 'sendText' }
                 });
+
                 await conn.client.sendMessage({
                     to: chatId,
-                    body: "Se precisar de mais algum atendimento, envie suas informações novamente no formato:",
+                    body: "Atendimento finalizado. Se precisar de mais algum atendimento, envie suas informações novamente no formato:",
                     options: { type: 'sendText' }
                 });
 
-                // Emitir evento para fechar o chat na UI
-                io.emit('endChat', { chatId });
+
                 return true;
             } else {
                 await conn.client.sendMessage({
@@ -39,8 +42,7 @@ class ServiceFeedback {
         return new Promise((resolve, reject) => {
             getDatabase().run(
                 `UPDATE problems 
-                 SET feedback_rating = ?,
-                     date_completed = datetime('now')
+                 SET feedback_rating = ?
                  WHERE chatId = ? AND status = 'completed'`,
                 [rating, chatId],
                 (err) => {

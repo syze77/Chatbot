@@ -396,70 +396,80 @@ async function handleAttendProblem(problem) {
 
 // Função para finalizar um atendimento
 async function handleEndChat(chat) {
-    const modal = new bootstrap.Modal(document.getElementById('endChatModal'));
-    const cardCreatedSelect = document.getElementById('cardCreatedSelect');
-    const cardLinkGroup = document.getElementById('cardLinkGroup');
-    const cardLinkInput = document.getElementById('cardLink');
-    const confirmEndBtn = document.getElementById('confirmEndBtn');
+    try {
+        const modal = new bootstrap.Modal(document.getElementById('endChatModal'));
+        const cardCreatedSelect = document.getElementById('cardCreatedSelect');
+        const cardLinkGroup = document.getElementById('cardLinkGroup');
+        const cardLinkInput = document.getElementById('cardLink');
+        const confirmEndBtn = document.getElementById('confirmEndBtn');
 
-    cardCreatedSelect.value = 'no';
-    cardLinkGroup.style.display = 'none';
-    cardLinkInput.value = '';
+        // Reset modal fields
+        cardCreatedSelect.value = 'no';
+        cardLinkGroup.style.display = 'none';
+        cardLinkInput.value = '';
 
-    cardCreatedSelect.addEventListener('change', () => {
-        cardLinkGroup.style.display = 
-            cardCreatedSelect.value === 'yes' ? 'block' : 'none';
-        if (cardCreatedSelect.value === 'no') {
-            cardLinkInput.value = '';
-        }
-    });
-
-    const handleConfirm = async () => {
-        if (cardCreatedSelect.value === 'yes' && !cardLinkInput.value.trim()) {
-            alert('Por favor, insira o link do card');
-            return;
-        }
-
-        modal.hide();
-
-        // Remove o item da lista de problemas
-        const problemItem = Array.from(problemListContainer.children)
-            .find(item => item.dataset.chatId === chat.chatId);
-        if (problemItem) {
-            problemItem.remove();
-        }
-
-        // Criar card apenas se necessário
-        if (cardCreatedSelect.value === 'yes') {
-            try {
-                // Usar a API do módulo de cards
-                socket.emit('createCard', {
-                    chatId: chat.chatId,
-                    cardLink: cardLinkInput.value.trim()
-                });
-            } catch (error) {
-                console.error('Erro ao criar card:', error);
-                alert('Erro ao criar o card. O atendimento será finalizado mesmo assim.');
+        cardCreatedSelect.addEventListener('change', () => {
+            cardLinkGroup.style.display = 
+                cardCreatedSelect.value === 'yes' ? 'block' : 'none';
+            if (cardCreatedSelect.value === 'no') {
+                cardLinkInput.value = '';
             }
-        }
-
-        // Notificar sobre o fim do atendimento
-        socket.emit('endChat', {
-            chatId: chat.chatId,
-            id: chat.id,
-            cardCreated: cardCreatedSelect.value === 'yes',
-            cardLink: cardLinkInput.value.trim()
         });
 
-        if (problemListContainer.children.length === 0) {
-            problemListContainer.innerHTML = '<div class="empty-message">Nenhum problema relatado.</div>';
-        }
+        const handleConfirm = async () => {
+            if (cardCreatedSelect.value === 'yes' && !cardLinkInput.value.trim()) {
+                alert('Por favor, insira o link do card');
+                return;
+            }
 
-        confirmEndBtn.removeEventListener('click', handleConfirm);
-    };
+            modal.hide();
 
-    confirmEndBtn.addEventListener('click', handleConfirm);
-    modal.show();
+            try {
+                // 1. Criar card se necessário
+                if (cardCreatedSelect.value === 'yes') {
+                    socket.emit('createCard', {
+                        chatId: chat.chatId,
+                        cardLink: cardLinkInput.value.trim()
+                    });
+                }
+
+                // 2. Marcar chat como concluído para permitir o feedback
+                socket.emit('endChat', {
+                    chatId: chat.chatId,
+                    id: chat.id
+                });
+
+                // 3. Aguardar um momento para o status ser atualizado
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // 4. Solicitar feedback
+                socket.emit('requestFeedback', { chatId: chat.chatId });
+
+                // 5. Atualizar UI
+                const problemItem = Array.from(problemListContainer.children)
+                    .find(item => item.dataset.chatId === chat.chatId);
+                if (problemItem) {
+                    problemItem.remove();
+                }
+
+                if (problemListContainer.children.length === 0) {
+                    problemListContainer.innerHTML = '<div class="empty-message">Nenhum problema relatado.</div>';
+                }
+            } catch (error) {
+                console.error('Erro ao finalizar atendimento:', error);
+                alert('Erro ao finalizar atendimento. Por favor, tente novamente.');
+            }
+
+            confirmEndBtn.removeEventListener('click', handleConfirm);
+        };
+
+        confirmEndBtn.addEventListener('click', handleConfirm);
+        modal.show();
+
+    } catch (error) {
+        console.error('Erro ao finalizar atendimento:', error);
+        alert('Erro ao finalizar atendimento. Por favor, tente novamente.');
+    }
 }
 
 // Buscar dados do banco de dados SQLite e atualizar a UI
