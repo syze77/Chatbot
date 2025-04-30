@@ -978,13 +978,14 @@ async function handleVideoFeedback(conn, chatId, messageText, io) {
 // Processa descrição do problema
 async function handleProblemDescription(conn, chatId, messageText, io) {
     try {
-        // Buscar o problema mais recente do usuário
-        const existingProblem = await new Promise((resolve, reject) => {
+        // Get user info for possible new problem creation
+        const userInfo = await new Promise((resolve, reject) => {
             getDatabase().get(
-                'SELECT * FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
+                'SELECT name, city, position, school FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
                 [chatId],
                 (err, row) => {
                     if (err) reject(err);
+                    else if (!row) reject(new Error('Usuário não encontrado'));
                     else resolve(row);
                 }
             );
@@ -993,15 +994,54 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
         const date = new Date().toISOString();
         const description = messageText;
 
-        if (existingProblem) {
-            // Atualizar o registro existente
+        // Check if this is from video feedback "não" response or option 6
+        const isFromVideo = userCurrentTopic[chatId]?.previousState === 'videoFeedback';
+
+        if (isFromVideo) {
+            // Update the most recent problem for video feedback case
+            const existingProblem = await new Promise((resolve, reject) => {
+                getDatabase().get(
+                    'SELECT * FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
+                    [chatId],
+                    (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    }
+                );
+            });
+
+            if (existingProblem) {
+                await new Promise((resolve, reject) => {
+                    getDatabase().run(
+                        `UPDATE problems 
+                        SET description = ?, 
+                            date = ?
+                        WHERE id = ?`,
+                        [description, date, existingProblem.id],
+                        function(err) {
+                            if (err) reject(err);
+                            else resolve(this.lastID);
+                        }
+                    );
+                });
+
+                io.emit('userProblem', {
+                    description,
+                    chatId,
+                    name: existingProblem.name,
+                    city: existingProblem.city,
+                    position: existingProblem.position,
+                    school: existingProblem.school
+                });
+            }
+        } else {
+            // Create new problem record for option 6
             await new Promise((resolve, reject) => {
                 getDatabase().run(
-                    `UPDATE problems 
-                    SET description = ?, 
-                        date = ?
-                    WHERE id = ?`,
-                    [description, date, existingProblem.id],
+                    `INSERT INTO problems 
+                    (chatId, name, city, position, school, description, status, date)
+                    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+                    [chatId, userInfo.name, userInfo.city, userInfo.position, userInfo.school, description, date],
                     function(err) {
                         if (err) reject(err);
                         else resolve(this.lastID);
@@ -1009,31 +1049,26 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
                 );
             });
 
-            // Notificar o front-end sobre a atualização do problema
+            // Emit new problem event
             io.emit('userProblem', {
                 description,
                 chatId,
-                name: existingProblem.name,
-                city: existingProblem.city,
-                position: existingProblem.position,
-                school: existingProblem.school
+                name: userInfo.name,
+                city: userInfo.city,
+                position: userInfo.position,
+                school: userInfo.school
             });
         }
 
-        // Enviar confirmação para o usuário
+        // Common actions for both cases
         await sendMessage(
             conn, 
             chatId, 
             finished.problemRegistered
         );
 
-        // Atualizar status
         await sendStatusUpdateToMainProcess(io);
-
-        // Adicionar à lista de chats atendidos para parar respostas automáticas
         humanAttendedChats.add(chatId);
-        
-        // Limpar o tópico do usuário
         delete userCurrentTopic[chatId];
 
     } catch (error) {
