@@ -2,6 +2,10 @@ const { getDatabase } = require('../../utils/database.js');
 const finished = require('../messages/finished.json');
 
 class ServiceFeedback {
+    static delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     static async handleFeedback(conn, chatId, messageText, io) {
         try {
             const rating = parseInt(messageText);
@@ -18,6 +22,9 @@ class ServiceFeedback {
                     body: finished.feedbackThank,
                     options: { type: 'sendText' }
                 });
+
+                // Esperar 2 segundos
+                await this.delay(15000);
 
                 await conn.client.sendMessage({
                     to: chatId,

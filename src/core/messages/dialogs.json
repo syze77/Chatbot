@@ -3,7 +3,7 @@
     "rfaceContact": "Para suporte do RFACE, entre em contato pelo número: (83) 99608-0051",
     "subProblems": {
         "accessSystem": {
-            "title": "Selecione o subtópico:\n\n1️⃣ Recuperação de senha\n2️⃣ Recuperação de email\n3️⃣ Como acessar a plataforma professor",
+            "title": "Selecione o subtópico:\n\n1️⃣ Recuperação de senha\n2️⃣ Recuperação de email\n3️⃣ Como acessar a plataforma professor\n\nDigite 'voltar' para retornar às opções",
             "options": {
                 "1": "Recuperação de senha",
                 "2": "Recuperação de email",
@@ -16,7 +16,7 @@
             }
         },
         "registration": {
-            "title": "Selecione o subtópico:\n\n1️⃣ Dificuldade ao inserir informações do estudante\n2️⃣ Dificuldade ao inserir informações do funcionário\n3️⃣ Vínculo de perfil\n4️⃣ Vínculo de escola",
+            "title": "Selecione o subtópico:\n\n1️⃣ Dificuldade ao inserir informações do estudante\n2️⃣ Dificuldade ao inserir informações do funcionário\n3️⃣ Vínculo de perfil\n4️⃣ Vínculo de escola\n\nDigite 'voltar' para retornar às opções",
             "options": {
                 "1": "Dificuldade ao inserir informações do estudante",
                 "2": "Dificuldade ao inserir informações do funcionário",
@@ -31,7 +31,7 @@
             }
         },
         "classLog": {
-            "title": "Selecione o subtópico:\n\n1️⃣ Dificuldade ao inserir notas\n2️⃣ Dificuldade ao realizar um registro\n3️⃣ Dificuldade ao lançar conceitos\n4️⃣ Dificuldade com planejamento ou plano de aula\n5️⃣ Inativação de notas para alunos especiais\n6️⃣ Replicação de registro de aula\n7️⃣ Impressão de relatórios (frequência, avaliação e ações)",
+            "title": "Selecione o subtópico:\n\n1️⃣ Dificuldade ao inserir notas\n2️⃣ Dificuldade ao realizar um registro\n3️⃣ Dificuldade ao lançar conceitos\n4️⃣ Dificuldade com planejamento ou plano de aula\n5️⃣ Inativação de notas para alunos especiais\n6️⃣ Replicação de registro de aula\n7️⃣ Impressão de relatórios (frequência, avaliação e ações)\n\nDigite 'voltar' para retornar às opções",
             "options": {
                 "1": "Dificuldade ao inserir notas",
                 "2": "Dificuldade ao realizar um registro",
@@ -52,7 +52,7 @@
             }
         },
         "studentMovement": {
-            "title": "Selecione o subtópico:\n\n1️⃣ Transferência de alunos\n2️⃣ Remanejamento de alunos\n3️⃣ Reclassificação de alunos\n4️⃣ Matricular alunos transferidos",
+            "title": "Selecione o subtópico:\n\n1️⃣ Transferência de alunos\n2️⃣ Remanejamento de alunos\n3️⃣ Reclassificação de alunos\n4️⃣ Matricular alunos transferidos\n\nDigite 'voltar' para retornar às opções",
             "options": {
                 "1": "Transferência de alunos",
                 "2": "Remanejamento de alunos",
