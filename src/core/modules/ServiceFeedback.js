@@ -6,7 +6,10 @@ class ServiceFeedback {
         try {
             const rating = parseInt(messageText);
             if (rating >= 1 && rating <= 5) {
-                // Apenas salvar o feedback, status já foi atualizado
+                // Atualizar status primeiro
+                await this.updateChatStatus(chatId);
+                
+                // Salvar o feedback
                 await this.saveFeedback(chatId, rating);
                 
                 // Enviar mensagens finais
@@ -21,6 +24,12 @@ class ServiceFeedback {
                     body: "Atendimento finalizado. Se precisar de mais algum atendimento, envie suas informações novamente no formato:",
                     options: { type: 'sendText' }
                 });
+
+                // Emitir eventos na ordem correta
+                const statusData = await this.getStatusUpdate();
+                io?.emit('statusUpdate', statusData);
+                io?.emit('feedbackReceived', { chatId });
+                io?.emit('forceUpdate');
 
                 return true;
             } else {
@@ -116,19 +125,21 @@ class ServiceFeedback {
 
     static async requestFeedback(conn, chatId) {
         try {
-            // 1. Atualizar status primeiro
+            // Atualizar status primeiro
             await this.updateChatStatus(chatId);
             
-            // 2. Emitir atualização de status para UI
+            // Atualizar UI antes de solicitar feedback
             const statusData = await this.getStatusUpdate();
             global.io?.emit('statusUpdate', statusData);
-
-            // 3. Solicitar feedback
+            global.io?.emit('chatCompleted', { chatId });
+            
+            // Depois solicitar feedback
             await conn.client.sendMessage({
                 to: chatId,
                 body: finished.feedbackRequest,
                 options: { type: 'sendText' }
             });
+            
             return true;
         } catch (error) {
             console.error('Erro ao solicitar feedback:', error);

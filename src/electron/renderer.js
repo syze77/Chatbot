@@ -10,8 +10,19 @@ socket.on('connect', () => {
 socket.on('statusUpdate', (data) => {
     // Verifica se os dados são válidos antes de atualizar a UI
     if (data && typeof data === 'object') {
+        // Forçar limpeza dos containers antes de atualizar
+        activeChatList.innerHTML = '';
+        waitingListContainer.innerHTML = '';
+        problemListContainer.innerHTML = '';
+        
+        // Atualizar UI
         updateUI(data);
     }
+});
+
+// Adicionar novo listener para forçar atualização
+socket.on('forceUpdate', () => {
+    fetchDataAndUpdateUI();
 });
 
 // Manipula novos problemas reportados pelos usuários
@@ -53,6 +64,41 @@ socket.on('newProblemReported', (problemData) => {
     };
     
     showNotification('Novo Problema Relatado', notificationData);
+});
+
+// Adicionar novo listener para feedback após conexão socket
+socket.on('feedbackReceived', (data) => {
+    if (data && data.chatId) {
+        // Remover o chat de todas as listas possíveis
+        ['active-chat-list', 'waiting-list-container', 'problem-list-container'].forEach(containerId => {
+            const container = document.getElementById(containerId);
+            if (container) {
+                const chatItem = container.querySelector(`[data-chat-id="${data.chatId}"]`);
+                if (chatItem) {
+                    chatItem.remove();
+                }
+            }
+        });
+    }
+});
+
+// Adicionar novo listener para chats completados
+socket.on('chatCompleted', (data) => {
+    if (data && data.chatId) {
+        // Remove o chat de todas as listas imediatamente
+        ['active-chat-list', 'waiting-list-container', 'problem-list-container'].forEach(containerId => {
+            const container = document.getElementById(containerId);
+            if (container) {
+                const chatItem = container.querySelector(`[data-chat-id="${data.chatId}"]`);
+                if (chatItem) {
+                    chatItem.remove();
+                }
+            }
+        });
+        
+        // Atualiza a UI
+        fetchDataAndUpdateUI();
+    }
 });
 
 // Atualizar caminhos de recursos de áudio
@@ -425,7 +471,17 @@ async function handleEndChat(chat) {
             modal.hide();
 
             try {
-                // 1. Criar card se necessário
+                // Remover o chat imediatamente de todas as listas
+                ['active-chat-list', 'waiting-list-container', 'problem-list-container'].forEach(containerId => {
+                    const container = document.getElementById(containerId);
+                    if (container) {
+                        const chatItem = container.querySelector(`[data-chat-id="${chat.chatId}"]`);
+                        if (chatItem) {
+                            chatItem.remove();
+                        }
+                    }
+                });
+
                 if (cardCreatedSelect.value === 'yes') {
                     socket.emit('createCard', {
                         chatId: chat.chatId,
@@ -433,34 +489,17 @@ async function handleEndChat(chat) {
                     });
                 }
 
-                // 2. Marcar chat como concluído para permitir o feedback
-                socket.emit('endChat', {
-                    chatId: chat.chatId,
-                    id: chat.id
+                // Emitir apenas um evento endChat com requestFeedback
+                socket.emit('endChat', { 
+                    chatId: chat.chatId, 
+                    id: chat.id,
+                    requestFeedback: true
                 });
 
-                // 3. Aguardar um momento para o status ser atualizado
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                // 4. Solicitar feedback
-                socket.emit('requestFeedback', { chatId: chat.chatId });
-
-                // 5. Atualizar UI
-                const problemItem = Array.from(problemListContainer.children)
-                    .find(item => item.dataset.chatId === chat.chatId);
-                if (problemItem) {
-                    problemItem.remove();
-                }
-
-                if (problemListContainer.children.length === 0) {
-                    problemListContainer.innerHTML = '<div class="empty-message">Nenhum problema relatado.</div>';
-                }
             } catch (error) {
                 console.error('Erro ao finalizar atendimento:', error);
                 alert('Erro ao finalizar atendimento. Por favor, tente novamente.');
             }
-
-            confirmEndBtn.removeEventListener('click', handleConfirm);
         };
 
         confirmEndBtn.addEventListener('click', handleConfirm);

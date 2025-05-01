@@ -142,7 +142,7 @@ async function startHydraBot(io) {
 
     socket.on('endChat', async (data) => {
       try {
-        const { chatId, id } = data;
+        const { chatId, id, requestFeedback } = data;
         
         const eventId = `end_${chatId}_${Date.now()}`;
         if (processedEvents.has(eventId)) {
@@ -154,7 +154,7 @@ async function startHydraBot(io) {
 
         humanAttendedChats.delete(chatId);
 
-        // Apenas atualizar status no banco de dados
+        // Atualizar status no banco de dados
         await getDatabase().run(
           `UPDATE problems 
            SET status = 'completed', 
@@ -258,15 +258,44 @@ function setupSocketListeners(io) {
             }
         });
 
-        socket.on('requestFeedback', async (data) => {
+        socket.on('endChat', async (data) => {
             try {
-                const { chatId } = data;
-                if (botConnection) {
-                    await ServiceFeedback.requestFeedback(botConnection, chatId);
-                    userCurrentTopic[chatId] = 'serviceFeedback';
+                const { chatId, id, requestFeedback } = data;
+                
+                const eventId = `end_${chatId}_${Date.now()}`;
+                if (processedEvents.has(eventId)) return;
+                
+                processedEvents.add(eventId);
+                setTimeout(() => processedEvents.delete(eventId), EVENT_TIMEOUT);
+
+                humanAttendedChats.delete(chatId);
+
+                // 1. Atualizar status para completed imediatamente
+                await getDatabase().run(
+                    `UPDATE problems 
+                     SET status = 'completed', 
+                     date_completed = DATETIME('now')
+                     WHERE chatId = ? AND (id = ? OR status = 'active' OR status = 'pending')`,
+                    [chatId, id]
+                );
+
+                // 2. Emitir atualização imediata da UI
+                const statusData = await fetchCurrentStatus();
+                io.emit('statusUpdate', statusData);
+                io.emit('chatCompleted', { chatId });
+
+                delete userCurrentTopic[chatId];
+
+                // 3. Solicitar feedback apenas se explicitamente solicitado
+                if (requestFeedback && botConnection && !userCurrentTopic[chatId]) {
+                    setTimeout(async () => {
+                        await ServiceFeedback.requestFeedback(botConnection, chatId);
+                        userCurrentTopic[chatId] = 'serviceFeedback';
+                    }, 500);
                 }
+
             } catch (error) {
-                console.error('Erro ao solicitar feedback:', error);
+                console.error(errors.processError.replace('%s', error));
             }
         });
     });
@@ -1158,10 +1187,7 @@ function sendProblemToFrontEnd(problemData) {
 // Fechar o chat
 async function closeChat(chatId, io) {
     try {
-        await ServiceFeedback.requestFeedback(botConnection, chatId);
-        userCurrentTopic[chatId] = 'serviceFeedback';
-        
-        // Primeiro atualiza o banco
+        // 1. Atualizar status para completed imediatamente
         await getDatabase().run(
             `UPDATE problems 
              SET status = 'completed', 
@@ -1170,23 +1196,11 @@ async function closeChat(chatId, io) {
             [chatId]
         );
 
-        // Busca status atualizado imediatamente após a mudança
-        const [active, waiting, pending, completed] = await Promise.all([
-            queryDatabase('SELECT * FROM problems WHERE status = "active" ORDER BY date DESC'),
-            queryDatabase('SELECT * FROM problems WHERE status = "waiting" ORDER BY date ASC'),
-            queryDatabase('SELECT * FROM problems WHERE status = "pending" ORDER BY date DESC'),
-            queryDatabase('SELECT * FROM problems WHERE status = "completed" ORDER BY date_completed DESC LIMIT 10')
-        ]);
+        // 2. Emitir atualização imediata da UI
+        const statusData = await ServiceFeedback.getStatusUpdate();
+        io.emit('statusUpdate', statusData);
 
-        // Emite atualização com dados reais
-        io.emit('statusUpdate', {
-            activeChats: active,
-            waitingList: waiting,
-            problems: pending,
-            completedChats: completed
-        });
-
-        // Processa próximo usuário na fila
+        // 4. Processa próximo usuário na fila
         const nextUser = await getNextInWaitingList();
         if (nextUser) {
             await getDatabase().run(
@@ -1204,7 +1218,7 @@ async function closeChat(chatId, io) {
             await sendProblemOptions(botConnection, nextUser.chatId);
         }
 
-        // Atualiza posições dos usuários em espera
+        // 5. Atualiza posições dos usuários em espera
         await updateWaitingUsers(io);
 
     } catch (error) {
