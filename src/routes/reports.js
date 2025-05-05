@@ -62,7 +62,7 @@ router.get('/api/reports/generateReport', async (req, res) => {
 
         if (format === 'xlsx') {
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.xlsx`);
+            res.setHeader('Content-Disposition', `attachment; filename=rRelatório-${start}-a-${end}.xlsx`);
             const workbook = await generateXLSXReport(problems, start, end);
             await workbook.xlsx.write(res);
             return;
@@ -75,7 +75,7 @@ router.get('/api/reports/generateReport', async (req, res) => {
         });
         
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=relatorio-${start}-a-${end}.pdf`);
+        res.setHeader('Content-Disposition', `attachment; filename=Relatório-${start}-a-${end}.pdf`);
         
         doc.pipe(res);
         generatePDFReport(doc, problems, start, end);

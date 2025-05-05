@@ -85,10 +85,13 @@
         "hydra-bot": "^1.0.33",
         "open": "^10.1.0",
         "pdfkit": "^0.15.2",
+        "pg": "^8.15.6",
+        "pg-hstore": "^2.3.4",
         "puppeteer-core": "^20.9.0",
         "qrcode": "^1.5.4",
+        "sequelize": "^6.37.7",
         "socket.io": "^4.8.1",
         "socket.io-client": "^4.8.1",
-        "sqlite3": "^5.1.6"
+        "sqlite3": "^5.1.7"
     }
 }
