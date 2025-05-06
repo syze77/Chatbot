@@ -1,8 +1,8 @@
-const sequelize = require ('src/models/connections/connection.js')
-const {DataTypes} = require ('sequelize');
+const sequelize = require('../connections/connection.js')
+const {DataTypes} = require('sequelize');
 
 const Call = sequelize.define(
-    'Call',
+    'call',
     {
         id: {
             type: DataTypes.BIGINT,
@@ -36,11 +36,5 @@ const Call = sequelize.define(
         },
     },
 );
-
-Call.associate = (models) => {
-    Call.belongsTo(models.User);
-    Call.belongsTo(models.Card);
-    Call.belongsTo(models.Attendant);
-};
 
 module.exports = Call;

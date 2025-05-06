@@ -1,8 +1,9 @@
-const sequelize = require ('src/models/connections/connection.js')
-const {DataTypes} = require ('sequelize');
+const Call = require('./call.js')
+const sequelize = require('../connections/connection.js')
+const {DataTypes} = require('sequelize');
 
 const Attendant = sequelize.define(
-    'Attendant',
+    'attendant',
     {
         id: {
             type: DataTypes.BIGINT,
@@ -16,8 +17,6 @@ const Attendant = sequelize.define(
     },
 );
 
-Attendant.associate = (models) => {
-    Attendant.hasMany(models.Call);
-};
+Attendant.hasMany(Call);
 
 module.exports = Attendant;

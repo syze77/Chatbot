@@ -12,11 +12,19 @@ const filtersRoutes = require('../routes/filters.js');
 const reportsRoutes = require('../routes/reports.js');
 const problemCardsRoutes = require('../routes/api/problemCards.js');
 
+const sequelize = require('../models/connections/connection.js');
+const User  = require('../models/entities/user.js');
+const School = require('../models/entities/school.js');
+const Call = require('../models/entities/call.js');
+const Card = require('../models/entities/card.js');
+const Attendant = require('../models/entities/attendant.js')
+const UserTelephone = require('../models/entities/usertelephone.js');
+
+
 // Configuração do servidor HTTP e Socket.IO
 const httpServer = http.createServer(server);
 const io = socketIo(httpServer);
 
-// Add Socket.IO instance to app for use in routes
 server.set('io', io);
 
 let win;
@@ -107,10 +115,8 @@ function createWindow() {
     }
 }
 
-
 server.use(express.json());
 server.use(express.urlencoded({ extended: true }));
-
 
 server.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
@@ -204,6 +210,8 @@ function setupIpcHandlers() {
 app.whenReady().then(async () => {
     try {
         await initializeDatabase();
+        
+        await sequelize.sync({ force: true });
         createWindow();
         setupIpcHandlers();
         startHydraBot(io);

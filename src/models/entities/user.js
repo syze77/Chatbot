@@ -1,8 +1,11 @@
-const sequelize = require ('src/models/connections/connection.js')
-const {DataTypes} = require ('sequelize');
+
+const School = require('./school.js')
+const Call = require('./call.js')
+const sequelize = require('../connections/connection.js')
+const {DataTypes} = require('sequelize');
 
 const User = sequelize.define(
-    'User',
+    'user',
     {
         id: {
             type: DataTypes.BIGINT,
@@ -26,16 +29,16 @@ const User = sequelize.define(
             type: DataTypes.ENUM('ALUNO', 'PROFESSOR', 'SECRETÁRIO', 'ADMINISTRADOR', 'RESPONSÁVEL'),
             allowNull: false,
         },
-        telephone: {
-            type: DataTypes.STRING,
-            allowNull: false,
-        },
     },
 );
 
-User.associate = (models) => {
-    User.belongsTo(models.School, { foreignKey: 'iescolarId' });
-    User.hasMany(models.Call);
-};
 
-module.exports = User;
+// Associações
+User.belongsToMany(School, { 
+    through: 'userschool',
+    foreignKey: 'idUser',
+    otherKey: 'idSchool'
+})
+
+// Exportações
+module.exports = User

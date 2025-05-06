@@ -1,8 +1,9 @@
-const sequelize = require ('src/models/connections/connection.js')
-const {DataTypes} = require ('sequelize');
+const Call = require('./call.js')
+const sequelize = require('../connections/connection.js')
+const {DataTypes} = require('sequelize');
 
 const Card = sequelize.define(
-    'Card',
+    'card',
     {
         id: {
             type: DataTypes.BIGINT,
@@ -21,8 +22,6 @@ const Card = sequelize.define(
     },
 );
 
-Card.associate = (models) => {
-    Card.hasOne(models.Call);
-};
+Card.hasOne(Call);
 
 module.exports = Card;
