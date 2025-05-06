@@ -1,41 +1,43 @@
 const express = require('express');
 const router = express.Router();
-const { queryDatabase } = require('../utils/database.js');
+const School = require('../models/entities/school.js');
+const { Op, fn, col } = require('sequelize');
 
-router.get('/api/filters/getCities', async (req, res) => {
+router.get('/api/filters/getClients', async (req, res) => {
     try {
-        const query = `
-            SELECT DISTINCT city 
-            FROM problems 
-            WHERE city IS NOT NULL 
-            ORDER BY city`;
+        const clients = await School.findAll({
+            attributes: [
+                [fn('DISTINCT', col('client')), 'client']
+            ],
+            where: {
+                client: { [Op.ne]: null }
+            },
+            order: [['client', 'ASC']]
+        });
         
-        const cities = await queryDatabase(query);
-        res.json(cities.map(row => row.city));
+        res.json(clients.map(row => row.getDataValue('client')));
     } catch (error) {
-        console.error('Erro ao buscar cidades:', error);
-        res.status(500).json({ error: 'Erro ao buscar cidades' });
+        console.error('Erro ao buscar clientes:', error);
+        res.status(500).json({ error: 'Erro ao buscar clientes' });
     }
 });
 
 router.get('/api/filters/getSchools', async (req, res) => {
     try {
-        const { city } = req.query;
-        let query = `
-            SELECT DISTINCT school 
-            FROM problems 
-            WHERE school IS NOT NULL`;
+        const { client } = req.query;
+        const where = { name: { [Op.ne]: null } };
         
-        const params = [];
-        if (city) {
-            query += ` AND city = ?`;
-            params.push(city);
+        if (client) {
+            where.client = client;
         }
         
-        query += ` ORDER BY school`;
+        const schools = await School.findAll({
+            attributes: ['name'],
+            where,
+            order: [['name', 'ASC']]
+        });
         
-        const schools = await queryDatabase(query, params);
-        res.json(schools.map(row => row.school));
+        res.json(schools.map(row => row.name));
     } catch (error) {
         console.error('Erro ao buscar escolas:', error);
         res.status(500).json({ error: 'Erro ao buscar escolas' });

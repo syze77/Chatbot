@@ -1,4 +1,4 @@
-const { getDatabase } = require('../../utils/database.js');
+
 const finished = require('../messages/finished.json');
 
 class ServiceFeedback {

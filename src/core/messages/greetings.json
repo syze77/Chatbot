@@ -1,11 +1,9 @@
 {
     "welcome": [
-        "Olá! Bem-vindo ao atendimento. Para iniciarmos, por favor, envie suas informações no formato abaixo:",
-        "Oi! Para que eu possa te ajudar melhor, preciso de algumas informações. Por favor, envie no formato:",
-        "Seja bem-vindo! Para começarmos seu atendimento, envie seus dados assim:",
-        "Olá! Para um atendimento personalizado, preciso que você envie suas informações dessa forma:"
+        "Olá! Para iniciar o atendimento, por favor digite seu CPF:",
+        "Bem-vindo! Para começar, preciso que você informe seu CPF:",
+        "Olá! Para prosseguir com o atendimento, digite seu CPF:"
     ],
-    "template": "Nome:\nCidade:\nCargo:\nEscola:",
     "attendantAvailable": "Olá %s! Um atendente está disponível agora para ajudá-lo.",
     "queueUpdate": "Atualização: %s, sua posição atual na fila é %dº lugar.",
     "attendantAssigned": "Um atendente está analisando seu problema e entrará em contato em breve.",

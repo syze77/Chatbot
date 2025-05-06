@@ -7,12 +7,16 @@ const hydraBot = require('hydra-bot');
 const path = require('path');
 const { ipcMain } = require('electron');
 const express = require('express');
-const { getDatabase } = require('../utils/database.js');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const { handleRecovery } = require('./recovery.js'); 
 const { getRecentContacts } = require('./contacts/getcontacts.js');
 const ServiceFeedback = require('./modules/ServiceFeedback');
+const User = require('../models/entities/user.js');
+const School = require('../models/entities/school.js');
+const Call = require('../models/entities/call.js');
+const UserTelephone = require('../models/entities/usertelephone.js');
+const { Op } = require('sequelize');
 
 //Importar mensagens e diálogos                                            
 const greetings = require('./messages/greetings.json');
@@ -116,12 +120,9 @@ async function startHydraBot(io) {
         humanAttendedChats.add(chatId);
 
         // Atualizar status do problema no banco de dados
-        await getDatabase().run(
-          `UPDATE problems 
-           SET status = 'active', 
-               attendant_id = ? 
-           WHERE chatId = ? AND status = 'pending'`,
-          [attendantId, chatId]
+        await Call.update(
+          { status: 'active', attendant_id: attendantId },
+          { where: { chatId, status: 'pending' } }
         );
 
         // Enviar atualização de status para todos os clientes
@@ -155,12 +156,9 @@ async function startHydraBot(io) {
         humanAttendedChats.delete(chatId);
 
         // Atualizar status no banco de dados
-        await getDatabase().run(
-          `UPDATE problems 
-           SET status = 'completed', 
-               date_completed = DATETIME('now')
-           WHERE chatId = ? AND (id = ? OR status = 'active' OR status = 'pending')`,
-          [chatId, id]
+        await Call.update(
+          { status: 'completed', date_completed: new Date() },
+          { where: { chatId, [Op.or]: [{ id }, { status: 'active' }, { status: 'pending' }] } }
         );
 
         delete userCurrentTopic[chatId];
@@ -221,29 +219,14 @@ function setupSocketListeners(io) {
                 console.log('Recebendo solicitação de criação de card:', data);
                 const { chatId, cardLink } = data;
                 
-                const db = getDatabase();
-                const query = `INSERT INTO problem_cards (chatId, card_link, card_status) 
-                             VALUES (?, ?, 'pending')`;
-                
-                db.run(query, [chatId, cardLink], function(err) {
-                    if (err) {
-                        console.error('Erro ao criar card:', err);
-                        socket.emit('cardError', { error: 'Erro ao salvar o card' });
-                        return;
-                    }
-                    
-                    // Buscar o card criado
-                    db.get('SELECT * FROM problem_cards WHERE id = ?', [this.lastID], (err, card) => {
-                        if (err) {
-                            console.error('Erro ao buscar card criado:', err);
-                            socket.emit('cardError', { error: 'Erro ao recuperar o card' });
-                            return;
-                        }
-                        
-                        console.log('Card criado com sucesso:', card);
-                        io.emit('cardCreated', card);
-                    });
+                const newCard = await Call.create({
+                  chatId,
+                  card_link: cardLink,
+                  card_status: 'pending'
                 });
+
+                console.log('Card criado com sucesso:', newCard);
+                io.emit('cardCreated', newCard);
             } catch (error) {
                 console.error('Erro ao processar criação do card:', error);
                 socket.emit('cardError', { error: 'Erro interno do servidor' });
@@ -271,12 +254,9 @@ function setupSocketListeners(io) {
                 humanAttendedChats.delete(chatId);
 
                 // 1. Atualizar status para completed imediatamente
-                await getDatabase().run(
-                    `UPDATE problems 
-                     SET status = 'completed', 
-                     date_completed = DATETIME('now')
-                     WHERE chatId = ? AND (id = ? OR status = 'active' OR status = 'pending')`,
-                    [chatId, id]
+                await Call.update(
+                  { status: 'completed', date_completed: new Date() },
+                  { where: { chatId, [Op.or]: [{ id }, { status: 'active' }, { status: 'pending' }] } }
                 );
 
                 // 2. Emitir atualização imediata da UI
@@ -387,20 +367,8 @@ async function startListeningForMessages(conn, io) {
 }
 
 async function checkIgnoredContact(chatId) {
-    return new Promise((resolve) => {
-        getDatabase().get(
-            'SELECT id FROM ignored_contacts WHERE id = ?',
-            [chatId],
-            (err, row) => {
-                if (err) {
-                    console.error('Erro ao verificar contato ignorado:', err);
-                    resolve(false);
-                } else {
-                    resolve(!!row);
-                }
-            }
-        );
-    });
+    const ignored = await User.findOne({ where: { id: chatId, ignored: true } });
+    return !!ignored;
 }
 
 /**
@@ -410,76 +378,42 @@ async function checkIgnoredContact(chatId) {
  * @param {Object} io - Objeto Socket.IO
  * @returns {Promise<number>} ID do registro inserido/atualizado
  */
-async function updateDatabaseAndNotify(query, params, io) {
-    return new Promise((resolve, reject) => {
-        getDatabase().run(query, params, async function(err) {
-            if (err) {
-                console.error('Erro na atualização do banco:', err);
-                reject(err);
-                return;
-            }
-
-            try {
-                // Buscar dados atualizados
-                const statusData = await fetchCurrentStatus();
-                // Emitir atualização para todos os clientes
-                io.emit('statusUpdate', statusData);
-                resolve(this.lastID);
-            } catch (error) {
-                console.error('Erro ao buscar dados atualizados:', error);
-                reject(error);
-            }
-        });
-    });
+async function updateDatabaseAndNotify(fieldsToUpdate, condition, io) {
+    await Call.update(fieldsToUpdate, { where: condition });
+    const statusData = await fetchCurrentStatus();
+    io.emit('statusUpdate', statusData);
 }
 
 // Função auxiliar para buscar status atual
 async function fetchCurrentStatus() {
-    return new Promise((resolve, reject) => {
-        const queries = {
-            active: 'SELECT * FROM problems WHERE status = "active" ORDER BY date DESC LIMIT 3',
-            waiting: 'SELECT * FROM problems WHERE status = "waiting" ORDER BY date ASC',
-            pending: 'SELECT * FROM problems WHERE status = "pending" ORDER BY date DESC'
-        };
+    const [active, waiting, pending] = await Promise.all([
+        Call.findAll({ where: { status: 'active' }, order: [['date', 'DESC']], limit: 3 }),
+        Call.findAll({ where: { status: 'waiting' }, order: [['date', 'ASC']] }),
+        Call.findAll({ where: { status: 'pending' }, order: [['date', 'DESC']] })
+    ]);
 
-        Promise.all([
-            queryDatabase(queries.active),
-            queryDatabase(queries.waiting),
-            queryDatabase(queries.pending)
-        ])
-        .then(([active, waiting, pending]) => {
-            resolve({
-                activeChats: active,
-                waitingList: waiting,
-                problems: pending
-            });
-        })
-        .catch(reject);
-    });
-}
-
-// Função auxiliar para consultas no banco de dados
-function queryDatabase(query, params = []) {
-    return new Promise((resolve, reject) => {
-        getDatabase().all(query, params, (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows || []);
-        });
-    });
+    return {
+        activeChats: active,
+        waitingList: waiting,
+        problems: pending
+    };
 }
 
 // Processa novo usuário
 async function handleNewUser(conn, chatId, userInfo, io) {
-    const activeCount = await getActiveChatsCount();
+    const activeCount = await Call.count({ where: { status: 'active' } });
     const status = activeCount < CONFIG.MAX_ACTIVE_CHATS ? 'active' : 'waiting';
     
     try {
-        await updateDatabaseAndNotify(
-            `INSERT INTO problems (chatId, name, position, city, school, status, date) 
-             VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
-            [chatId, userInfo.name, userInfo.position, userInfo.city, userInfo.school, status],
-            io
-        );
+        await Call.create({
+            chatId,
+            name: userInfo.name,
+            position: userInfo.position,
+            city: userInfo.city,
+            school: userInfo.school,
+            status,
+            date: new Date()
+        });
 
         if (status === 'active') {
             await sendMessage(
@@ -490,7 +424,12 @@ async function handleNewUser(conn, chatId, userInfo, io) {
             await sendProblemOptions(conn, chatId);
             userCurrentTopic[chatId] = 'problema';
         } else {
-            const position = await getWaitingPosition(chatId);
+            const waitingChats = await Call.findAll({
+                where: { status: 'waiting' },
+                order: [['date', 'ASC']],
+                attributes: ['chatId']
+            });
+            const position = waitingChats.findIndex(row => row.chatId === chatId) + 1;
             await sendMessage(
                 conn,
                 chatId,
@@ -505,135 +444,15 @@ async function handleNewUser(conn, chatId, userInfo, io) {
 
 // Função para obter contagem de chats ativos
 async function getActiveChatsCount() {
-    return new Promise((resolve, reject) => {
-        getDatabase().get('SELECT COUNT(*) as count FROM problems WHERE status = "active"', (err, row) => {
-            if (err) reject(err);
-            else resolve(row.count);
-        });
-    });
+    return await Call.count({ where: { status: 'active' } });
 }
 
-// Função para obter posição na fila
-async function getWaitingPosition(chatId) {
-    return new Promise((resolve, reject) => {
-        getDatabase().all('SELECT chatId FROM problems WHERE status = "waiting" ORDER BY date ASC', (err, rows) => {
-            if (err) reject(err);
-            else {
-                const position = rows.findIndex(row => row.chatId === chatId) + 1;
-                resolve(position || rows.length + 1);
-            }
-        });
-    });
-}
-
-// Processa mensagem do usuário
-async function handleUserMessage(conn, chatId, messageText, io) {
-    try {
-        const currentTopic = userCurrentTopic[chatId];
-        
-        // Lista de comandos que devem ignorar verificação de duplicidade
-        const allowedDuplicates = [
-            '1', '2', '3', '4', '5', '6',
-            'voltar',
-            'sim', 'não',
-            'menu'
-        ];
-        
-        // Verificar duplicação apenas se não for um comando permitido
-        if (!allowedDuplicates.includes(messageText.toLowerCase())) {
-            const chatHistory = messageHistory.get(chatId) || [];
-            const now = Date.now();
-            
-            // Limpar mensagens antigas do histórico
-            while (chatHistory.length > 0 && now - chatHistory[0].timestamp > CONFIG.DUPLICATE_MESSAGE_WINDOW) {
-                chatHistory.shift();
-            }
-            
-            // Verificar se é uma mensagem duplicada
-            const isDuplicate = chatHistory.some(msg => 
-                msg.text === messageText && 
-                (now - msg.timestamp) < CONFIG.DUPLICATE_MESSAGE_WINDOW
-            );
-            
-            if (isDuplicate) {
-                console.log(`Mensagem duplicada ignorada para ${chatId}: ${messageText}`);
-                return;
-            }
-            
-            // Adicionar mensagem ao histórico
-            chatHistory.push({ text: messageText, timestamp: now });
-            if (chatHistory.length > CONFIG.MESSAGE_HISTORY_LIMIT) {
-                chatHistory.shift();
-            }
-            messageHistory.set(chatId, chatHistory);
-        }
-
-        // Se o chat está sendo atendido por humano, ignorar
-        if (humanAttendedChats.has(chatId)) {
-            return;
-        }
-        
-        // Verificar estado do chat no banco de dados
-        const chatState = await getChatState(chatId);
-        if (chatState && chatState.status === 'active') {
-            // Se já existe um atendimento ativo, não iniciar novo
-            if (!currentTopic && !messageText.toLowerCase().startsWith('nome:')) {
-                console.log(`Chat ${chatId} já possui atendimento ativo`);
-                return;
-            }
-        }
-        
-        // Resto do processamento de mensagem
-        if (!currentTopic || messageText.toLowerCase().startsWith('nome:')) {
-            if (messageText.toLowerCase().startsWith('nome:')) {
-                const userInfo = parseUserInfo(messageText);
-                if (userInfo) {
-                    await handleNewUser(conn, chatId, userInfo, io);
-                } else {
-                    await sendFormattedMessage(conn, chatId, 'template');
-                }
-            } else {
-                await sendFormattedMessage(conn, chatId, 'template');
-            }
-            return;
-        }
-
-        if (currentTopic.state === 'descricaoProblema') {
-            await handleProblemDescription(conn, chatId, messageText, io);
-            // Após descrever o problema, limpar o tópico para evitar respostas automáticas
-            delete userCurrentTopic[chatId];
-        } else if (currentTopic === 'problema') {
-            await handleProblemSelection(conn, chatId, messageText, io);
-        } else if (currentTopic.stage === 'subproblema') {
-            await handleSubProblemSelection(conn, chatId, messageText, io);
-        } else if (currentTopic === 'videoFeedback') {
-            await handleVideoFeedback(conn, chatId, messageText, io);
-        } else if (currentTopic === 'serviceFeedback') {
-            const feedbackSuccess = await ServiceFeedback.handleFeedback(conn, chatId, messageText, io);
-            if (feedbackSuccess) {
-                delete userCurrentTopic[chatId];
-                await sendMessage(conn, chatId, greetings.template);
-            }
-            return;
-        } else {
-            await sendMessage(conn, chatId, defaultMessage);
-        }
-    } catch (error) {
-        console.error(errors.processError.replace('%s', error));
-    }
-}
-
-//Função para obter estado do chat
+// Função para obter estado do chat
 async function getChatState(chatId) {
-    return new Promise((resolve, reject) => {
-        getDatabase().get(
-            'SELECT status FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
-            [chatId],
-            (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
-            }
-        );
+    return await Call.findOne({
+        where: { chatId },
+        order: [['date', 'DESC']],
+        attributes: ['status']
     });
 }
 
@@ -669,27 +488,23 @@ async function sendFormattedMessage(conn, chatId, type) {
 async function handleChatClosed(chatId, io) {
     try {
         // Marcar chat como concluído
-        await updateDatabaseAndNotify(
-            `UPDATE problems 
-             SET status = 'completed', 
-             date_completed = datetime('now') 
-             WHERE chatId = ?`,
-            [chatId],
-            io
+        await Call.update(
+            { status: 'completed', date_completed: new Date() },
+            { where: { chatId } }
         );
 
         // Obter próximo usuário na lista de espera
-        const nextUser = await getNextInWaitingList();
+        const nextUser = await Call.findOne({
+            where: { status: 'waiting' },
+            order: [['date', 'ASC']]
+        });
         
         // Verificar se existe próximo usuário
         if (nextUser) {
             // Atualizar status do próximo usuário
-            await updateDatabaseAndNotify(
-                `UPDATE problems 
-                 SET status = 'active' 
-                 WHERE chatId = ?`,
-                [nextUser.chatId],
-                io
+            await Call.update(
+                { status: 'active' },
+                { where: { chatId: nextUser.chatId } }
             );
 
             // Enviar mensagem para o próximo usuário
@@ -899,43 +714,28 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
         const videoUrl = dialogs.subProblems[problemKey].videos[messageText];
 
         // Buscar informações do usuário
-        const userInfo = await new Promise((resolve, reject) => {
-            getDatabase().get(
-                'SELECT name, city, position, school FROM problems WHERE chatId = ?', 
-                [chatId], 
-                (err, row) => {
-                    if (err) reject(err);
-                    else if (!row) reject(new Error('Usuário não encontrado'));
-                    else resolve(row);
-                }
-            );
+        const userInfo = await Call.findOne({
+            where: { chatId },
+            attributes: ['name', 'city', 'position', 'school']
         });
+
+        if (!userInfo) {
+            throw new Error('Usuário não encontrado');
+        }
 
         // Criar novo registro de problema
         const problemDescription = `${mainProblem} - ${subProblemText}`;
-        const date = new Date().toISOString();
+        const date = new Date();
 
-        await new Promise((resolve, reject) => {
-            getDatabase().run(
-                `INSERT INTO problems 
-                (chatId, name, city, position, school, description, status, date) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-
-                [
-                    chatId,
-                    userInfo.name,
-                    userInfo.city,
-                    userInfo.position,
-                    userInfo.school,
-                    problemDescription,
-                    'pending',
-                    date
-                ],
-                function(err) {
-                    if (err) reject(err);
-                    else resolve(this.lastID);
-                }
-            );
+        await Call.create({
+            chatId,
+            name: userInfo.name,
+            city: userInfo.city,
+            position: userInfo.position,
+            school: userInfo.school,
+            description: problemDescription,
+            status: 'pending',
+            date
         });
 
         await sendMessage(conn, chatId, dialogs.watchVideo.replace('%s', videoUrl));
@@ -978,19 +778,17 @@ async function handleVideoFeedback(conn, chatId, messageText, io) {
 async function handleProblemDescription(conn, chatId, messageText, io) {
     try {
         // Get user info for possible new problem creation
-        const userInfo = await new Promise((resolve, reject) => {
-            getDatabase().get(
-                'SELECT name, city, position, school FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
-                [chatId],
-                (err, row) => {
-                    if (err) reject(err);
-                    else if (!row) reject(new Error('Usuário não encontrado'));
-                    else resolve(row);
-                }
-            );
+        const userInfo = await Call.findOne({
+            where: { chatId },
+            order: [['date', 'DESC']],
+            attributes: ['name', 'city', 'position', 'school']
         });
 
-        const date = new Date().toISOString();
+        if (!userInfo) {
+            throw new Error('Usuário não encontrado');
+        }
+
+        const date = new Date();
         const description = messageText;
 
         // Check if this is from video feedback "não" response or option 6
@@ -998,31 +796,16 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
 
         if (isFromVideo) {
             // Update the most recent problem for video feedback case
-            const existingProblem = await new Promise((resolve, reject) => {
-                getDatabase().get(
-                    'SELECT * FROM problems WHERE chatId = ? ORDER BY date DESC LIMIT 1',
-                    [chatId],
-                    (err, row) => {
-                        if (err) reject(err);
-                        else resolve(row);
-                    }
-                );
+            const existingProblem = await Call.findOne({
+                where: { chatId },
+                order: [['date', 'DESC']]
             });
 
             if (existingProblem) {
-                await new Promise((resolve, reject) => {
-                    getDatabase().run(
-                        `UPDATE problems 
-                        SET description = ?, 
-                            date = ?
-                        WHERE id = ?`,
-                        [description, date, existingProblem.id],
-                        function(err) {
-                            if (err) reject(err);
-                            else resolve(this.lastID);
-                        }
-                    );
-                });
+                await Call.update(
+                    { description, date },
+                    { where: { id: existingProblem.id } }
+                );
 
                 io.emit('userProblem', {
                     description,
@@ -1035,17 +818,15 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
             }
         } else {
             // Create new problem record for option 6
-            await new Promise((resolve, reject) => {
-                getDatabase().run(
-                    `INSERT INTO problems 
-                    (chatId, name, city, position, school, description, status, date)
-                    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-                    [chatId, userInfo.name, userInfo.city, userInfo.position, userInfo.school, description, date],
-                    function(err) {
-                        if (err) reject(err);
-                        else resolve(this.lastID);
-                    }
-                );
+            await Call.create({
+                chatId,
+                name: userInfo.name,
+                city: userInfo.city,
+                position: userInfo.position,
+                school: userInfo.school,
+                description,
+                status: 'pending',
+                date
             });
 
             // Emit new problem event
@@ -1083,74 +864,45 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
 }
 
 // Salvar informações do cliente no banco de dados
-function saveClientInfoToDatabase(userInfo, chatId, status, io) {
-  const date = new Date().toISOString();
-  
-  getDatabase().run(
-    `INSERT INTO problems (chatId, name, position, city, school, status, date) 
-     VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-    [chatId, userInfo.name, userInfo.position, userInfo.city, userInfo.school, status, date], 
-    function(err) {
-      if (err) {
-        console.error('Erro ao salvar informações do cliente:', err.message);
-        return;
-      }
-      console.log(`Cliente inserido com ID ${this.lastID}`);
-      io.emit('statusUpdate');
-    }
-  );
+async function saveClientInfoToDatabase(userInfo, chatId, status, io) {
+    await Call.create({
+        chatId,
+        name: userInfo.name,
+        position: userInfo.position,
+        city: userInfo.city,
+        school: userInfo.school,
+        status,
+        date: new Date()
+    });
+    io.emit('statusUpdate');
 }
 
 // Salvar problema no banco de dados
-function saveProblemToDatabase(problemData, io) {
-  getDatabase().run(`UPDATE problems SET description = ?, date = ? WHERE id = ?`, 
-    [problemData.description, problemData.date, problemData.problemId], 
-    function(err) {
-      if (err) {
-        console.error('Erro ao salvar problema:', err.message);
-        return;
-      }
-      console.log(`Descrição do problema atualizada para id ${problemData.problemId}`);
-      io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
-    });
+async function saveProblemToDatabase(problemData, io) {
+    await Call.update(
+        { description: problemData.description, date: problemData.date },
+        { where: { id: problemData.problemId } }
+    );
+    io.emit('statusUpdate');
 }
 
 // Marcar problema como concluído no banco de dados
-function markProblemAsCompleted(problemId, io) {
-  getDatabase().run(`UPDATE problems SET status = 'completed' WHERE id = ?`, [problemId], function(err) {
-    if (err) {
-      console.error('Erro ao marcar problema como concluído:', err.message);
-      return;
-    }
-    console.log(`Problema com id ${problemId} marcado como concluído.`);
-    io.emit('statusUpdate', { activeChats: activeChatsList, waitingList: getWaitingList(), problems: reportedProblems });
-  });
+async function markProblemAsCompleted(problemId, io) {
+    await Call.update(
+        { status: 'completed' },
+        { where: { id: problemId } }
+    );
+    io.emit('statusUpdate');
 }
 
 // Enviar atualização de status para o processo principal
 async function sendStatusUpdateToMainProcess(io) {
     try {
-        const queries = {
-            active: `SELECT * FROM problems 
-                     WHERE status = 'active' 
-                     ORDER BY date DESC`,
-            waiting: `SELECT * FROM problems 
-                      WHERE status = 'waiting' 
-                      ORDER BY date ASC`,
-            pending: `SELECT * FROM problems 
-                      WHERE status = 'pending' 
-                      ORDER BY date DESC`,
-            completed: `SELECT * FROM problems 
-                        WHERE status = 'completed' 
-                        ORDER BY date_completed DESC 
-                        LIMIT 10`
-        };
-
         const [active, waiting, pending, completed] = await Promise.all([
-            queryDatabase(queries.active),
-            queryDatabase(queries.waiting),
-            queryDatabase(queries.pending),
-            queryDatabase(queries.completed)
+            Call.findAll({ where: { status: 'active' }, order: [['date', 'DESC']] }),
+            Call.findAll({ where: { status: 'waiting' }, order: [['date', 'ASC']] }),
+            Call.findAll({ where: { status: 'pending' }, order: [['date', 'DESC']] }),
+            Call.findAll({ where: { status: 'completed' }, order: [['date_completed', 'DESC']], limit: 10 })
         ]);
 
         const statusData = {
@@ -1188,12 +940,9 @@ function sendProblemToFrontEnd(problemData) {
 async function closeChat(chatId, io) {
     try {
         // 1. Atualizar status para completed imediatamente
-        await getDatabase().run(
-            `UPDATE problems 
-             SET status = 'completed', 
-             date_completed = datetime('now') 
-             WHERE chatId = ?`,
-            [chatId]
+        await Call.update(
+            { status: 'completed', date_completed: new Date() },
+            { where: { chatId } }
         );
 
         // 2. Emitir atualização imediata da UI
@@ -1201,13 +950,15 @@ async function closeChat(chatId, io) {
         io.emit('statusUpdate', statusData);
 
         // 4. Processa próximo usuário na fila
-        const nextUser = await getNextInWaitingList();
+        const nextUser = await Call.findOne({
+            where: { status: 'waiting' },
+            order: [['date', 'ASC']]
+        });
+
         if (nextUser) {
-            await getDatabase().run(
-                `UPDATE problems 
-                 SET status = 'active' 
-                 WHERE chatId = ?`,
-                [nextUser.chatId]
+            await Call.update(
+                { status: 'active' },
+                { where: { chatId: nextUser.chatId } }
             );
 
             await sendMessage(
@@ -1228,17 +979,9 @@ async function closeChat(chatId, io) {
 
 // Função para obter próximo da fila
 async function getNextInWaitingList() {
-    return new Promise((resolve, reject) => {
-        getDatabase().get(
-            `SELECT * FROM problems 
-             WHERE status = 'waiting' 
-             ORDER BY date ASC 
-             LIMIT 1`,
-            (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
-            }
-        );
+    return await Call.findOne({
+        where: { status: 'waiting' },
+        order: [['date', 'ASC']]
     });
 }
 
@@ -1296,14 +1039,10 @@ function redirectToWhatsAppChat(chatId) {
 
 async function updateWaitingUsers(io) {
     try {
-        const waitingUsers = await new Promise((resolve, reject) => {
-            getDatabase().all(
-                `SELECT chatId, name, date 
-                 FROM problems 
-                 WHERE status = "waiting" 
-                 ORDER BY date ASC`,
-                (err, rows) => err ? reject(err) : resolve(rows)
-            );
+        const waitingUsers = await Call.findAll({
+            where: { status: 'waiting' },
+            order: [['date', 'ASC']],
+            attributes: ['chatId', 'name', 'date']
         });
 
         // Para cada usuário em espera, calcular e enviar sua posição atual

@@ -1,96 +1,91 @@
 const express = require('express');
 const router = express.Router();
-const { db, queryDatabase } = require('../utils/database.js');
+const User  = require('../models/entities/user.js');
+const School = require('../models/entities/school.js');
+const Call = require('../models/entities/call.js');
+const Attendant = require('../models/entities/attendant.js');
+const { Op, literal, fn, col } = require('sequelize');
 
 router.get('/api/statistics/getChartData', async (req, res) => {
     try {
-        const { city, school } = req.query;
-        let conditions = ['problems.description IS NOT NULL'];
-        const params = [];
+        const { client, school } = req.query;
+        let where = {
+            description: { [Op.ne]: null }
+        };
         
-        if (city && city !== 'undefined' && city !== '') {
-            conditions.push('problems.city = ?');
-            params.push(city);
+        if (client && client !== 'undefined' && client !== '') {
+            where['$school.client$'] = client;
         }
         
         if (school && school !== 'undefined' && school !== '') {
-            conditions.push('problems.school = ?');
-            params.push(school);
+            where['$school.id$'] = school;
         }
+
+        const currentYear = new Date().getFullYear();
+        const startOfYear = new Date(currentYear, 0, 1);
+        const endOfYear = new Date(currentYear, 11, 31);
+
+        // Monthly data
+        const monthlyData = await Call.findAll({
+            attributes: [
+                [fn('date_part', 'month', col('createDate')), 'month'],
+                [fn('count', '*'), 'count']
+            ],
+            where: {
+                ...where,
+                createDate: {
+                    [Op.between]: [startOfYear, endOfYear]
+                }
+            },
+            include: [{
+                model: School,
+                attributes: []
+            }],
+            group: [fn('date_part', 'month', col('createDate'))],
+            order: [[fn('date_part', 'month', col('createDate')), 'ASC']]
+        });
+
+        // Weekly data
+        const startOfWeek = new Date();
+        startOfWeek.setDate(startOfWeek.getDate() - 7);
         
-        const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+        const weeklyData = await Call.findAll({
+            attributes: [
+                [fn('date', col('createDate')), 'date'],
+                [fn('count', '*'), 'count']
+            ],
+            where: {
+                ...where,
+                createDate: {
+                    [Op.between]: [startOfWeek, new Date()]
+                }
+            },
+            include: [{
+                model: School,
+                attributes: []
+            }],
+            group: [fn('date', col('createDate'))],
+            order: [[col('createDate'), 'ASC']]
+        });
 
-        const monthlyQuery = `
-            WITH RECURSIVE 
-            months(month_num) AS (
-                SELECT 1
-                UNION ALL
-                SELECT month_num + 1
-                FROM months
-                WHERE month_num < 12
-            )
-            SELECT 
-                printf('%02d', months.month_num) as month,
-                COALESCE(
-                    (SELECT COUNT(*) 
-                     FROM problems 
-                     ${whereClause}
-                     ${whereClause ? 'AND' : 'WHERE'} strftime('%m', date) = printf('%02d', months.month_num)
-                     AND strftime('%Y', date) = strftime('%Y', 'now')), 
-                    0
-                ) as count
-            FROM months
-            ORDER BY months.month_num`;
-
-        const weeklyQuery = `
-            WITH RECURSIVE 
-            dates(date) AS (
-                SELECT date('now', 'weekday 0', '-7 days')
-                UNION ALL
-                SELECT date(date, '+1 day')
-                FROM dates
-                WHERE date < date('now', 'weekday 5')
-            )
-            SELECT 
-                dates.date,
-                COALESCE(
-                    (SELECT COUNT(*) 
-                     FROM problems 
-                     ${whereClause}
-                     ${whereClause ? 'AND' : 'WHERE'} date(problems.date) = dates.date),
-                    0
-                ) as count
-            FROM dates
-            WHERE strftime('%w', date) BETWEEN '1' AND '5'
-            ORDER BY dates.date`;
-
-        const [weeklyData, monthlyData] = await Promise.all([
-            queryDatabase(weeklyQuery, params),
-            queryDatabase(monthlyQuery, params)
-        ]);
-
-        // Nomes dos meses em português
         const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-        
-        // Nomes dos dias da semana em português 
-        const weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'];          
+        const weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'];
 
         const processed = {
             weekly: {
                 labels: weeklyData.map(row => {
-                    const date = new Date(row.date + 'T00:00:00-03:00'); 
-                    console.log('Date:', date, 'Day:', date.getDay()); 
+                    const date = new Date(row.getDataValue('date'));
                     return weekDays[date.getDay() - 1] || '';
                 }).filter(label => label !== ''),
-                data: weeklyData.map(row => row.count).filter((_, index) => {
-                    const date = new Date(weeklyData[index].date + 'T00:00:00-03:00');
-                    return date.getDay() >= 1 && date.getDay() <= 5;
-                })
+                data: weeklyData.map(row => parseInt(row.getDataValue('count')))
             },
             monthly: {
                 labels: monthNames,
-                data: monthlyData.map(row => row.count)
+                data: Array(12).fill(0).map((_, index) => {
+                    const monthData = monthlyData.find(m => parseInt(m.getDataValue('month')) === index + 1);
+                    return monthData ? parseInt(monthData.getDataValue('count')) : 0;
+                })
             }
         };
 
@@ -103,71 +98,55 @@ router.get('/api/statistics/getChartData', async (req, res) => {
 
 router.get('/api/statistics/getCompletedAttendances', async (req, res) => {
     try {
-        const { date, position, city, school, attendant } = req.query;
-        let query = `
-            SELECT 
-                id, 
-                chatId, 
-                name, 
-                position, 
-                city, 
-                school, 
-                description,
-                date,
-                date_completed,
-                status,
-                CASE 
-                    WHEN attendant_id IS NULL THEN 'Bot'
-                    ELSE attendant_id
-                END as attendant,
-                CAST(
-                    (julianday(date_completed) - julianday(date)) * 24 * 60 AS INTEGER
-                ) as duration_minutes,
-                strftime('%d/%m/%Y %H:%M', datetime(date)) as formatted_date,
-                strftime('%d/%m/%Y %H:%M', datetime(date_completed)) as formatted_date_completed
-            FROM problems 
-            WHERE status = 'completed'
-            AND description IS NOT NULL`;
+        const { date, position, client, school, attendant } = req.query;
         
-        const params = [];
-        
+        const where = {
+            status: 'COMPLETED',
+            description: { [Op.ne]: null }
+        };
+
         if (date) {
-            query += ` AND DATE(date_completed) = DATE(?)`;
-            params.push(date);
-        }
-        
-        if (position) {
-            query += ` AND position = ?`;
-            params.push(position);
+            where.dateTimeFinish = {
+                [Op.between]: [new Date(date), new Date(date + ' 23:59:59')]
+            };
         }
 
-        if (city) {
-            query += ` AND city = ?`;
-            params.push(city);
-        }
-
-        if (school) {
-            query += ` AND school = ?`;
-            params.push(school);
-        }
-
+        if (position) where.position = position;
+        if (school) where['$school.id$'] = school;
+        if (client) where['$school.client$'] = client;
         if (attendant) {
             if (attendant === 'Bot') {
-                query += ` AND attendant_id IS NULL`;
+                where['$attendant.id$'] = null;
             } else {
-                query += ` AND attendant_id = ?`;
-                params.push(attendant);
+                where['$attendant.id$'] = attendant;
             }
         }
-        
-        query += ` ORDER BY date_completed DESC`;
 
-        const completedAttendances = await queryDatabase(query, params);
-        
+        const completedAttendances = await Call.findAll({
+            where,
+            include: [
+                {
+                    model: School,
+                    attributes: ['name', 'client']
+                },
+                {
+                    model: Attendant,
+                    attributes: ['name']
+                }
+            ],
+            order: [['dateTimeFinish', 'DESC']]
+        });
+
         const formattedAttendances = completedAttendances.map(att => ({
-            ...att,
-            date: att.formatted_date,
-            date_completed: att.formatted_date_completed
+            id: att.id,
+            position: att.position,
+            description: att.description,
+            school: att.school?.name,
+            client: att.school?.client,
+            attendant: att.attendant?.name || 'Bot',
+            date: att.createDate.toLocaleString('pt-BR'),
+            date_completed: att.dateTimeFinish.toLocaleString('pt-BR'),
+            duration_minutes: Math.floor((att.dateTimeFinish - att.createDate) / (1000 * 60))
         }));
 
         res.json(formattedAttendances);

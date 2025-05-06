@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const PDFDocument = require('pdfkit');
-const { queryDatabase } = require('../utils/database.js');
+const School = require('../models/entities/school.js');
+const Call = require('../models/entities/call.js');
+const Card = require('../models/entities/card.js');
+const Attendant = require('../models/entities/attendant.js');
+const { Op, fn, col, literal } = require('sequelize');
 const { generateXLSXReport } = require('../core/reports/templates/xlsx/report.template.js');
 const { generatePDFReport } = require('../core/reports/templates/pdf/report.template.js');
 
@@ -9,61 +13,55 @@ router.get('/api/reports/generateReport', async (req, res) => {
     try {
         const { start, end, format, city, school } = req.query;
         
-        let filter = '';
-        const params = [start, end];
-        
-        if (city) {
-            filter += ' AND city = ?';
-            params.push(city);
-        }
-        
-        if (school) {
-            filter += ' AND school = ?';
-            params.push(school);
-        }
-        
-        const query = `
-            WITH ProblemCards AS (
-                SELECT 
-                    p.chatId,
-                    p.date as problem_date,
-                    MIN(pc.card_link) as card_link,
-                    MIN(pc.card_status) as card_status
-                FROM problems p
-                LEFT JOIN problem_cards pc ON 
-                    p.chatId = pc.chatId 
-                    AND pc.created_at >= p.date 
-                    AND pc.created_at <= COALESCE(p.date_completed, datetime(p.date, '+1 day'))
-                GROUP BY p.chatId, p.date
-            )
-            SELECT 
-                problems.*,
-                strftime('%d/%m/%Y %H:%M', datetime(problems.date, 'localtime')) as formatted_date,
-                strftime('%d/%m/%Y %H:%M', datetime(problems.date_completed, 'localtime')) as formatted_date_completed,
-                CAST((julianday(problems.date_completed) - julianday(problems.date)) * 24 * 60 AS INTEGER) as duration_minutes,
-                attendant_id,
-                COALESCE(pc.card_link, 'NÃO FOI NECESSÁRIO') as card_link,
-                COALESCE(pc.card_status, 'NÃO FOI NECESSÁRIO') as card_status
-            FROM problems 
-            LEFT JOIN ProblemCards pc ON 
-                problems.chatId = pc.chatId 
-                AND problems.date = pc.problem_date
-            WHERE problems.date BETWEEN ? AND ?
-            AND problems.description IS NOT NULL
-            ${filter}
-            ORDER BY problems.date DESC
-        `;
+        let where = {
+            createDate: {
+                [Op.between]: [new Date(start), new Date(end)]
+            },
+            description: { [Op.ne]: null }
+        };
 
-        const problems = await queryDatabase(query, params);
+        if (city) where['$school.city$'] = city;
+        if (school) where['$school.id$'] = school;
 
-        if (!Array.isArray(problems)) {
-            throw new Error('Dados inválidos retornados da consulta');
-        }
+        const problems = await Call.findAll({
+            where,
+            include: [
+                {
+                    model: Card,
+                    attributes: ['link', 'status']
+                },
+                {
+                    model: School,
+                    attributes: ['name', 'city']
+                },
+                {
+                    model: Attendant,
+                    attributes: ['name']
+                }
+            ],
+            order: [['createDate', 'DESC']]
+        });
+
+        const formattedProblems = problems.map(problem => ({
+            id: problem.id,
+            description: problem.description,
+            school: problem.school?.name,
+            city: problem.school?.city,
+            position: problem.position,
+            status: problem.status,
+            formatted_date: problem.createDate.toLocaleString('pt-BR'),
+            formatted_date_completed: problem.dateTimeFinish?.toLocaleString('pt-BR'),
+            duration_minutes: problem.dateTimeFinish ? 
+                Math.floor((problem.dateTimeFinish - problem.createDate) / (1000 * 60)) : null,
+            attendant_id: problem.attendant?.name || 'Bot',
+            card_link: problem.card?.link || 'Não foi necessário',
+            card_status: problem.card?.status || 'Não foi necessário'
+        }));
 
         if (format === 'xlsx') {
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename=rRelatório-${start}-a-${end}.xlsx`);
-            const workbook = await generateXLSXReport(problems, start, end);
+            res.setHeader('Content-Disposition', `attachment; filename=Relatório-${start}-a-${end}.xlsx`);
+            const workbook = await generateXLSXReport(formattedProblems, start, end);
             await workbook.xlsx.write(res);
             return;
         }
@@ -78,7 +76,7 @@ router.get('/api/reports/generateReport', async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename=Relatório-${start}-a-${end}.pdf`);
         
         doc.pipe(res);
-        generatePDFReport(doc, problems, start, end);
+        generatePDFReport(doc, formattedProblems, start, end);
         doc.end();
 
     } catch (error) {

@@ -1,4 +1,3 @@
-const { getDatabase } = require('../../utils/database.js');
 const { getRecentContacts, getBotConnection } = require('../bot.js');
 
 async function executeQuery(query, params = []) {

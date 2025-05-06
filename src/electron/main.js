@@ -4,7 +4,6 @@ const http = require('http');
 const socketIo = require('socket.io');
 const express = require('express');
 const { startHydraBot, redirectToWhatsAppChat, server, getRecentContacts, getBotConnection } = require('../core/bot.js');
-const { initializeDatabase, getDatabase } = require('../utils/database.js');
 const { getAllContacts, saveIgnoredContacts } = require('../core/contacts/contactmanager.js');
 
 const statisticsRoutes = require('../routes/statistics.js');
@@ -15,11 +14,6 @@ const problemCardsRoutes = require('../routes/api/problemCards.js');
 const sequelize = require('../models/connections/connection.js');
 const User  = require('../models/entities/user.js');
 const School = require('../models/entities/school.js');
-const Call = require('../models/entities/call.js');
-const Card = require('../models/entities/card.js');
-const Attendant = require('../models/entities/attendant.js')
-const UserTelephone = require('../models/entities/usertelephone.js');
-
 
 // Configuração do servidor HTTP e Socket.IO
 const httpServer = http.createServer(server);
@@ -29,29 +23,35 @@ server.set('io', io);
 
 let win;
 
-// Função utilitária para consultas ao banco de dados
-async function executeQuery(query, params = []) {
-    return new Promise((resolve, reject) => {
-        getDatabase().all(query, params, (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows || []);
-        });
-    });
-}
-
 // Função central para buscar dados do sistema
 async function fetchSystemData() {
-    const queries = {
-        active: `SELECT * FROM problems WHERE status = 'active' ORDER BY date DESC LIMIT 3`,
-        waiting: `SELECT * FROM problems WHERE status = 'waiting' ORDER BY date ASC`,
-        pending: `SELECT * FROM problems WHERE status = 'pending' ORDER BY date DESC`
-    };
-
     try {
         const [active, waiting, pending] = await Promise.all([
-            executeQuery(queries.active),
-            executeQuery(queries.waiting),
-            executeQuery(queries.pending)
+            Call.findAll({
+                where: { status: 'ACTIVE' },
+                order: [['createDate', 'DESC']],
+                limit: 3,
+                include: [
+                    { model: School },
+                    { model: Attendant }
+                ]
+            }),
+            Call.findAll({
+                where: { status: 'WAITING' },
+                order: [['createDate', 'ASC']],
+                include: [
+                    { model: School },
+                    { model: Attendant }
+                ]
+            }),
+            Call.findAll({
+                where: { status: 'PENDING' },
+                order: [['createDate', 'DESC']],
+                include: [
+                    { model: School },
+                    { model: Attendant }
+                ]
+            })
         ]);
 
         return {
@@ -131,37 +131,6 @@ server.use('/', filtersRoutes);
 server.use('/', reportsRoutes);
 server.use('/api/problem-cards', problemCardsRoutes); 
 
-// Configuração das rotas do servidor
-server.get('/getProblemsData', async (req, res) => {
-    try {
-        const data = await fetchSystemData();
-        res.json(data);
-        io.emit('statusUpdate', data);
-    } catch (error) {
-        console.error('Erro ao buscar dados:', error);
-        res.status(500).send('Erro ao buscar dados');
-    }
-});
-
-server.get('/getCompletedAttendances', async (req, res) => {
-    try {
-        const completed = await executeQuery('SELECT * FROM problems WHERE status = "completed"');
-        res.json(completed);
-    } catch (error) {
-        console.error('Erro ao buscar atendimentos concluídos:', error);
-        res.status(500).send('Erro ao buscar atendimentos concluídos');
-    }
-});
-
-server.delete('/deleteCompletedAttendance/:id', async (req, res) => {
-    try {
-        await executeQuery('DELETE FROM problems WHERE id = ?', [req.params.id]);
-        res.sendStatus(200);
-    } catch (error) {
-        console.error('Erro ao deletar atendimento:', error);
-        res.status(500).send('Erro ao deletar atendimento');
-    }
-});
 
 // Configuração dos eventos IPC
 function setupIpcHandlers() {
@@ -209,9 +178,8 @@ function setupIpcHandlers() {
 // Inicialização do aplicativo
 app.whenReady().then(async () => {
     try {
-        await initializeDatabase();
-        
-        await sequelize.sync({ force: true });
+        await sequelize.authenticate();
+        await sequelize.sync();
         createWindow();
         setupIpcHandlers();
         startHydraBot(io);
