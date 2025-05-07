@@ -541,18 +541,8 @@ function getRandomWelcomeMessage() {
 }
 
 async function sendFormattedMessage(conn, chatId, type) {
-    switch (type) {
-        case 'template':
-            // Mantém delay inicial longo
-            await new Promise(resolve => setTimeout(resolve, getRandomDelay()));
-            await sendMessage(conn, chatId, getRandomWelcomeMessage());
-            // Reduz delay do template
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            await sendMessage(conn, chatId, greetings.template);
-            break;
-        default:
-            await sendMessage(conn, chatId, getRandomWelcomeMessage());
-    }
+    // Apenas envia mensagem de boas-vindas aleatória, pois não há mais fluxo de template
+    await sendMessage(conn, chatId, getRandomWelcomeMessage());
 }
 
 // Processa fechamento do chat

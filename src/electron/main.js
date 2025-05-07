@@ -35,7 +35,7 @@ async function fetchSystemData() {
                 order: [['createDate', 'DESC']],
                 limit: 3,
                 include: [
-                    { model: School },
+                    { model: User },
                     { model: Attendant }
                 ]
             }),
@@ -43,7 +43,7 @@ async function fetchSystemData() {
                 where: { status: 'WAITING' },
                 order: [['createDate', 'ASC']],
                 include: [
-                    { model: School },
+                    { model: User },
                     { model: Attendant }
                 ]
             }),
@@ -51,7 +51,7 @@ async function fetchSystemData() {
                 where: { status: 'PENDING' },
                 order: [['createDate', 'DESC']],
                 include: [
-                    { model: School },
+                    { model: User },
                     { model: Attendant }
                 ]
             })
@@ -92,7 +92,7 @@ function createWindow() {
 
     win.setTitle('');
     
-    // Remove focus listener and simplify theme handling
+   
     nativeTheme.themeSource = 'dark';
 
     // Configurar regras de segurança de conteúdo
