@@ -20,8 +20,9 @@ const UserTelephone = sequelize.define(
         },
     },
     {
+        freezeTableName: true,
         timestamps: false,
-    }
+    },
 );
 
 module.exports = UserTelephone;

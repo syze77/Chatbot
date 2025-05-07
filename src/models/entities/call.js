@@ -36,8 +36,10 @@ const Call = sequelize.define(
         },
     },
     {
+        freezeTableName: true,
         timestamps: false,
-    }
+    },
+
 );
 
 module.exports = Call;

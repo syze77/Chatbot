@@ -34,8 +34,9 @@ const School = sequelize.define('school', {
     },
 }, 
     {
+        freezeTableName: true,
         timestamps: false,
-    }
+    },
 );
 
 module.exports = School;

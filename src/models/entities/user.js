@@ -3,6 +3,7 @@ const School = require('./school.js')
 const Call = require('./call.js')
 const sequelize = require('../connections/connection.js')
 const {DataTypes} = require('sequelize');
+const { fr } = require('date-fns/locale');
 
 const User = sequelize.define(
     'user',
@@ -12,7 +13,7 @@ const User = sequelize.define(
             autoIncrement: true,
             primaryKey: true,
         },
-        cpf: {
+        identifier: {
             type: DataTypes.STRING,
             allowNull: false,
             unique: true,
@@ -31,8 +32,9 @@ const User = sequelize.define(
         },
     },
     {
+        freezeTableName: true,
         timestamps: false,
-    }
+    },
 );
 
 

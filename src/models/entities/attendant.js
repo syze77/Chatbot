@@ -16,8 +16,11 @@ const Attendant = sequelize.define(
         },
     },
     {
+        freezeTableName: true,
         timestamps: false,
-    }
+    },
+
+
 );
 
 Attendant.hasMany(Call);

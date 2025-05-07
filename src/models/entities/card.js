@@ -21,8 +21,9 @@ const Card = sequelize.define(
         },
     },
     {
+        freezeTableName: true,
         timestamps: false,
-    }
+    },
 );
 
 Card.hasOne(Call);
