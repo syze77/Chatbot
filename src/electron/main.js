@@ -14,6 +14,9 @@ const problemCardsRoutes = require('../routes/api/problemCards.js');
 const sequelize = require('../models/connections/connection.js');
 const User  = require('../models/entities/user.js');
 const School = require('../models/entities/school.js');
+const Call = require('../models/entities/call.js');
+const Attendant = require('../models/entities/attendant.js');
+const UserTelephone = require('../models/entities/usertelephone.js');
 
 // Configuração do servidor HTTP e Socket.IO
 const httpServer = http.createServer(server);

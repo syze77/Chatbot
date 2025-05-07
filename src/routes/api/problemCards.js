@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const Call = require('../models/entities/call.js');
-const Card = require('../models/entities/card.js');
+const Call = require('../../models/entities/call.js');
+const Card = require('../../models/entities/card.js');
 const { Op } = require('sequelize');
 
 router.get('/test', (req, res) => {

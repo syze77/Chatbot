@@ -19,6 +19,9 @@ const UserTelephone = sequelize.define(
             primaryKey: true,
         },
     },
+    {
+        timestamps: false,
+    }
 );
 
 module.exports = UserTelephone;

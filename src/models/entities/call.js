@@ -35,6 +35,9 @@ const Call = sequelize.define(
             }
         },
     },
+    {
+        timestamps: false,
+    }
 );
 
 module.exports = Call;

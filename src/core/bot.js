@@ -121,8 +121,8 @@ async function startHydraBot(io) {
 
         // Atualizar status do problema no banco de dados
         await Call.update(
-          { status: 'active', attendant_id: attendantId },
-          { where: { chatId, status: 'pending' } }
+          { status: 'ACTIVE', attendant_id: attendantId },
+          { where: { chatId, status: 'PENDING' } }
         );
 
         // Enviar atualização de status para todos os clientes
@@ -157,8 +157,8 @@ async function startHydraBot(io) {
 
         // Atualizar status no banco de dados
         await Call.update(
-          { status: 'completed', date_completed: new Date() },
-          { where: { chatId, [Op.or]: [{ id }, { status: 'active' }, { status: 'pending' }] } }
+          { status: 'COMPLETED', dateTimeFinish: new Date() },
+          { where: { chatId, [Op.or]: [{ id }, { status: 'ACTIVE' }, { status: 'PENDING' }] } }
         );
 
         delete userCurrentTopic[chatId];
@@ -222,7 +222,7 @@ function setupSocketListeners(io) {
                 const newCard = await Call.create({
                   chatId,
                   card_link: cardLink,
-                  card_status: 'pending'
+                  card_status: 'PENDING'
                 });
 
                 console.log('Card criado com sucesso:', newCard);
@@ -255,8 +255,8 @@ function setupSocketListeners(io) {
 
                 // 1. Atualizar status para completed imediatamente
                 await Call.update(
-                  { status: 'completed', date_completed: new Date() },
-                  { where: { chatId, [Op.or]: [{ id }, { status: 'active' }, { status: 'pending' }] } }
+                  { status: 'COMPLETED', dateTimeFinish: new Date() },
+                  { where: { chatId, [Op.or]: [{ id }, { status: 'ACTIVE' }, { status: 'PENDING' }] } }
                 );
 
                 // 2. Emitir atualização imediata da UI
@@ -311,32 +311,103 @@ async function startListeningForMessages(conn, io) {
                 return;
             }
 
-            const messageText = newMsg.result.body.toLowerCase();
+            const messageText = newMsg.result.body.trim();
 
-            // Verificar se é recuperação de senha
-            const recoveryResponse = await handleRecovery(newMsg.result);
-            if (recoveryResponse) {
-                await sendMessage(conn, chatId, recoveryResponse);
+            // --- INÍCIO DA TRIAGEM: Solicitar CPF ---
+            if (!userCurrentTopic[chatId]) {
+                // (mensagem aleatória)
+                await sendMessage(conn, chatId, getRandomWelcomeMessage());
+                userCurrentTopic[chatId] = { state: 'awaitingCpf' };
                 return;
             }
 
-            // Continuar com o fluxo normal para outras mensagens
-            const isIgnored = await checkIgnoredContact(chatId);
-            if (isIgnored) {
-                return;
-            }
-
-            // Processar mensagem normal
-            if (messageText.startsWith("nome:")) {
-                const userInfo = parseUserInfo(messageText);
-                if (userInfo) {
-                    await handleNewUser(conn, chatId, userInfo, io);
-                } else {
-                    await sendFormattedMessage(conn, chatId, 'template');
+            // --- Recebe CPF e busca usuário ---
+            if (userCurrentTopic[chatId]?.state === 'awaitingCpf') {
+                const cpf = messageText.replace(/\D/g, '');
+                if (!cpf || cpf.length < 11) {
+                    await sendMessage(conn, chatId, errors.invalidCpf);
+                    return;
                 }
-            } else {
-                await handleUserMessage(conn, chatId, messageText, io);
+                // Buscar usuário pelo CPF
+                const user = await User.findOne({ where: { cpf } });
+                if (!user) {
+                    await sendMessage(conn, chatId, errors.userNotFound);
+                    return;
+                }
+
+                // Buscar escolas vinculadas (tabela de associação)
+                const userSchools = await user.getSchools();
+                if (!userSchools || userSchools.length === 0) {
+                    await sendMessage(conn, chatId, errors.noSchoolLinked);
+                    return;
+                }
+
+                // Montar lista de escolas/cidades
+                if (userSchools.length === 1) {
+                    // Só uma escola/cidade, seguir fluxo
+                    const school = userSchools[0];
+                    userCurrentTopic[chatId] = {
+                        state: 'cpfTriaged',
+                        userId: user.id,
+                        userName: user.name,
+                        userType: user.type,
+                        schoolId: school.id,
+                        schoolName: school.name,
+                        city: school.client
+                    };
+                    await sendMessage(conn, chatId, greetings.confirmSchool.replace('%s', `${school.name} - ${school.client}`));
+                    // Prosseguir para o fluxo normal (ex: pedir problema)
+                    await sendProblemOptions(conn, chatId);
+                    userCurrentTopic[chatId] = 'problema';
+                } else {
+                    // Múltiplas escolas/cidades, pedir escolha
+                    let msg = greetings.chooseSchool + '\n';
+                    userSchools.forEach((school, idx) => {
+                        msg += `${idx + 1}. ${school.name} - ${school.client}\n`;
+                    });
+                    await sendMessage(conn, chatId, msg.trim());
+                    userCurrentTopic[chatId] = {
+                        state: 'awaitingSchoolSelection',
+                        userId: user.id,
+                        userName: user.name,
+                        userType: user.type,
+                        schools: userSchools.map(s => ({
+                            id: s.id,
+                            name: s.name,
+                            city: s.client
+                        }))
+                    };
+                }
+                return;
             }
+
+            // --- Recebe escolha da escola/cidade ---
+            if (userCurrentTopic[chatId]?.state === 'awaitingSchoolSelection') {
+                const selection = parseInt(messageText, 10);
+                const schools = userCurrentTopic[chatId].schools;
+                if (!selection || selection < 1 || selection > schools.length) {
+                    await sendMessage(conn, chatId, errors.invalidSchoolSelection);
+                    return;
+                }
+                const chosen = schools[selection - 1];
+                userCurrentTopic[chatId] = {
+                    state: 'cpfTriaged',
+                    userId: userCurrentTopic[chatId].userId,
+                    userName: userCurrentTopic[chatId].userName,
+                    userType: userCurrentTopic[chatId].userType,
+                    schoolId: chosen.id,
+                    schoolName: chosen.name,
+                    city: chosen.city
+                };
+                await sendMessage(conn, chatId, greetings.confirmSchool.replace('%s', `${chosen.name} - ${chosen.city}`));
+                // Prosseguir para o fluxo normal (ex: pedir problema)
+                await sendProblemOptions(conn, chatId);
+                userCurrentTopic[chatId] = 'problema';
+                return;
+            }
+
+            // --- Fluxo normal após triagem ---
+            await handleUserMessage(conn, chatId, messageText, io);
             
         } catch (error) {
             console.error(errors.processError.replace('%s', error.message || 'Unknown error'));
@@ -387,9 +458,9 @@ async function updateDatabaseAndNotify(fieldsToUpdate, condition, io) {
 // Função auxiliar para buscar status atual
 async function fetchCurrentStatus() {
     const [active, waiting, pending] = await Promise.all([
-        Call.findAll({ where: { status: 'active' }, order: [['date', 'DESC']], limit: 3 }),
-        Call.findAll({ where: { status: 'waiting' }, order: [['date', 'ASC']] }),
-        Call.findAll({ where: { status: 'pending' }, order: [['date', 'DESC']] })
+        Call.findAll({ where: { status: 'ACTIVE' }, order: [['createDate', 'DESC']], limit: 3 }),
+        Call.findAll({ where: { status: 'WAITING' }, order: [['createDate', 'ASC']] }),
+        Call.findAll({ where: { status: 'PENDING' }, order: [['createDate', 'DESC']] })
     ]);
 
     return {
@@ -401,8 +472,8 @@ async function fetchCurrentStatus() {
 
 // Processa novo usuário
 async function handleNewUser(conn, chatId, userInfo, io) {
-    const activeCount = await Call.count({ where: { status: 'active' } });
-    const status = activeCount < CONFIG.MAX_ACTIVE_CHATS ? 'active' : 'waiting';
+    const activeCount = await Call.count({ where: { status: 'ACTIVE' } });
+    const status = activeCount < CONFIG.MAX_ACTIVE_CHATS ? 'ACTIVE' : 'WAITING';
     
     try {
         await Call.create({
@@ -412,10 +483,10 @@ async function handleNewUser(conn, chatId, userInfo, io) {
             city: userInfo.city,
             school: userInfo.school,
             status,
-            date: new Date()
+            createDate: new Date()
         });
 
-        if (status === 'active') {
+        if (status === 'ACTIVE') {
             await sendMessage(
                 conn, 
                 chatId, 
@@ -425,8 +496,8 @@ async function handleNewUser(conn, chatId, userInfo, io) {
             userCurrentTopic[chatId] = 'problema';
         } else {
             const waitingChats = await Call.findAll({
-                where: { status: 'waiting' },
-                order: [['date', 'ASC']],
+                where: { status: 'WAITING' },
+                order: [['createDate', 'ASC']],
                 attributes: ['chatId']
             });
             const position = waitingChats.findIndex(row => row.chatId === chatId) + 1;
@@ -444,14 +515,14 @@ async function handleNewUser(conn, chatId, userInfo, io) {
 
 // Função para obter contagem de chats ativos
 async function getActiveChatsCount() {
-    return await Call.count({ where: { status: 'active' } });
+    return await Call.count({ where: { status: 'ACTIVE' } });
 }
 
 // Função para obter estado do chat
 async function getChatState(chatId) {
     return await Call.findOne({
         where: { chatId },
-        order: [['date', 'DESC']],
+        order: [['createDate', 'DESC']],
         attributes: ['status']
     });
 }
@@ -489,21 +560,21 @@ async function handleChatClosed(chatId, io) {
     try {
         // Marcar chat como concluído
         await Call.update(
-            { status: 'completed', date_completed: new Date() },
+            { status: 'COMPLETED', dateTimeFinish: new Date() },
             { where: { chatId } }
         );
 
         // Obter próximo usuário na lista de espera
         const nextUser = await Call.findOne({
-            where: { status: 'waiting' },
-            order: [['date', 'ASC']]
+            where: { status: 'WAITING' },
+            order: [['createDate', 'ASC']]
         });
         
         // Verificar se existe próximo usuário
         if (nextUser) {
             // Atualizar status do próximo usuário
             await Call.update(
-                { status: 'active' },
+                { status: 'ACTIVE' },
                 { where: { chatId: nextUser.chatId } }
             );
 
@@ -525,87 +596,6 @@ async function handleChatClosed(chatId, io) {
     } catch (error) {
         console.error(errors.processError.replace('%s', error));
     }
-}
-
-// Analisa informações do usuário da mensagem
-function parseUserInfo(messageText) {
-  const info = {};
-  const lines = messageText.split('\n');
-  for (const line of lines) {
-    const [key, ...value] = line.split(':');
-    if (key && value.length) {
-      info[key.trim().toLowerCase()] = value.join(':').trim();
-    }
-  }
-  if (info.nome && info.cidade && info.cargo && info.escola) {
-    return {
-      name: capitalize(info.nome),
-      city: capitalize(info.cidade),
-      position: capitalize(info.cargo),
-      school: capitalize(info.escola),
-    };
-  }
-  return null;
-}
-
-// Capitaliza primeiras letras das palavras
-function capitalize(str) {
-  return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
-}
-
-/**
- * Envia uma mensagem para o usuário através do WhatsApp
- * @param {Object} conn - Conexão com o WhatsApp
- * @param {string} chatId - ID do chat
- * @param {string} message - Mensagem a ser enviada
- * @returns {Promise<void>}
- */
-// Controle de mensagens recentes
-const recentMessages = new Map();
-const MESSAGE_TIMEOUT = 2000; 
-
-const sentMessages = new Map();
-const DEBOUNCE_TIME = 2000; 
-
-
-async function sendMessage(conn, chatId, message) {
-    if (!messageQueue.has(chatId)) {
-        messageQueue.set(chatId, Promise.resolve());
-    }
-
-    return messageQueue.get(chatId).then(async () => {
-        const now = Date.now();
-        const lastMessage = sentMessages.get(chatId);
-
-        if (lastMessage && 
-            lastMessage.text === message && 
-            (now - lastMessage.timestamp) < DEBOUNCE_TIME) {
-            console.log(logs.similarMessage.replace('%s', message));
-            return;
-        }
-
-        try {
-            if (!conn || !conn.client || !message) {
-                throw new Error('Invalid connection or message');
-            }
-
-            await conn.client.sendMessage({
-                to: chatId,
-                body: message,
-                options: { type: 'sendText' }
-            });
-
-            sentMessages.set(chatId, {
-                text: message,
-                timestamp: now
-            });
-
-            await new Promise(resolve => setTimeout(resolve, CONFIG.MESSAGE_DELAY));
-        } catch (error) {
-            console.error(errors.sendError.replace('%s', error.message || 'Unknown error'));
-            throw error;
-        }
-    });
 }
 
 // Envia opções de problema para o usuário
@@ -734,8 +724,8 @@ async function handleSubProblemSelection(conn, chatId, messageText, io) {
             position: userInfo.position,
             school: userInfo.school,
             description: problemDescription,
-            status: 'pending',
-            date
+            status: 'PENDING',
+            createDate: date
         });
 
         await sendMessage(conn, chatId, dialogs.watchVideo.replace('%s', videoUrl));
@@ -780,7 +770,7 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
         // Get user info for possible new problem creation
         const userInfo = await Call.findOne({
             where: { chatId },
-            order: [['date', 'DESC']],
+            order: [['createDate', 'DESC']],
             attributes: ['name', 'city', 'position', 'school']
         });
 
@@ -798,12 +788,12 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
             // Update the most recent problem for video feedback case
             const existingProblem = await Call.findOne({
                 where: { chatId },
-                order: [['date', 'DESC']]
+                order: [['createDate', 'DESC']]
             });
 
             if (existingProblem) {
                 await Call.update(
-                    { description, date },
+                    { description, createDate: date },
                     { where: { id: existingProblem.id } }
                 );
 
@@ -825,8 +815,8 @@ async function handleProblemDescription(conn, chatId, messageText, io) {
                 position: userInfo.position,
                 school: userInfo.school,
                 description,
-                status: 'pending',
-                date
+                status: 'PENDING',
+                createDate: date
             });
 
             // Emit new problem event
@@ -872,7 +862,7 @@ async function saveClientInfoToDatabase(userInfo, chatId, status, io) {
         city: userInfo.city,
         school: userInfo.school,
         status,
-        date: new Date()
+        createDate: new Date()
     });
     io.emit('statusUpdate');
 }
@@ -880,7 +870,7 @@ async function saveClientInfoToDatabase(userInfo, chatId, status, io) {
 // Salvar problema no banco de dados
 async function saveProblemToDatabase(problemData, io) {
     await Call.update(
-        { description: problemData.description, date: problemData.date },
+        { description: problemData.description, createDate: problemData.date },
         { where: { id: problemData.problemId } }
     );
     io.emit('statusUpdate');
@@ -889,7 +879,7 @@ async function saveProblemToDatabase(problemData, io) {
 // Marcar problema como concluído no banco de dados
 async function markProblemAsCompleted(problemId, io) {
     await Call.update(
-        { status: 'completed' },
+        { status: 'COMPLETED' },
         { where: { id: problemId } }
     );
     io.emit('statusUpdate');
@@ -899,10 +889,10 @@ async function markProblemAsCompleted(problemId, io) {
 async function sendStatusUpdateToMainProcess(io) {
     try {
         const [active, waiting, pending, completed] = await Promise.all([
-            Call.findAll({ where: { status: 'active' }, order: [['date', 'DESC']] }),
-            Call.findAll({ where: { status: 'waiting' }, order: [['date', 'ASC']] }),
-            Call.findAll({ where: { status: 'pending' }, order: [['date', 'DESC']] }),
-            Call.findAll({ where: { status: 'completed' }, order: [['date_completed', 'DESC']], limit: 10 })
+            Call.findAll({ where: { status: 'ACTIVE' }, order: [['createDate', 'DESC']] }),
+            Call.findAll({ where: { status: 'WAITING' }, order: [['createDate', 'ASC']] }),
+            Call.findAll({ where: { status: 'PENDING' }, order: [['createDate', 'DESC']] }),
+            Call.findAll({ where: { status: 'COMPLETED' }, order: [['dateTimeFinish', 'DESC']], limit: 10 })
         ]);
 
         const statusData = {
@@ -941,7 +931,7 @@ async function closeChat(chatId, io) {
     try {
         // 1. Atualizar status para completed imediatamente
         await Call.update(
-            { status: 'completed', date_completed: new Date() },
+            { status: 'COMPLETED', dateTimeFinish: new Date() },
             { where: { chatId } }
         );
 
@@ -951,13 +941,13 @@ async function closeChat(chatId, io) {
 
         // 4. Processa próximo usuário na fila
         const nextUser = await Call.findOne({
-            where: { status: 'waiting' },
-            order: [['date', 'ASC']]
+            where: { status: 'WAITING' },
+            order: [['createDate', 'ASC']]
         });
 
         if (nextUser) {
             await Call.update(
-                { status: 'active' },
+                { status: 'ACTIVE' },
                 { where: { chatId: nextUser.chatId } }
             );
 
@@ -980,8 +970,8 @@ async function closeChat(chatId, io) {
 // Função para obter próximo da fila
 async function getNextInWaitingList() {
     return await Call.findOne({
-        where: { status: 'waiting' },
-        order: [['date', 'ASC']]
+        where: { status: 'WAITING' },
+        order: [['createDate', 'ASC']]
     });
 }
 
@@ -1040,8 +1030,8 @@ function redirectToWhatsAppChat(chatId) {
 async function updateWaitingUsers(io) {
     try {
         const waitingUsers = await Call.findAll({
-            where: { status: 'waiting' },
-            order: [['date', 'ASC']],
+            where: { status: 'WAITING' },
+            order: [['createDate', 'ASC']],
             attributes: ['chatId', 'name', 'date']
         });
 
@@ -1064,10 +1054,10 @@ async function updateWaitingUsers(io) {
 // Função auxiliar para converter status em texto legível
 function getStatusText(status) {
     const statusMap = {
-        'active': 'Em atendimento',
-        'waiting': 'Em espera',
-        'completed': 'Concluído',
-        'pending': 'Pendente'
+        'ACTIVE': 'Em atendimento',
+        'WAITING': 'Em espera',
+        'COMPLETED': 'Concluído',
+        'PENDING': 'Pendente'
     };
     return statusMap[status] || status;
 }

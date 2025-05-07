@@ -20,6 +20,9 @@ const Card = sequelize.define(
             defaultValue: 'PENDING',
         },
     },
+    {
+        timestamps: false,
+    }
 );
 
 Card.hasOne(Call);

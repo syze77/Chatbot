@@ -4,6 +4,8 @@
         "Bem-vindo! Para começar, preciso que você informe seu CPF:",
         "Olá! Para prosseguir com o atendimento, digite seu CPF:"
     ],
+    "chooseSchool": "Você está vinculado(a) a mais de uma escola/cidade. Com qual deseja seguir?",
+    "confirmSchool": "Atendimento vinculado à escola: %s",
     "attendantAvailable": "Olá %s! Um atendente está disponível agora para ajudá-lo.",
     "queueUpdate": "Atualização: %s, sua posição atual na fila é %dº lugar.",
     "attendantAssigned": "Um atendente está analisando seu problema e entrará em contato em breve.",

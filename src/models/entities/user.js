@@ -30,6 +30,9 @@ const User = sequelize.define(
             allowNull: false,
         },
     },
+    {
+        timestamps: false,
+    }
 );
 
 
@@ -37,7 +40,8 @@ const User = sequelize.define(
 User.belongsToMany(School, { 
     through: 'userschool',
     foreignKey: 'idUser',
-    otherKey: 'idSchool'
+    otherKey: 'idSchool',
+    timestamps: false,
 })
 
 // Exportações
